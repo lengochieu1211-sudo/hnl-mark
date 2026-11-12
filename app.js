@@ -582,7 +582,7 @@ function paintCameraFrame(g,video,frame,W,H){
   g.restore();
 }
 function cameraOrientationUi(frame){
-  const key=[frame.portrait?'doc':'ngang',frame.rotation,frame.sensor,frame.manual,cameraSensorSource,frame.sensor?cameraSensorSide:0,devicePortrait()].join(':');
+  const key=[frame.portrait?'doc':'ngang',frame.rotation,frame.sensor,frame.manual,cameraSensorSource,cameraSensorPortrait,frame.sensor?cameraSensorSide:0,devicePortrait()].join(':');
   if(cameraOrientationKey===key)return;
   cameraOrientationKey=key;
   const el=$('cameraOrientation');
@@ -600,13 +600,17 @@ function cameraOrientationUi(frame){
   cameraViewTurn=turn;
   $('cameraArea').classList.toggle('hnl-turn-left',turn==='left');
   $('cameraArea').classList.toggle('hnl-turn-right',turn==='right');
+  // The actual handset can be horizontal while CSS remains portrait (rotation lock).
+  // Keep the actions in a compact dock on the user's right in BOTH cases.
+  const dockRight=cameraSensorPortrait===false||(cameraSensorPortrait===null&&!screenPortrait);
+  $('cameraArea').classList.toggle('hnl-landscape-dock',dockRight);
   const btn=$('rotateCameraOverlay');
   if(btn){btn.title='Xoay cả hình camera và dấu HNLMark 90° (đang bù '+cameraManualRotation+'°)';btn.setAttribute('aria-label',btn.title);}
 }
 function clearOrientationUi(){
   cameraOrientationKey='';
   stage.classList.remove('camera-portrait','camera-landscape');
-  $('cameraArea').classList.remove('portrait','landscape','hnl-turn-left','hnl-turn-right');
+  $('cameraArea').classList.remove('portrait','landscape','hnl-turn-left','hnl-turn-right','hnl-landscape-dock');
   cameraViewTurn='';
 }
 function rotateCameraAndStamp(){
