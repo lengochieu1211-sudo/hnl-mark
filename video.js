@@ -28,6 +28,7 @@ function syncButtons(){
  $('videoFlip').hidden=mode!=='camera';$('videoPlayPause').hidden=mode!=='file'||rec;
  $('videoSave').disabled=!outputBlob;
  $('videoRecord').textContent=mode==='file'?'● Xuất video có dấu':'● Quay video';
+ $('videoRotate').disabled=rec;$('videoFlip').disabled=rec;
  $('videoPlayPause').textContent=media.paused?'▶ Xem thử':'Ⅱ Tạm dừng';
  $('videoStudio').classList.toggle('is-recording',rec);
  $('videoCameraMode').hidden=mode!=='camera';
@@ -138,7 +139,7 @@ async function importVideo(selected){
   studio.classList.add('video-open');applyPhysicalLayout();frameLoop();syncButtons();
   message('Đã chọn '+selected.name+'. Xem thử hoặc chọn Xuất video có dấu. Video gốc không thay đổi.');
   studio.scrollIntoView({behavior:'smooth',block:'center'});
- }catch(e){message(e.message);await closeStudio();}
+ }catch(e){await closeStudio();message(e.message);}
 }
 async function sourceAudioTracks(){
  fallbackNoAudio=false;
@@ -153,7 +154,7 @@ async function sourceAudioTracks(){
   audioContext=audioContext||new (window.AudioContext||window.webkitAudioContext)();
   audioSource=audioSource||audioContext.createMediaElementSource(media);
   audioDestination=audioDestination||audioContext.createMediaStreamDestination();
-  audioSource.connect(audioDestination);
+  if(!audioSource.__hnlConnected){audioSource.connect(audioDestination);audioSource.__hnlConnected=true;}
   await audioContext.resume();return audioDestination.stream.getAudioTracks();
  }catch(_){fallbackNoAudio=true;return [];}
 }
@@ -171,7 +172,7 @@ async function startRecording(){
   }
   // Give video frames a full paint before capturing, and preserve the
   // same rendered time/logo as the live preview.
-  drawFrame();
+  await new Promise(resolve=>requestAnimationFrame(resolve));
   const audioTracks=await sourceAudioTracks();
   const visual=canvas.captureStream(25);
   exportStream=new MediaStream([...visual.getVideoTracks(),...audioTracks]);
@@ -210,7 +211,7 @@ async function finishRecording(){
  syncButtons();
 }
 function saveResult(){
- if(!outputBlob)return;
+ if(!outputBlob||!outputUrl)return;
  const ext=extFor(outputBlob.type||recordingMime);
  const a=document.createElement('a');a.href=outputUrl;a.download=recordingName+'_Timemark_'+videoCode+'.'+ext;document.body.appendChild(a);a.click();a.remove();
  message('Đã gửi yêu cầu tải video. Kiểm tra thư mục Tải xuống.');
