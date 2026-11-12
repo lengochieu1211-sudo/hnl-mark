@@ -1,4 +1,4 @@
-# HNLMark v1.8.0 — Chỉnh ảnh gốc và chữ đóng dấu
+# HNLMark v1.9.0 — Chỉnh ảnh gốc và chữ đóng dấu
 
 **Trang chính:** https://hnl-photomark.vercel.app/
 
@@ -37,3 +37,11 @@
 - Cùng một hàm hướng camera cho khung xem trước và ảnh gốc chụp xuất JPG; logo/ngày/giờ/mã không lệch khỏi ảnh.
 - Cầm camera chĩa gần thẳng xuống đất khiến dữ liệu trọng lực không phân biệt dọc/ngang; lúc này thao tác xoay 90° là cách tin cậy.
 - Dấu được tạo bởi HNLMark, không chứng minh ảnh chưa bị chỉnh sửa.
+
+
+### Mobile v1.9.0
+- Hướng dẫn camera rút còn một câu, thao tác nhanh theo thanh điều hướng mobile.
+- Khi chụp camera mở dạng màn hình riêng, nút nằm ngoài khung ảnh.
+- Khi trình duyệt bị khóa dọc nhưng cảm biến báo máy nghiêng ngang, xoay toàn bộ giao diện camera (bao gồm hình, dấu, điều khiển) theo hướng mắt người xem.
+- Xuất JPG dùng pixel gốc đã xoay đúng trong canvas, không phụ thuộc CSS của trình xem.
+- Mặc định camera hiển thị bình thường nếu không có dữ liệu cảm biến; có nút xoay thủ công 90°.

@@ -1,4 +1,4 @@
-/* HNL PhotoMark - stand-alone, local-only photo stamping studio */
+/* HNLMark v1.9.0 - stand-alone, local-only photo stamping studio */
 (function(){'use strict';
 const $=id=>document.getElementById(id), canvas=$('previewCanvas'), stage=$('stage'), ctx=canvas.getContext('2d',{alpha:false});
 const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'HNLMark',footerCaption:'Ảnh đã chỉnh sửa',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
@@ -12,6 +12,7 @@ let photoSequence=0,photos=[],selected=-1,logoImg=null,logoUrl=null,isRendering=
 let cameraActive=false,cameraStream=null,cameraRAF=0,cameraFacing='environment',cameraRequest=0,cameraCapturing=false,cameraShotPending=false,cameraShotUniqueId=null,cameraPreviewCode='',cameraLastDraw=0,cameraOrientationKey='';
 // Physical posture can differ from the browser viewport when Android auto-rotate is locked.
 let cameraSensorPortrait=null,cameraSensorSide=0,cameraSensorAt=0,cameraSensorCandidate='',cameraSensorSamples=0,cameraManualRotation=0;
+let cameraViewTurn='';
 const usedSerials=new Set();
 const SERIAL_CHARS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 function createPhotoCode(){
@@ -321,6 +322,9 @@ async function saveAll(){if(busy||!photos.length)return;setBusy(true);let list=[
 /* Camera mode: in-place live preview rendered on the SAME canvas as exported photos.
    Camera frames are held in memory; no upload or network camera service is used. */
 function cameraUi(){
+  // The full-screen mobile camera prevents settings and long guidance from crowding the view.
+  document.body.classList.toggle('hnl-camera-live',cameraActive||cameraShotPending);
+  $('cameraArea').classList.toggle('hnl-capture-screen',cameraActive||cameraShotPending);
   $('cameraControls').hidden=!cameraActive;
   $('cameraReview').hidden=!cameraShotPending;
   $('openCamera').disabled=busy||cameraActive||cameraShotPending;
@@ -375,7 +379,7 @@ function handleCameraPosture(e){
 }
 function cameraGeometry(video){
   const rawW=video.videoWidth,rawH=video.videoHeight;
-  const physicalSensor=Date.now()-cameraSensorAt<3500&&cameraSensorPortrait!==null;
+  const physicalSensor=cameraSensorPortrait!==null;
   const expectedPortrait=physicalSensor?cameraSensorPortrait:devicePortrait();
   let baseRotation=0;
   // The video frame might be landscape-native while the phone is portrait,
@@ -406,7 +410,7 @@ function paintCameraFrame(g,video,frame,W,H){
   g.restore();
 }
 function cameraOrientationUi(frame){
-  const key=[frame.portrait?'doc':'ngang',frame.rotation,frame.sensor,frame.manual].join(':');
+  const key=[frame.portrait?'doc':'ngang',frame.rotation,frame.sensor,frame.manual,frame.sensor?cameraSensorSide:0,devicePortrait()].join(':');
   if(cameraOrientationKey===key)return;
   cameraOrientationKey=key;
   const el=$('cameraOrientation');
@@ -415,20 +419,30 @@ function cameraOrientationUi(frame){
   stage.classList.toggle('camera-landscape',!frame.portrait);
   $('cameraArea').classList.toggle('portrait',frame.portrait);
   $('cameraArea').classList.toggle('landscape',!frame.portrait);
+  const screenPortrait=devicePortrait();
+  // When the browser stays portrait while the physical handset is landscape,
+  // display the *whole live camera* turned in the opposite direction. This
+  // includes the canvas, the stamp and every control. Saved pixels are unchanged.
+  const turn=frame.sensor&&cameraSensorPortrait!==null&&cameraSensorPortrait!==screenPortrait
+    ?(cameraSensorSide>=0?'left':'right') : '';
+  cameraViewTurn=turn;
+  $('cameraArea').classList.toggle('hnl-turn-left',turn==='left');
+  $('cameraArea').classList.toggle('hnl-turn-right',turn==='right');
   const btn=$('rotateCameraOverlay');
   if(btn){btn.title='Xoay cả hình camera và dấu HNLMark 90° (đang bù '+cameraManualRotation+'°)';btn.setAttribute('aria-label',btn.title);}
 }
 function clearOrientationUi(){
   cameraOrientationKey='';
   stage.classList.remove('camera-portrait','camera-landscape');
-  $('cameraArea').classList.remove('portrait','landscape');
+  $('cameraArea').classList.remove('portrait','landscape','hnl-turn-left','hnl-turn-right');
+  cameraViewTurn='';
 }
 function rotateCameraAndStamp(){
   if(!cameraActive||cameraCapturing)return;
   cameraManualRotation=(cameraManualRotation+90)%360;
   cameraLastDraw=0;
   refreshCameraOrientation();
-  showToast('Đã xoay hình camera và dấu HNLMark '+cameraManualRotation+'°; ảnh lưu sẽ giống khung xem trước.');
+  showToast('Đã xoay ảnh và dấu '+cameraManualRotation+'°.');
 }
 function refreshCameraOrientation(){
   if(!cameraActive)return;
@@ -481,6 +495,7 @@ async function startCamera(){
     $('previewName').textContent='Camera trực tiếp · ảnh chưa lưu';
     $('photoIndex').textContent='Nhấn nút tròn để chụp';
     cameraUi();
+    if(window.innerWidth<=950||window.innerHeight<=650)window.scrollTo({top:0,behavior:'instant'});
     cameraRAF=requestAnimationFrame(liveCameraFrame);
   }catch(e){
     if(request!==cameraRequest)return;
@@ -531,6 +546,10 @@ async function retakeCameraShot(){
 }
 
 function bind(){fillForm();cameraUi();
+document.querySelectorAll('.mobile-shortcuts [data-jump]').forEach(button=>button.addEventListener('click',()=>{
+ const target=document.querySelector(button.dataset.jump);
+ if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
+}));
 // A phone rotation changes both the live preview and the next captured image
 // without stopping/restarting the camera stream.
 window.addEventListener('orientationchange',refreshCameraOrientation);
