@@ -1,0 +1,21 @@
+# Local / generated files
+node_modules/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.vercel/
+# Never commit credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*serviceAccount*.json
