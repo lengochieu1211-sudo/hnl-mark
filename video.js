@@ -9,7 +9,7 @@ let mode='none', cameraStream=null, sourceUrl='', outputUrl='', outputBlob=null;
 let file=null, rotation=0, recorder=null, chunks=[], raf=0, exportStream=null, micStream=null;
 let recordingStart=0, recordingDate=null, importDate=null, recordingName='', recordingMime='', recordingMode='';
 let videoCode='', isBusy=false, audioContext=null, audioSource=null, audioDestination=null, fallbackNoAudio=false;
-let physicalPortrait=null, physicalSide=1, candidate='', samples=0, nextOrientation=0;
+let physicalPortrait=null, physicalSide=1, candidate='', samples=0, fixedTurn=null;
 const message=text=>{$('videoStatus').textContent=text;};
 const supportsCapture=()=>!!window.MediaRecorder&&typeof canvas.captureStream==='function';
 const mimeType=()=>{
@@ -70,7 +70,7 @@ function drawFrame(){
   const portrait=mode==='camera'?effectivePortrait():h>=w;
   const mismatch=(h>=w)!==portrait;
   const base=mismatch?(portrait?90:(physicalSide>=0?90:270)):0;
-  const turn=(base+rotation)%360,flip=turn===90||turn===270;
+  const turn=fixedTurn===null?(base+rotation)%360:fixedTurn,flip=turn===90||turn===270;
   const max=Math.min(1,1920/Math.max(w,h)),width=Math.max(1,Math.round((flip?h:w)*max)),height=Math.max(1,Math.round((flip?w:h)*max));
   // Dimensions are fixed during recording to prevent MediaRecorder renegotiation.
   if(!recorder||recorder.state==='inactive'){
@@ -107,7 +107,7 @@ async function closeStudio(){
  if(recorder&&recorder.state==='recording'){message('Dừng quay trước khi đóng camera.');return;}
  media.pause();media.srcObject=null;media.removeAttribute('src');media.load();
  stopCameraTracks();resetFileUrl();clearOutput();
- mode='none';physicalPortrait=null;rotation=0;
+ mode='none';physicalPortrait=null;rotation=0;fixedTurn=null;
  studio.classList.remove('video-open','video-landscape','video-locked-left','video-locked-right');
  document.body.classList.remove('hnl-video-live');cancelAnimationFrame(raf);raf=0;
  message('Chọn video hoặc mở camera để bắt đầu.');syncButtons();
@@ -170,6 +170,10 @@ async function startRecording(){
    await new Promise(resolve=>{if(media.seeked||Math.abs(media.currentTime)<.05)setTimeout(resolve,60);else media.addEventListener('seeked',resolve,{once:true});});
    media.muted=false;await media.play();
   }
+  // Freeze output orientation when recording begins, like a phone camera.
+  const rawPortrait=media.videoHeight>=media.videoWidth;
+  const intendedPortrait=mode==='camera'?effectivePortrait():rawPortrait;
+  fixedTurn=((rawPortrait!==intendedPortrait?(intendedPortrait?90:(physicalSide>=0?90:270)):0)+rotation)%360;
   // Give video frames a full paint before capturing, and preserve the
   // same rendered time/logo as the live preview.
   await new Promise(resolve=>requestAnimationFrame(resolve));
@@ -187,7 +191,7 @@ async function startRecording(){
   if(fallbackNoAudio)message('Đang ghi video KHÔNG có âm thanh: micro/nguồn âm thanh không khả dụng.');
   else message(mode==='camera'?'Đang quay video có dấu và âm thanh…':'Đang xuất video có dấu theo thời lượng thực…');
   syncButtons();
- }catch(e){message('Không thể bắt đầu video: '+(e.message||e));if(exportStream)exportStream.getVideoTracks().forEach(t=>t.stop());exportStream=null;stopMicOnly();}
+ }catch(e){fixedTurn=null;message('Không thể bắt đầu video: '+(e.message||e));if(exportStream)exportStream.getVideoTracks().forEach(t=>t.stop());exportStream=null;stopMicOnly();}
  finally{isBusy=false;}
 }
 function stopMicOnly(){if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}}
@@ -199,7 +203,7 @@ function stopRecording(){
 async function finishRecording(){
  const result=new Blob(chunks,{type:recorder?.mimeType||recordingMime});chunks=[];
  if(exportStream)exportStream.getVideoTracks().forEach(t=>t.stop());exportStream=null;stopMicOnly();recorder=null;
- $('videoStop').disabled=false;studio.classList.remove('is-recording');
+ fixedTurn=null;$('videoStop').disabled=false;studio.classList.remove('is-recording');
  media.pause();if(recordingMode==='camera'){media.srcObject=null;stopCameraTracks();mode='none';document.body.classList.remove('hnl-video-live');}
  else mode='file';
  if(result.size){
