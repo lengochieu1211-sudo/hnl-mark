@@ -295,3 +295,86 @@
 }
 #cameraArea:fullscreen.hnl-turn-left{left:0!important;top:100dvh!important;transform:rotate(-90deg)!important}
 #cameraArea:fullscreen.hnl-turn-right{left:100dvw!important;top:0!important;transform:rotate(90deg)!important}
+
+/* v2.0.5: right-hand compact camera rail in actual landscape AND when
+   Android locks the CSS viewport in portrait while the phone is sideways.
+   The image and the rail remain siblings: controls NEVER cover photo pixels. */
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock{
+ display:flex!important;flex-direction:row!important;align-items:stretch!important;
+ justify-content:stretch!important;gap:5px!important;
+ padding:5px max(5px,env(safe-area-inset-right)) 5px max(5px,env(safe-area-inset-left))!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .canvas-stage{
+ flex:1 1 auto!important;width:auto!important;min-width:0!important;
+ height:100%!important;min-height:0!important;max-height:none!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-toolbar,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review{
+ flex:0 0 112px!important;width:112px!important;min-width:112px!important;
+ max-width:112px!important;height:100%!important;min-height:0!important;
+ display:flex!important;flex-direction:column!important;
+ justify-content:space-between!important;align-items:stretch!important;
+ overflow:hidden!important;padding:6px 4px!important;gap:4px!important;
+ border-radius:12px;background:#14263ae8;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-status,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-tag{
+ flex:0 0 auto!important;font-size:9px!important;line-height:1.3!important;
+ padding:2px 0!important;margin:0!important;gap:3px!important;
+ max-width:100%!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-count,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-orientation{
+ font-size:9px!important;padding:2px 5px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-buttons{
+ display:grid!important;flex:1 1 auto!important;width:100%!important;
+ min-width:0!important;min-height:0!important;
+ grid-template-columns:repeat(2,minmax(0,1fr))!important;
+ grid-template-rows:64px repeat(3,31px)!important;
+ align-content:center!important;align-items:center!important;
+ justify-content:stretch!important;justify-items:stretch!important;
+ padding:1px!important;margin:0!important;gap:5px!important;
+ overflow:hidden!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-buttons .camera-glass{
+ width:100%!important;max-width:none!important;min-width:0!important;
+ height:31px!important;min-height:31px!important;
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ flex-basis:auto!important;white-space:nowrap!important;
+ font-size:18px!important;padding:2px!important;border-radius:10px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-action-label{
+ display:none!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #shutterButton{
+ grid-column:1/-1!important;grid-row:1!important;justify-self:center!important;
+ width:62px!important;height:62px!important;
+ min-width:62px!important;min-height:62px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #shutterButton span{
+ width:46px!important;height:46px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #cameraLibrary{grid-column:1;grid-row:2}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #toggleCameraFull{grid-column:2;grid-row:2}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #flipCamera{grid-column:1;grid-row:3}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #rotateCameraOverlay{grid-column:2;grid-row:3}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #closeCamera{
+ grid-column:1/-1;grid-row:4;max-width:60px!important;justify-self:center!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-burst{
+ flex:0 0 auto!important;display:flex;flex-wrap:nowrap;gap:3px!important;
+ padding:0!important;margin:0!important;font-size:10px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-burst input{width:15px;height:15px}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-burst small{display:none!important}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions{
+ display:flex!important;flex:1!important;flex-direction:column!important;
+ justify-content:center!important;gap:8px!important;padding:2px!important;
+ width:100%!important;min-height:0!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions button{
+ width:100%!important;min-width:0!important;max-width:none!important;
+ font-size:10px!important;padding:8px 2px!important;
+ min-height:39px!important;white-space:normal!important;
+}
