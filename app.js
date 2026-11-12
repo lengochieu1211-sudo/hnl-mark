@@ -1,16 +1,16 @@
-/* HNLMark v2.0.1 - mobile continuous camera, editable local library */
+/* HNLMark v2.0.2 - mobile continuous camera, editable local library */
 (function(){'use strict';
 const $=id=>document.getElementById(id), canvas=$('previewCanvas'), stage=$('stage'), ctx=canvas.getContext('2d',{alpha:false});
-const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Time Mark',footerCaption:'100% Chân Thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
+const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Timemark',footerCaption:'100% Chân thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
 let saved={};try{saved=JSON.parse(localStorage.getItem('hnlmark-config-v1')||localStorage.getItem('hnl-photomark-config-v3')||'{}')||{};}catch(_){ }
 // Migrate old stamp labels in saved preferences AND per-photo settings, even when
 // an older one-time migration flag exists. Custom user captions/brands remain intact.
 function migrateStampLabels(options){
  if(!options||typeof options!=='object')return options;
  const name=String(options.footerBrand??'').trim().replace(/\s+/g,' ').toLowerCase();
- if(['hnlmark','hnl mark','hnl photomark','hnl photo mark'].includes(name))options.footerBrand='Time Mark';
+ if(['hnlmark','hnl mark','hnl photomark','hnl photo mark','time mark','timemark'].includes(name))options.footerBrand='Timemark';
  const note=String(options.footerCaption??'').trim().toLowerCase();
- if(['ảnh đã chỉnh sửa','anh da chinh sua'].includes(note))options.footerCaption='100% Chân Thực';
+ if(['ảnh đã chỉnh sửa','anh da chinh sua','100% chân thực'].includes(note))options.footerCaption='100% Chân thực';
  return options;
 }
 migrateStampLabels(saved);
@@ -259,7 +259,7 @@ function drawReferenceFooter(g,W,H){
   g.save();g.textAlign='right';g.textBaseline='alphabetic';
   if(config.showBackground&&Number(config.bgOpacity)>0){g.fillStyle='rgba(0,0,0,'+(Number(config.bgOpacity)/140)+')';roundRect(g,x-base*.12,y-base*.18,allowed+base*.24,blockH+base*.30,base*.19);g.fill();}
   if(config.showShadow){g.shadowColor='rgba(0,0,0,.76)';g.shadowBlur=base*.16;g.shadowOffsetY=base*.07;}
-  let caption=textSafe(config.footerCaption),brand=textSafe(config.footerBrand)||'Time Mark';
+  let caption=textSafe(config.footerCaption),brand=textSafe(config.footerBrand)||'Timemark';
   let textRight=x+allowed;
   if(logoImg&&config.logoMode==='inside'){
     const sz=blockH*.68;
@@ -271,7 +271,16 @@ function drawReferenceFooter(g,W,H){
   while(g.measureText(brand).width>allowed-(logoImg&&config.logoMode==='inside'?blockH*.65:0)&&drawFont>brandFont*.65){drawFont-=1;g.font=stampFont(drawFont,700);}
   const brandAvail=allowed-(logoImg&&config.logoMode==='inside'?blockH*.65:0);
   brand=ellipsis(g,brand,brandAvail);
-  g.fillStyle=config.footerColor;g.fillText(brand,textRight,y+brandFont*.96);
+  // The default Timemark wordmark is two-tone: Time uses the chosen accent
+  // color, and mark remains white. Both runs share a baseline, fit and right edge.
+  // Custom brand names keep the single user-selected footer color.
+  if(brand==='Timemark'){
+    const markWidth=g.measureText('mark').width;
+    g.fillStyle='#ffffff';g.fillText('mark',textRight,y+brandFont*.96);
+    g.fillStyle=config.footerColor;g.fillText('Time',textRight-markWidth,y+brandFont*.96);
+  }else{
+    g.fillStyle=config.footerColor;g.fillText(brand,textRight,y+brandFont*.96);
+  }
   g.font=stampFont(captionFont,400);g.fillStyle='rgba(255,255,255,.95)';
   g.fillText(ellipsis(g,caption,allowed),textRight,y+brandFont+captionFont*1.12);
   g.restore();
@@ -279,7 +288,11 @@ function drawReferenceFooter(g,W,H){
 function drawVerticalSerial(g,W,H,p){
   if(!config.showSerial)return;
   const s=Number(config.fontSize)/3.2,base=Math.max(8,Math.min(W,Math.min(W,H)*1.2)/1152*38*s);
-  const serial=photoSerial(p),label=serial+'  |  '+(textSafe(config.footerBrand)||'Time Mark');
+  // The right-edge vertical label is separate from the lower-right wordmark.
+  // Display text only: not an official authenticity verification.
+  const serial=photoSerial(p),brand=textSafe(config.footerBrand)||'Timemark';
+  const verticalBrand=brand==='Timemark'?'Timemark Verified':brand;
+  const label=serial+'  |  '+verticalBrand;
   const f=base*.58*Number(config.serialScale)/100;
   g.save();g.textBaseline='middle';g.textAlign='center';g.font=stampFont(f,400);
   const labelW=Math.min(g.measureText(label).width,H*.68),maxSpan=Math.max(10,H*.76);

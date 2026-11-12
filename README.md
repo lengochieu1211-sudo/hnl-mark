@@ -1,10 +1,10 @@
-# HNLMark v2.0.1 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
+# HNLMark v2.0.2 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
 
 **Trang chính:** https://hnl-photomark.vercel.app/
 
 ## Tính năng mới
 - Chọn kiểu font chữ: hẹp theo mẫu, Arial, Roboto/hệ thống, Tahoma, Verdana, Georgia, monospace. Tùy chọn độ đậm.
-- Chỉnh cỡ chữ riêng cho giờ, ngày/thứ, địa chỉ, nhãn Time Mark/HNLMark tùy chỉnh, mã dọc. Tùy chỉnh màu chữ từng phần, ngoài màu chữ và màu nhấn toàn bộ có sẵn.
+- Chỉnh cỡ chữ riêng cho giờ, ngày/thứ, địa chỉ, nhãn Timemark/HNLMark tùy chỉnh, mã dọc. Tùy chỉnh màu chữ từng phần, ngoài màu chữ và màu nhấn toàn bộ có sẵn.
 - Chỉnh sửa ảnh **trước khi đóng dấu**: khoanh vùng cắt, xoay trái/phải, chỉnh sáng/tương phản/bão hòa/ấm–lạnh.
 - Khoanh vùng ảnh gốc cần xóa dấu ngày giờ/vật thể nhỏ: phương pháp vá từ ảnh lân cận (tự chọn hướng hoặc chọn trên/dưới/trái/phải), hoặc làm mờ. Nên chọn vùng rộng hơn chi tiết cần bỏ. Đây là thuật toán vá/nhân bản trên máy, **không phải xóa vật thể AI** và không đảm bảo phục hồi nền phức tạp.
 - Có hoàn tác thao tác chỉnh ảnh cuối và khôi phục ảnh gốc. Bộ lọc màu đặt riêng theo ảnh, có thể áp dụng màu hiện tại cho tất cả ảnh.
@@ -39,7 +39,7 @@
 - Dấu được tạo bởi HNLMark, không chứng minh ảnh chưa bị chỉnh sửa.
 
 
-### Mobile v2.0.1
+### Mobile v2.0.2
 - Hướng dẫn camera rút còn một câu, thao tác nhanh theo thanh điều hướng mobile.
 - Khi chụp camera mở dạng màn hình riêng, nút nằm ngoài khung ảnh.
 - Khi trình duyệt bị khóa dọc nhưng cảm biến báo máy nghiêng ngang, xoay toàn bộ giao diện camera (bao gồm hình, dấu, điều khiển) theo hướng mắt người xem.
@@ -52,10 +52,15 @@
 - **Thư viện**: xem ảnh chụp từ ứng dụng hoặc ảnh tải lên, sửa ngày giờ, font, màu, logo, crop và xuất lại. Ảnh lưu trên IndexedDB trong trình duyệt; không phải máy chủ hay bộ sưu tập Android.
 - **Sao lưu dự án ZIP** có ảnh gốc, logo riêng (nếu đã tải lên) và JSON thiết lập; **Mở dự án** để chỉnh lại khi đổi máy/xóa dữ liệu web.
 - JPG đã đóng dấu chỉ có thể gỡ dấu sạch nếu có bản gốc cùng mã trong thư viện hoặc tệp dự án; file JPG đơn lẻ không lưu đủ thông tin để khôi phục nền.
-- Kiểu TimeMark cho phép nhãn **Time Mark** tùy chỉnh, không phải xác thực/ứng dụng TimeMark chính thức.
+- Kiểu TimeMark cho phép nhãn **Timemark** tùy chỉnh, không phải xác thực/ứng dụng TimeMark chính thức.
 
-## 2.0.1 – Đồng bộ nhãn Time Mark ở mọi góc ảnh
-- Chữ góc phải dưới và nhãn đứng cạnh mã ảnh bên phải thống nhất hiển thị **Time Mark**.
-- Dòng phụ dưới nhãn hiển thị **100% Chân Thực** (chỉ là văn bản do người dùng tùy chỉnh; không phải chứng thực tính nguyên gốc).
+## 2.0.1 – Đồng bộ nhãn Timemark ở mọi góc ảnh
+- Chữ góc phải dưới và nhãn đứng cạnh mã ảnh bên phải thống nhất hiển thị **Timemark**.
+- Dòng phụ dưới nhãn hiển thị **100% Chân thực** (chỉ là văn bản do người dùng tùy chỉnh; không phải chứng thực tính nguyên gốc).
 - Tự chuyển những giá trị mặc định cũ `HNLMark`/`Ảnh đã chỉnh sửa` trong thiết lập lưu trên trình duyệt, thư viện từng ảnh, ảnh xuất JPG/ZIP và dự án ZIP; giữ nguyên nhãn tùy chỉnh khác.
 - Không thay đổi biểu tượng logo HNL, tên ứng dụng, dự án GitHub/Vercel, dữ liệu ảnh gốc.
+
+## Thay đổi v2.0.2
+- Dấu góc phải dưới: `Timemark` viết liền; chữ **Time** màu nhấn, **mark** màu trắng. Dòng phụ giữ `100% Chân thực`.
+- Nhãn dọc cạnh mã ảnh hiển thị `Timemark Verified`; đây chỉ là dòng chữ tùy chỉnh, không phải chứng nhận xác thực hình ảnh hoặc mã xác minh do TimeMark phát hành. Cấu hình cũ có `HNLMark` hoặc `Time Mark` được chuẩn hóa khi mở lại.
+- Tên ứng dụng HNLMark không đổi.

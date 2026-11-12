@@ -11,8 +11,9 @@ css=(P/'style.css').read_text()
 with sync_playwright() as pw:
  b=pw.chromium.launch(headless=True,executable_path='/usr/bin/chromium',args=['--no-sandbox','--disable-dev-shm-usage','--use-fake-ui-for-media-stream'])
  for saved,expected in [
-  (None,('Time Mark','100% Chân Thực')),
-  ({'footerBrand':'HNLMark','footerCaption':'Ảnh đã chỉnh sửa'},('Time Mark','100% Chân Thực')),
+  (None,('Timemark','100% Chân thực')),
+  ({'footerBrand':'HNLMark','footerCaption':'Ảnh đã chỉnh sửa'},('Timemark','100% Chân thực')),
+  ({'footerBrand':'Time Mark','footerCaption':'100% Chân Thực'},('Timemark','100% Chân thực')),
   ({'footerBrand':'My Project','footerCaption':'Nhật ký công trường'},('My Project','Nhật ký công trường'))
  ]:
   page=b.new_page(viewport={'width':390,'height':844})
@@ -25,7 +26,7 @@ with sync_playwright() as pw:
   assert actual==expected,(saved,actual,expected)
   if saved and saved.get('footerBrand')=='HNLMark':
    # Verify the serial stamp shares the same migrated footer label.
-   assert 'const serial=photoSerial(p),label=serial+\'  |  \'+(textSafe(config.footerBrand)||\'Time Mark\')' in js
+   assert "brand==='Timemark'?'Timemark Verified':brand" in js
   assert not errors,errors
   page.close()
  b.close()
