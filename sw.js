@@ -1,5 +1,5 @@
-const CACHE='hnlmark-v2.0.5-20261112';
-const ASSETS=['./','./index.html','./style.css','./app.js','./hnl-logo-192.png','./hnl-logo-512.png','./manifest.webmanifest'];
+const CACHE='hnlmark-v2.1.0-20261113';
+const ASSETS=['./','./index.html','./style.css','./app.js','./video.js','./hnl-logo-192.png','./hnl-logo-512.png','./manifest.webmanifest'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{
