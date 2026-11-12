@@ -1,10 +1,19 @@
-/* HNLMark v2.0.0 - mobile continuous camera, editable local library */
+/* HNLMark v2.0.1 - mobile continuous camera, editable local library */
 (function(){'use strict';
 const $=id=>document.getElementById(id), canvas=$('previewCanvas'), stage=$('stage'), ctx=canvas.getContext('2d',{alpha:false});
-const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Time Mark',footerCaption:'Ảnh đã chỉnh sửa',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
+const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Time Mark',footerCaption:'100% Chân Thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
 let saved={};try{saved=JSON.parse(localStorage.getItem('hnlmark-config-v1')||localStorage.getItem('hnl-photomark-config-v3')||'{}')||{};}catch(_){ }
-// Keep user settings, but migrate old default branding and the former fixed-code option.
-if(['HNLmark','HNL PhotoMark','HNL Photomark','HNLMark'].includes(saved.footerBrand) && !localStorage.getItem('hnlmark-timemark-brand-migrated')){saved.footerBrand='Time Mark';try{localStorage.setItem('hnlmark-timemark-brand-migrated','1');}catch(_){}}
+// Migrate old stamp labels in saved preferences AND per-photo settings, even when
+// an older one-time migration flag exists. Custom user captions/brands remain intact.
+function migrateStampLabels(options){
+ if(!options||typeof options!=='object')return options;
+ const name=String(options.footerBrand??'').trim().replace(/\s+/g,' ').toLowerCase();
+ if(['hnlmark','hnl mark','hnl photomark','hnl photo mark'].includes(name))options.footerBrand='Time Mark';
+ const note=String(options.footerCaption??'').trim().toLowerCase();
+ if(['ảnh đã chỉnh sửa','anh da chinh sua'].includes(note))options.footerCaption='100% Chân Thực';
+ return options;
+}
+migrateStampLabels(saved);
 if(saved.serialMode==='custom')saved.serialMode='prefix';
 const config=Object.assign({},defaultConfig,saved); config.moveTarget='stamp';
 let editTool='move',editSelection=null,editDragging=false;const previewSnapshot=document.createElement('canvas');
@@ -39,7 +48,7 @@ const libraryDelete=id=>libraryTx('readwrite',o=>o.delete(id));
 async function logoAsset(method,value){const db=await openLibraryDB();return new Promise((resolve,reject)=>{const tx=db.transaction('assets',method==='get'?'readonly':'readwrite'),o=tx.objectStore('assets');let req;try{req=method==='get'?o.get('custom-logo'):method==='put'?o.put(value,'custom-logo'):o.delete('custom-logo');}catch(e){reject(e);return;}tx.oncomplete=()=>resolve(req.result);tx.onerror=()=>reject(tx.error);});}
 async function loadStoredLogo(){try{const blob=await logoAsset('get');if(blob){logoFile=new File([blob],'HNL-custom-logo.png',{type:blob.type||'image/png'});if(logoImg?.close)logoImg.close();logoImg=await createImageBitmap(blob);if(logoUrl)URL.revokeObjectURL(logoUrl);logoUrl=URL.createObjectURL(blob);$('logoThumb').replaceChildren();const el=document.createElement('img');el.src=logoUrl;el.alt='Logo';$('logoThumb').appendChild(el);renderPreview();}}catch(_){}}
 function photoRecord(p){return {id:p.serialCode,name:p.file.name,blob:p.file,modifiedAt:p.modifiedDate.getTime(),exifISO:p.exifDate?.toISOString()||null,override:p.override,customDate:p.customDate,edits:structuredClone(p.edits),stampConfig:configForPhoto(p),origin:p.origin||'import',savedAt:Date.now()};}
-function configForPhoto(p){return {...(p.stampConfig||config),moveTarget:'stamp'};}
+function configForPhoto(p){return {...migrateStampLabels(p.stampConfig||config),moveTarget:'stamp'};}
 async function savePhotoRecord(p){
  try{await libraryTx('readwrite',o=>o.put(photoRecord(p)));p.persisted=true;}
  catch(e){p.persisted=false;showToast('Thư viện cục bộ không lưu được: '+(e?.name||'thiếu bộ nhớ')+'. Hãy xuất tệp dự án dự phòng.');}
@@ -53,7 +62,7 @@ async function updateLibraryCount(){try{const all=await libraryList();const el=$
 function stashPhotoSettings(p=previewIndex()) {if(!p)return;p.stampConfig={...config};scheduleSavePhoto(p);}
 function selectPhoto(i){
  const former=previewIndex();if(former&&former!==photos[i])stashPhotoSettings(former);
- selected=i;const p=previewIndex();if(p?.stampConfig)Object.assign(config,p.stampConfig);
+ selected=i;const p=previewIndex();if(p?.stampConfig)Object.assign(config,migrateStampLabels(p.stampConfig));
  if(editTool!=='move')editTool='move';editSelection=null;fillForm();renderGallery();renderPreview();
 }
 async function showLibrary(){
@@ -130,7 +139,7 @@ async function appendFiles(list,opts={}){
   else if(match)showToast('Không tìm thấy ảnh gốc của ảnh đã đóng dấu. Cần tệp dự án hoặc ảnh gốc để sửa dấu sạch.');
   const url=URL.createObjectURL(file),exifDate=savedRecord?.exifISO?new Date(savedRecord.exifISO):await extractExif(file);
   const serialCode=savedRecord?.id||(opts.serialCode&&images.length===1?opts.serialCode:createPhotoCode());usedSerials.add(serialCode);
-  const p={file,url,serialCode,uniqueId:++photoSequence,exifDate,modifiedDate:new Date(savedRecord?.modifiedAt||file.lastModified||Date.now()),bitmap:null,loading:null,override:!!savedRecord?.override,customDate:savedRecord?.customDate||toLocalInput(exifDate||new Date(file.lastModified||Date.now())),edits:savedRecord?.edits||{operations:[],filters:{brightness:0,contrast:0,saturation:0,warmth:0}},stampConfig:savedRecord?.stampConfig||{...config},origin:savedRecord?.origin||opts.origin||'import',persisted:!!savedRecord};
+  const p={file,url,serialCode,uniqueId:++photoSequence,exifDate,modifiedDate:new Date(savedRecord?.modifiedAt||file.lastModified||Date.now()),bitmap:null,loading:null,override:!!savedRecord?.override,customDate:savedRecord?.customDate||toLocalInput(exifDate||new Date(file.lastModified||Date.now())),edits:savedRecord?.edits||{operations:[],filters:{brightness:0,contrast:0,saturation:0,warmth:0}},stampConfig:migrateStampLabels(savedRecord?.stampConfig||{...config}),origin:savedRecord?.origin||opts.origin||'import',persisted:!!savedRecord};
   photos.push(p);
   if(!savedRecord&&opts.persist!==false)await savePhotoRecord(p);
  }
@@ -393,7 +402,7 @@ async function renderPreview(){
  finally{if(token===isRendering)$('canvasSpinner').hidden=true;}
 }
 async function renderBlob(p){
- const restore={...config};if(p?.stampConfig)Object.assign(config,p.stampConfig);
+ const restore={...config};if(p?.stampConfig)Object.assign(config,migrateStampLabels(p.stampConfig));
  try{
  const max=config.outputSize==='original'?Infinity:+config.outputSize;
  const edited=await buildEditedImage(p,max);
@@ -667,7 +676,7 @@ async function saveProject(){
   const project={app:'HNLMark',version:2,createdAt:new Date().toISOString(),templateConfig:{...config},photos:[]},items=[];
   for(let i=0;i<photos.length;i++){
    const p=photos[i],fn='originals/'+(i+1)+'_'+p.serialCode+'.bin';
-   project.photos.push({id:p.serialCode,name:p.file.name,mime:p.file.type,modifiedAt:p.modifiedDate.getTime(),exifISO:p.exifDate?.toISOString()||null,override:p.override,customDate:p.customDate,edits:structuredClone(p.edits),stampConfig:p.stampConfig||{...config},origin:p.origin||'import',file:fn});
+   project.photos.push({id:p.serialCode,name:p.file.name,mime:p.file.type,modifiedAt:p.modifiedDate.getTime(),exifISO:p.exifDate?.toISOString()||null,override:p.override,customDate:p.customDate,edits:structuredClone(p.edits),stampConfig:configForPhoto(p),origin:p.origin||'import',file:fn});
    items.push({name:fn,bytes:await p.file.arrayBuffer()});
   }
   if(logoFile){project.logo='assets/custom-logo.bin';items.push({name:project.logo,bytes:await logoFile.arrayBuffer()});}

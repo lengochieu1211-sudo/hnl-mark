@@ -1,4 +1,4 @@
-# HNLMark v2.0.0 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
+# HNLMark v2.0.1 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
 
 **Trang chính:** https://hnl-photomark.vercel.app/
 
@@ -39,7 +39,7 @@
 - Dấu được tạo bởi HNLMark, không chứng minh ảnh chưa bị chỉnh sửa.
 
 
-### Mobile v2.0.0
+### Mobile v2.0.1
 - Hướng dẫn camera rút còn một câu, thao tác nhanh theo thanh điều hướng mobile.
 - Khi chụp camera mở dạng màn hình riêng, nút nằm ngoài khung ảnh.
 - Khi trình duyệt bị khóa dọc nhưng cảm biến báo máy nghiêng ngang, xoay toàn bộ giao diện camera (bao gồm hình, dấu, điều khiển) theo hướng mắt người xem.
@@ -53,3 +53,9 @@
 - **Sao lưu dự án ZIP** có ảnh gốc, logo riêng (nếu đã tải lên) và JSON thiết lập; **Mở dự án** để chỉnh lại khi đổi máy/xóa dữ liệu web.
 - JPG đã đóng dấu chỉ có thể gỡ dấu sạch nếu có bản gốc cùng mã trong thư viện hoặc tệp dự án; file JPG đơn lẻ không lưu đủ thông tin để khôi phục nền.
 - Kiểu TimeMark cho phép nhãn **Time Mark** tùy chỉnh, không phải xác thực/ứng dụng TimeMark chính thức.
+
+## 2.0.1 – Đồng bộ nhãn Time Mark ở mọi góc ảnh
+- Chữ góc phải dưới và nhãn đứng cạnh mã ảnh bên phải thống nhất hiển thị **Time Mark**.
+- Dòng phụ dưới nhãn hiển thị **100% Chân Thực** (chỉ là văn bản do người dùng tùy chỉnh; không phải chứng thực tính nguyên gốc).
+- Tự chuyển những giá trị mặc định cũ `HNLMark`/`Ảnh đã chỉnh sửa` trong thiết lập lưu trên trình duyệt, thư viện từng ảnh, ảnh xuất JPG/ZIP và dự án ZIP; giữ nguyên nhãn tùy chỉnh khác.
+- Không thay đổi biểu tượng logo HNL, tên ứng dụng, dự án GitHub/Vercel, dữ liệu ảnh gốc.
