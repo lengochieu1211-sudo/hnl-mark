@@ -117,7 +117,7 @@ function parsedDate(s){if(!s)return null;const d=new Date(s);return Number.isFin
 function pad(n){return String(n).padStart(2,'0');}
 function fmtDate(d){const day=pad(d.getDate()),month=pad(d.getMonth()+1),year=d.getFullYear();switch(config.dateFormat){case'dd-mm-yyyy':return day+'-'+month+'-'+year;case'yyyy-mm-dd':return year+'-'+month+'-'+day;case'dd.month.yyyy':return day+'.'+month+'.'+year;case'reference':return d.getDate()+' Tháng '+(d.getMonth()+1)+', '+year;default:return day+'/'+month+'/'+year;}}
 function fmtTime(d){let h=d.getHours();if(config.timeFormat==='12')return pad(h%12||12)+':'+pad(d.getMinutes())+' '+(h>=12?'PM':'AM');return pad(h)+':'+pad(d.getMinutes())+(config.timeFormat==='24s'?':'+pad(d.getSeconds()):'');}
-function photoDate(p){return (p&&p.override?parsedDate(p.customDate):null)||(config.timeMode==='custom'?parsedDate(config.batchDate):null)||(p?p.exifDate||p.modifiedDate:new Date());}
+function photoDate(p,settings=config){return (p&&p.override?parsedDate(p.customDate):null)||(settings.timeMode==='custom'?parsedDate(settings.batchDate):null)||(p?p.exifDate||p.modifiedDate:new Date());}
 function showToast(msg){const node=$('toast');node.textContent=msg;node.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),4400);}
 function store(){const copy=Object.assign({},config);delete copy.moveTarget;try{localStorage.setItem('hnlmark-config-v1',JSON.stringify(copy));}catch(_){ }}
 function showError(e){console.error(e);showToast(e&&e.message?e.message:String(e));}
@@ -148,7 +148,7 @@ async function appendFiles(list,opts={}){
  if(!opts.silent)showToast('Đã thêm '+images.length+' ảnh. Có thể chỉnh ngày giờ riêng rồi xuất.');
 }
 
-function removePhoto(i){if(editTool!=='move')setEditTool('move');const p=photos[i];if(!p)return;URL.revokeObjectURL(p.url);if(p.bitmap&&p.bitmap.close)p.bitmap.close();photos.splice(i,1);selected=photos.length?clamp(selected>i?selected-1:selected,0,photos.length-1):-1;renderGallery();updateSelectionUI();renderPreview();}
+function removePhoto(i){if(editTool!=='move')setEditTool('move');const p=photos[i];if(!p)return;URL.revokeObjectURL(p.url);if(p.bitmap&&p.bitmap.close)p.bitmap.close();photos.splice(i,1);selected=photos.length?clamp(selected>i?selected-1:selected,0,photos.length-1):-1;if(photos.length)selectPhoto(selected);else{renderGallery();updateSelectionUI();renderPreview();}}
 function renderGallery(){const g=$('gallery');g.replaceChildren();photos.forEach((p,i)=>{let b=document.createElement('button');b.className='gallery-card'+(i===selected?' active':'');b.type='button';b.title=p.file.name;b.addEventListener('click',()=>selectPhoto(i));const thumb=document.createElement('img');thumb.src=p.url;thumb.alt=p.file.name;thumb.loading='lazy';const name=document.createElement('span');name.textContent=p.file.name;const close=document.createElement('button');close.type='button';close.className='remove';close.textContent='×';close.title='Bỏ ảnh';close.addEventListener('click',ev=>{ev.stopPropagation();removePhoto(i);});b.append(thumb,name,close);g.appendChild(b);});$('photoCount').textContent=photos.length+' ảnh';$('photoHint').textContent=photos.length?'Chọn ảnh nhỏ để sửa và xem trước. Nút × chỉ bỏ khỏi danh sách, không xóa ảnh gốc.':'Ảnh sẽ xuất hiện tại đây. Mỗi ảnh có thể dùng giờ chụp riêng.';}
 function updateSelectionUI(){const p=previewIndex();$('overrideCheck').checked=!!p?.override;$('overrideCheck').disabled=!p;$('individualDate').disabled=!p;$('individualDate').value=p?p.customDate:'';$('individualDateRow').hidden=!(p&&p.override);$('dateSource').textContent=p?(p.override?'Ngày giờ chỉnh riêng':config.timeMode==='custom'?'Ngày giờ chung':p.exifDate?'EXIF · giờ chụp gốc':'Ngày sửa tệp · cần kiểm tra'):'Chưa chọn ảnh';$('resolvedTime').textContent=p?fmtDate(photoDate(p))+' · '+fmtTime(photoDate(p)):'—';$('previewName').textContent=p?p.file.name:'Ảnh minh họa · tải ảnh để bắt đầu';$('photoIndex').textContent=p?(selected+1)+' / '+photos.length:'Chưa có ảnh';$('previousPhoto').disabled=!p||selected===0;$('nextPhoto').disabled=!p||selected===photos.length-1;$('saveOne').disabled=!p;$('saveAll').disabled=!p;$('batchDateRow').hidden=config.timeMode!=='custom';$('serialPreview').textContent=photoSerial(p);updateImageEditor();}
 function photoEdits(p){if(!p)return null;if(!p.edits)p.edits={operations:[],filters:{brightness:0,contrast:0,saturation:0,warmth:0}};return p.edits;}
@@ -426,7 +426,7 @@ async function renderBlob(p){
  return await new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error('Không xuất được ảnh (thiếu bộ nhớ hoặc định dạng chưa hỗ trợ).')),mimetype,Number(config.quality)/100));
  }finally{Object.assign(config,restore);}
 }
-function outputName(p){const stem=p.file.name.replace(/\.[^.]+$/,'').replace(/[\\/:*?"<>|]/g,'_').slice(0,65)||'photo';const d=photoDate(p);return stem+'_HNLMark_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())+'_TM-'+p.serialCode+'.'+(config.outputFormat==='png'?'png':'jpg');}
+function outputName(p,blob){const stem=p.file.name.replace(/\.[^.]+$/,'').replace(/[\\/:*?"<>|]/g,'_').slice(0,65)||'photo';const settings=p.stampConfig||config,d=photoDate(p,settings);const extension=blob?.type==='image/png'?'png':blob?.type==='image/jpeg'?'jpg':settings.outputFormat==='png'?'png':'jpg';return stem+'_HNLMark_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())+'_TM-'+p.serialCode+'.'+extension;}
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),40000);}
 function crc32(data){let c=-1;for(const b of data){c^=b;for(let j=0;j<8;j++)c=(c>>>1)^((c&1)?0xedb88320:0);}return(c^(-1))>>>0;}
 function zipStored(entries){const encode=new TextEncoder(),parts=[],central=[];let offset=0;const now=new Date(),dosTime=(now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1),dosDate=((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
@@ -435,8 +435,8 @@ const cd=new Uint8Array(46+name.length),d=new DataView(cd.buffer);d.setUint32(0,
 const centralSize=central.reduce((t,c)=>t+c.byteLength,0);const end=new Uint8Array(22),dv=new DataView(end.buffer);dv.setUint32(0,0x06054b50,true);dv.setUint16(8,entries.length,true);dv.setUint16(10,entries.length,true);dv.setUint32(12,centralSize,true);dv.setUint32(16,offset,true);return new Blob([...parts,...central,end],{type:'application/zip'});}
 function progress(label,index,total){$('progress').hidden=false;$('progressLabel').textContent=label;$('progressNumbers').textContent=index+' / '+total;$('progressBar').style.width=Math.round(index/Math.max(1,total)*100)+'%';}
 function setBusy(v){busy=v;if($('openCamera'))$('openCamera').disabled=v||cameraActive||cameraShotPending;$('saveOne').disabled=v||!previewIndex();$('saveAll').disabled=v||!previewIndex();$('photoInput').disabled=v;$('logoInput').disabled=v;}
-async function saveOne(){if(busy||!previewIndex())return;setBusy(true);progress('Đang tạo ảnh...',0,1);try{const p=previewIndex();download(await renderBlob(p),outputName(p));progress('Đã tạo ảnh',1,1);showToast('Đã tạo file ảnh. Kiểm tra thư mục Tải xuống của thiết bị.');}catch(e){showError(e);}finally{setBusy(false);setTimeout(()=>$('progress').hidden=true,3000);}}
-async function saveAll(){if(busy||!photos.length)return;setBusy(true);let list=[];const count=photos.length;progress('Đang chuẩn bị ảnh...',0,count);try{for(let i=0;i<count;i++){const p=photos[i];progress('Đang xuất '+p.file.name,i,count);const blob=await renderBlob(p);const bytes=await blob.arrayBuffer();list.push({name:(i+1)+'_'+outputName(p),bytes});progress('Đã xử lý',i+1,count);await new Promise(r=>setTimeout(r,0));}const zip=zipStored(list);download(zip,'HNLMark_'+new Date().toISOString().slice(0,10)+'_'+count+'_anh.zip');showToast('Đã đóng gói '+count+' ảnh trong ZIP. Kiểm tra mục Tải xuống.');}catch(e){showError(e);}finally{list=[];setBusy(false);setTimeout(()=>$('progress').hidden=true,3500);}}
+async function saveOne(){if(busy||!previewIndex())return;setBusy(true);progress('Đang tạo ảnh...',0,1);try{const p=previewIndex();const blob=await renderBlob(p);download(blob,outputName(p,blob));progress('Đã tạo ảnh',1,1);showToast('Đã tạo file ảnh. Kiểm tra thư mục Tải xuống của thiết bị.');}catch(e){showError(e);}finally{setBusy(false);setTimeout(()=>$('progress').hidden=true,3000);}}
+async function saveAll(){if(busy||!photos.length)return;setBusy(true);let list=[];const count=photos.length;progress('Đang chuẩn bị ảnh...',0,count);try{for(let i=0;i<count;i++){const p=photos[i];progress('Đang xuất '+p.file.name,i,count);const blob=await renderBlob(p);const bytes=await blob.arrayBuffer();list.push({name:(i+1)+'_'+outputName(p,blob),bytes});progress('Đã xử lý',i+1,count);await new Promise(r=>setTimeout(r,0));}const zip=zipStored(list);download(zip,'HNLMark_'+new Date().toISOString().slice(0,10)+'_'+count+'_anh.zip');showToast('Đã đóng gói '+count+' ảnh trong ZIP. Kiểm tra mục Tải xuống.');}catch(e){showError(e);}finally{list=[];setBusy(false);setTimeout(()=>$('progress').hidden=true,3500);}}
 
 /* Camera mode: in-place live preview rendered on the SAME canvas as exported photos.
    Camera frames are held in memory; no upload or network camera service is used. */
@@ -737,19 +737,30 @@ function readStoredProjectZip(buffer){
  return files;
 }
 async function saveProject(){
- if(busy||!photos.length){showToast('Chưa có ảnh để sao lưu.');return;}
+ if(busy)return;
  setBusy(true);try{
-  const project={app:'HNLMark',version:2,createdAt:new Date().toISOString(),templateConfig:{...config},photos:[]},items=[];
-  for(let i=0;i<photos.length;i++){
-   const p=photos[i],fn='originals/'+(i+1)+'_'+p.serialCode+'.bin';
-   project.photos.push({id:p.serialCode,name:p.file.name,mime:p.file.type,modifiedAt:p.modifiedDate.getTime(),exifISO:p.exifDate?.toISOString()||null,override:p.override,customDate:p.customDate,edits:structuredClone(p.edits),stampConfig:configForPhoto(p),origin:p.origin||'import',file:fn});
-   items.push({name:fn,bytes:await p.file.arrayBuffer()});
+  // Back up all local originals, including photos not currently open.
+  // In-memory photos override older autosaved copies of the same ID.
+  let stored=[],partial=false;
+  try{stored=await libraryList();}catch(_){partial=true;}
+  const combined=new Map();
+  for(const row of stored){if(row?.id&&row.blob)combined.set(row.id,row);}
+  for(const p of photos)combined.set(p.serialCode,photoRecord(p));
+  if(!combined.size){showToast('Chưa có ảnh để sao lưu.');return;}
+  const project={app:'HNLMark',version:2,createdAt:new Date().toISOString(),templateConfig:{...config},backupScope:partial?'open-photos-only':'entire-local-library',photos:[]},items=[];
+  let index=0;
+  for(const row of combined.values()){
+   const fn='originals/'+(++index)+'_'+row.id+'.bin';
+   project.photos.push({id:row.id,name:row.name,mime:row.blob.type||'image/jpeg',modifiedAt:row.modifiedAt,exifISO:row.exifISO||null,override:!!row.override,customDate:row.customDate,edits:structuredClone(row.edits),stampConfig:migrateStampLabels(row.stampConfig||{...config}),origin:row.origin||'import',file:fn});
+   items.push({name:fn,bytes:await row.blob.arrayBuffer()});
   }
-  if(logoFile){project.logo='assets/custom-logo.bin';items.push({name:project.logo,bytes:await logoFile.arrayBuffer()});}
+  // Include logo stored in IndexedDB even before its UI preview has loaded.
+  const backupLogo=logoFile||await logoAsset('get').catch(()=>null);
+  if(backupLogo){project.logo='assets/custom-logo.bin';items.push({name:project.logo,bytes:await backupLogo.arrayBuffer()});}
   items.unshift({name:'project.json',bytes:new TextEncoder().encode(JSON.stringify(project,null,2)).buffer});
-  const file=zipStored(items);
-  download(file,'HNLMark-du-an-'+new Date().toISOString().slice(0,10)+'.hnlmark.zip');
-  showToast('Đã tạo tệp dự án gồm ảnh GỐC + ngày giờ + tùy chỉnh. Cất giữ file ZIP này để sửa lại sau.');
+  const file=zipStored(items),suffix=partial?'-CHI-ANH-DANG-MO':'';
+  download(file,'HNLMark-du-an-'+new Date().toISOString().slice(0,10)+suffix+'.hnlmark.zip');
+  showToast(partial?'Đã sao lưu '+index+' ảnh ĐANG MỞ. Không đọc được thư viện; bản sao lưu chưa đầy đủ.':'Đã sao lưu '+index+' ảnh gốc trong thư viện và danh sách đang mở, kèm ngày giờ và tùy chỉnh.');
  }catch(e){showError(e);}finally{setBusy(false);}
 }
 async function importProject(file){
