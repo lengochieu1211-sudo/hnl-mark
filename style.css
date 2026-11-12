@@ -378,3 +378,95 @@ body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-
  font-size:10px!important;padding:8px 2px!important;
  min-height:39px!important;white-space:normal!important;
 }
+
+
+/* HNLMark v2.1 – video studio, independent of still-photo storage. */
+.video-panel{scroll-margin-top:65px}
+.video-entry{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.video-entry>*{flex:1 1 150px;min-height:43px;text-align:center;display:flex;align-items:center;justify-content:center}
+.video-picker{border:1px solid #b5c8dc;border-radius:9px;background:#f5f8fc;font-size:12px;font-weight:750;color:#27486a;cursor:pointer}
+.video-picker input{display:none}
+.video-status{font-size:11px;line-height:1.5;color:#456581;margin:7px 0 10px}
+.video-studio{display:flex;flex-direction:column;gap:5px;padding:6px;border-radius:12px;background:#0d1a29;color:white;min-height:0;overflow:hidden}
+.video-canvas-wrap{display:flex;flex:1 1 auto;align-items:center;justify-content:center;min-width:0;min-height:0;background:#05111d;border-radius:9px;overflow:hidden;aspect-ratio:16/9}
+.video-canvas-wrap canvas{display:block;width:auto;height:auto;max-height:100%;max-width:100%;object-fit:contain}
+.video-studio #videoMedia[hidden]{display:none!important}
+.video-controls{display:flex;align-items:center;justify-content:space-between;gap:5px;padding:5px;min-width:0}
+.video-control-header{display:flex;flex-direction:column;gap:3px;align-items:center;flex:0 0 auto}
+.video-control-header strong{font-size:10px;letter-spacing:.1em;color:#bad3f1}
+#videoElapsed{font-size:12px;font-weight:900;color:#ff6262;white-space:nowrap}
+.video-actions{display:flex;flex:1;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
+.video-actions button{border-radius:10px;border:1px solid #5d7694;background:#263e58;color:white;font-size:11px;font-weight:800;min-height:39px;padding:6px 9px;cursor:pointer}
+.video-actions .video-primary{background:#d82548;border-color:#ff6385}
+.video-actions .video-stop{background:#e9434f;border-color:#ff8585}
+.video-mode-tip{font-size:10px;color:#9cb4d4;white-space:nowrap}
+.video-result{margin-top:10px;border:1px solid #cfdfef;border-radius:10px;padding:10px;background:#f2f7ff;display:flex;flex-direction:column;gap:8px}
+.video-result[hidden],.video-actions [hidden],#videoElapsed[hidden],.video-mode-tip[hidden]{display:none!important}
+.video-result strong{font-size:13px;color:#183753}
+.video-result small{font-size:11px;color:#65809c}
+.video-result video{display:block;max-width:100%;width:100%;max-height:350px;background:#000;border-radius:8px}
+.video-result-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.video-result-actions button{flex:1}
+body.hnl-video-live{overflow:hidden}
+body.hnl-video-live #videoStudio.video-open{
+ position:fixed;inset:0;z-index:225;width:100dvw;height:100dvh;
+ box-sizing:border-box;display:flex;flex-direction:column;gap:6px;
+ background:#091827;padding:7px max(7px,env(safe-area-inset-right)) max(7px,env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left));
+ overflow:hidden;transform-origin:top left;
+}
+body.hnl-video-live #videoStudio.video-open .video-canvas-wrap{aspect-ratio:auto;min-height:0;flex:1 1 auto}
+body.hnl-video-live #videoStudio.video-open .video-controls{flex:0 0 auto;background:#13263c;border-radius:10px}
+body.hnl-video-live #videoStudio.video-open .video-actions button{min-height:37px}
+body.hnl-video-live #videoStudio.video-open.is-recording .video-primary{display:none}
+body.hnl-video-live #videoStudio.video-open .video-mode-tip{display:none}
+@media (orientation:landscape) and (max-height:680px), (max-width:950px) and (orientation:landscape){
+ body.hnl-video-live #videoStudio.video-open:not(.video-locked-left):not(.video-locked-right){flex-direction:row}
+ body.hnl-video-live #videoStudio.video-open .video-controls{width:112px;flex:0 0 112px;flex-direction:column;gap:6px;min-width:0}
+ body.hnl-video-live #videoStudio.video-open .video-actions{flex-direction:column;flex-wrap:nowrap;gap:5px;justify-content:center;width:100%}
+ body.hnl-video-live #videoStudio.video-open .video-actions button{width:100%;font-size:10px;padding:5px 2px;min-height:36px}
+}
+@media (max-width:950px), (max-height:650px){
+ body.hnl-video-live #videoStudio.video-open.video-landscape{flex-direction:row}
+ body.hnl-video-live #videoStudio.video-open.video-landscape .video-controls{width:112px;flex:0 0 112px;flex-direction:column;min-width:0;gap:4px}
+ body.hnl-video-live #videoStudio.video-open.video-landscape .video-actions{display:flex;flex-direction:column;flex-wrap:nowrap;gap:4px;width:100%;justify-content:center}
+ body.hnl-video-live #videoStudio.video-open.video-landscape .video-actions button{min-height:33px;width:100%;padding:4px 2px;font-size:10px}
+ body.hnl-video-live #videoStudio.video-open.video-locked-left{
+  inset:auto;left:0;top:100dvh;width:100dvh;height:100dvw;transform:rotate(-90deg)
+ }
+ body.hnl-video-live #videoStudio.video-open.video-locked-right{
+  inset:auto;left:100dvw;top:0;width:100dvh;height:100dvw;transform:rotate(90deg)
+ }
+}
+/* Camera v2.1: portrait layout tightened without reducing the shutter tap area. */
+@media (orientation:portrait) and (max-width:600px){
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-toolbar{gap:1px!important;padding:4px 5px!important}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-status{font-size:9px!important;margin:0!important;padding:1px!important;line-height:1.15!important}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-buttons{
+  grid-template-rows:31px 58px!important;min-height:90px!important;gap:3px!important;padding:1px!important
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-buttons .camera-glass{
+  font-size:15px!important;min-height:30px!important;padding:2px!important
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-action-label{display:none!important}
+ body.hnl-camera-live .camera-area.hnl-capture-screen #photoToVideo{
+  grid-column:4;grid-row:2;font-size:18px!important;width:40px!important;justify-self:center
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .shutter-button{
+  grid-column:3!important;grid-row:2!important;width:58px!important;height:58px!important;min-width:58px!important;min-height:58px!important
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-burst{padding:0 1px 1px!important;font-size:10px!important;min-height:18px}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-burst small{display:none}
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #photoToVideo{
+ grid-column:1!important;grid-row:4!important;max-width:none!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #closeCamera{
+ grid-column:2!important;grid-row:4!important;max-width:none!important;
+}
+/* Keep REVIEW actions compact in landscape: the whole right rail fits screen. */
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions{
+ justify-content:center!important;gap:5px!important;min-height:0!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions button{
+ min-height:36px!important;padding:5px 2px!important;font-size:10px!important;
+}
