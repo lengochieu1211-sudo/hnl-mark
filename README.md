@@ -1,6 +1,14 @@
-# HNLMark v2.0.4 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
+# HNLMark v2.0.5 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
 
 **Trang chính:** https://hnl-photomark.vercel.app/
+
+## Bản vá camera v2.0.5 – cụm điều khiển nằm bên phải khi quay ngang
+- Khi điện thoại nằm ngang, thanh chụp thu gọn thành một cụm ở cạnh phải, nút chụp lớn và các biểu tượng Thư viện, Full, Đổi camera, Xoay, Đóng.
+- Áp dụng cả khi thiết bị khóa xoay làm viewport vẫn dọc nhưng cảm biến nhận diện điện thoại nằm ngang. Các nút ở ngoài vùng ảnh, không che dấu thời gian.
+- Giao diện đứng/dọc giữ nguyên; Full dùng giao diện đồng nhất, không thay đổi chiều ảnh được lưu.
+- Sao lưu ZIP giờ gom mọi ảnh trong thư viện IndexedDB cùng ảnh đang mở; nếu không truy cập được thư viện, xuất ZIP chỉ ảnh đang mở và cảnh báo sao lưu chưa đầy đủ.
+- Tên JPG/PNG khi xuất theo từng ảnh khớp định dạng của blob; khi bỏ ảnh đang chọn, trạng thái chọn và tuỳ chỉnh được đồng bộ.
+- **Chưa kiểm thử trên thiết bị Android thực tế** (cảm biến, nút bấm khi khóa xoay, Full). Không xem kiểm tra mã hoặc mô phỏng là Runtime Golden.
 
 ## Bản vá camera v2.0.4 – tăng độ nhạy tự xoay
 - Dùng `devicemotion.accelerationIncludingGravity.x/y` (trọng lực theo trục thiết bị) làm nguồn nhận hướng chính khi trình duyệt hỗ trợ; `deviceorientation.beta/gamma` làm dự phòng.
