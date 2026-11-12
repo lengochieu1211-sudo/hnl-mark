@@ -1,3 +1,18 @@
+# HNLMark v2.1.0 — Video thử nghiệm và camera gọn hơn
+
+## Video (DEV, chưa Runtime Golden)
+- Chọn video MP4/WebM/MOV từ thiết bị, xem thử, thêm dấu giờ, ngày, logo và mã ảnh bằng bộ vẽ Timemark chung với ảnh.
+- Chế độ quay video trực tiếp từ camera, mở được từ công cụ Video hoặc nút Video khi đang chụp ảnh.
+- Ghi hình có dấu theo thời gian thực (canvas.captureStream + MediaRecorder); khi được cấp quyền, ghi kèm micro; nhập video hỗ trợ lấy lại âm thanh gốc khi trình duyệt cho phép.
+- File gốc vẫn giữ nguyên; xuất bản mới dạng WebM hoặc MP4 tùy khả năng trình duyệt. Cần nhấn "Lưu video" sau khi kết thúc.
+- Trên điện thoại nằm ngang, video có thanh điều khiển tách riêng ở bên phải, kể cả trường hợp khóa xoay mà có cảm biến hoạt động.
+- Ngày giờ khi nhập video lấy từ ngày sửa của file và cộng thời gian phát; đây là nhãn người dùng có thể chỉnh, không phải xác thực nguồn gốc.
+- Hiện chưa cắt ghép video, chưa đưa video vào ZIP lưu dự án ảnh, không có xử lý trên máy chủ. Video dài có thể tốn RAM và thời gian xử lý bằng đúng thời lượng video.
+- Chưa kiểm chứng ghi âm, định dạng, xoay và mã hóa trên Android/iOS thực tế. Kiểm tra CI mã không tương đương Runtime Golden.
+
+## Giao diện camera ảnh
+- Giữ chức năng Ảnh hiện có, thu gọn thanh nút dọc và thanh phải ngang, thêm nút đổi sang Video.
+
 # HNLMark v2.0.5 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
 
 **Trang chính:** https://hnl-photomark.vercel.app/
