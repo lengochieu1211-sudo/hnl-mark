@@ -42,6 +42,7 @@ with sync_playwright() as pw:
  assert sx+sw<bx or bx+bw<sx or sy+sh<by or by+bh<sy, bounds
  assert 0<=bx<390-bw and 0<=by<844-bh,bounds
  page.screenshot(path=str(P/'mobile-camera-locked-landscape.png'))
+ page.locator('#burstMode').uncheck()
  page.locator('#shutterButton').click()
  page.wait_for_function('!document.getElementById("cameraReview").hidden')
  assert page.locator('#cameraArea').evaluate('(e)=>e.classList.contains("hnl-turn-left")')

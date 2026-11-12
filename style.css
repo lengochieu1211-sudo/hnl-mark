@@ -216,3 +216,68 @@
   max-width:100%!important;width:100%!important;min-height:34px!important;font-size:10px!important
  }
 }
+
+
+/* v2.0 – Fullscreen continuous camera, compact live controls and local image library */
+.library-entry{display:flex;align-items:center;gap:9px;margin:10px 0;flex-wrap:wrap}
+.library-entry>.ghost,.library-entry>.project-upload{flex:1 1 160px;text-align:center}
+.project-upload{cursor:pointer}.project-upload input{display:none}
+.library-entry>span{color:#53708b;font-size:11px;flex:1 1 125px}
+.library-note{font-size:11px;line-height:1.45;color:#64758c;margin:9px 0}
+.camera-count{display:inline-block;background:#e7f0ff;color:#143a65;border-radius:20px;padding:3px 7px;font-size:10px}
+.camera-burst{display:flex;align-items:center;justify-content:center;gap:8px;padding:2px 4px 6px;cursor:pointer;color:#fff;font-size:11px;font-weight:750}
+.camera-burst input{width:17px;height:17px;accent-color:#ffc642}
+.camera-burst small{font-weight:450;opacity:.72;font-size:10px}
+.camera-area .camera-buttons{flex-wrap:wrap!important}
+.camera-area .camera-glass{padding:7px 10px;min-height:35px}
+.library-backdrop{position:fixed;inset:0;background:#071224da;z-index:250;display:flex;align-items:center;justify-content:center;padding:12px}
+.library-sheet{background:#f7f9fd;color:#132238;border-radius:17px;box-shadow:0 20px 60px #0007;width:min(720px,100%);max-height:93dvh;display:flex;flex-direction:column;overflow:hidden}
+.library-sheet>header{display:flex;justify-content:space-between;align-items:start;padding:15px 16px;background:#132238;color:white}
+.library-sheet h2{font-size:16px;margin:0 0 4px}.library-sheet header small{color:#b8ccdf;font-size:11px}
+.library-sheet>header button{background:#304969;color:white;border:0;border-radius:8px;min-width:37px;min-height:35px}
+.library-sheet>p{font-size:11px;color:#637993;padding:10px 15px;margin:0;border-top:1px solid #d9e3ec}
+.library-cards{padding:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;overflow:auto;min-height:120px}
+.library-item{display:grid;grid-template-columns:94px minmax(0,1fr);gap:10px;background:white;border:1px solid #dfe6ef;border-radius:10px;padding:7px;min-width:0}
+.library-item>img{width:94px;height:100px;object-fit:cover;border-radius:7px;background:#e3eaf3}
+.library-item>div{display:flex;align-items:start;flex-wrap:wrap;gap:5px;min-width:0}
+.library-item span{flex:1 1 100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:800}
+.library-item small{flex:1 1 100%;font-size:10px;color:#677b91}
+.library-item button{flex:1 1 auto;border-radius:6px;padding:6px;border:1px solid #b5d6ff;color:#236bd1;background:#edf5ff;font-weight:750;font-size:10px}
+.library-item button.danger-outline{color:#be5151;border-color:#f7d2d2;background:#fff7f7}
+@media(max-width:950px),(max-height:650px){
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-buttons{min-height:0;gap:3px}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-glass{font-size:10px!important;padding:6px 5px!important;min-height:31px!important;max-width:none!important}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-burst{font-size:10px}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-burst small{font-size:9px}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .shutter-button{width:54px!important;height:54px!important;min-width:54px;min-height:54px!important}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .shutter-button span{width:39px;height:39px}
+}
+/* Camera as primary app view on all screen sizes, separate from the editor. */
+@media(min-width:951px) and (min-height:651px){
+ body.hnl-camera-live{overflow:hidden}
+ body.hnl-camera-live .camera-area.hnl-capture-screen{position:fixed;inset:0;z-index:99;background:#091827;width:100dvw;height:100dvh;display:flex;flex-direction:column;padding:12px;gap:10px}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .canvas-stage{flex:1 1 auto;min-height:0;height:auto;max-height:none}
+ body.hnl-camera-live .camera-area.hnl-capture-screen canvas{max-width:100%;max-height:100%}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-toolbar{flex:0 0 auto;width:100%;min-height:0;gap:5px;padding:8px}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-buttons{gap:12px}
+}
+/* Fullscreen API attaches camera directly as the fullscreen element. */
+#cameraArea:fullscreen{position:relative!important;display:flex;flex-direction:column;background:#081827;width:100vw;height:100vh;padding:8px;gap:6px}
+#cameraArea:fullscreen .canvas-stage{flex:1 1 auto;min-height:0!important;height:auto!important}
+#cameraArea:fullscreen .camera-toolbar{flex:0 0 auto;min-height:0!important}
+/* Comfortable shutter size on narrow portrait phones, actions in their own row. */
+@media (orientation:portrait) and (max-width:600px){
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-buttons{
+  display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));grid-template-rows:35px 61px;
+  justify-items:stretch;align-items:center;gap:5px!important;min-height:102px;padding:2px 3px!important
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-glass{
+  font-size:9px!important;padding:6px 1px!important;min-width:0!important;max-width:none!important;
+  min-height:33px!important;border-radius:12px;overflow:hidden;text-overflow:ellipsis
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .shutter-button{
+  grid-column:3;grid-row:2;justify-self:center;width:61px!important;height:61px!important;
+  min-width:61px;min-height:61px!important
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .shutter-button span{width:45px;height:45px}
+}

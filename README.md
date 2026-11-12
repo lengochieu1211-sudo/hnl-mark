@@ -1,10 +1,10 @@
-# HNLMark v1.9.0 — Chỉnh ảnh gốc và chữ đóng dấu
+# HNLMark v2.0.0 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
 
 **Trang chính:** https://hnl-photomark.vercel.app/
 
 ## Tính năng mới
 - Chọn kiểu font chữ: hẹp theo mẫu, Arial, Roboto/hệ thống, Tahoma, Verdana, Georgia, monospace. Tùy chọn độ đậm.
-- Chỉnh cỡ chữ riêng cho giờ, ngày/thứ, địa chỉ, nhãn HNLMark, mã dọc. Tùy chỉnh màu chữ từng phần, ngoài màu chữ và màu nhấn toàn bộ có sẵn.
+- Chỉnh cỡ chữ riêng cho giờ, ngày/thứ, địa chỉ, nhãn Time Mark/HNLMark tùy chỉnh, mã dọc. Tùy chỉnh màu chữ từng phần, ngoài màu chữ và màu nhấn toàn bộ có sẵn.
 - Chỉnh sửa ảnh **trước khi đóng dấu**: khoanh vùng cắt, xoay trái/phải, chỉnh sáng/tương phản/bão hòa/ấm–lạnh.
 - Khoanh vùng ảnh gốc cần xóa dấu ngày giờ/vật thể nhỏ: phương pháp vá từ ảnh lân cận (tự chọn hướng hoặc chọn trên/dưới/trái/phải), hoặc làm mờ. Nên chọn vùng rộng hơn chi tiết cần bỏ. Đây là thuật toán vá/nhân bản trên máy, **không phải xóa vật thể AI** và không đảm bảo phục hồi nền phức tạp.
 - Có hoàn tác thao tác chỉnh ảnh cuối và khôi phục ảnh gốc. Bộ lọc màu đặt riêng theo ảnh, có thể áp dụng màu hiện tại cho tất cả ảnh.
@@ -39,9 +39,17 @@
 - Dấu được tạo bởi HNLMark, không chứng minh ảnh chưa bị chỉnh sửa.
 
 
-### Mobile v1.9.0
+### Mobile v2.0.0
 - Hướng dẫn camera rút còn một câu, thao tác nhanh theo thanh điều hướng mobile.
 - Khi chụp camera mở dạng màn hình riêng, nút nằm ngoài khung ảnh.
 - Khi trình duyệt bị khóa dọc nhưng cảm biến báo máy nghiêng ngang, xoay toàn bộ giao diện camera (bao gồm hình, dấu, điều khiển) theo hướng mắt người xem.
 - Xuất JPG dùng pixel gốc đã xoay đúng trong canvas, không phụ thuộc CSS của trình xem.
 - Mặc định camera hiển thị bình thường nếu không có dữ liệu cảm biến; có nút xoay thủ công 90°.
+
+
+## 2.0.0 – Camera toàn màn hình, chụp liên tiếp, sửa lại ảnh
+- Nút **Chụp liên tiếp** bật mặc định: mỗi lần chụp lưu bản gốc và mã riêng trong thư viện thiết bị, camera không đóng. Tắt để xem lại từng ảnh.
+- **Thư viện**: xem ảnh chụp từ ứng dụng hoặc ảnh tải lên, sửa ngày giờ, font, màu, logo, crop và xuất lại. Ảnh lưu trên IndexedDB trong trình duyệt; không phải máy chủ hay bộ sưu tập Android.
+- **Sao lưu dự án ZIP** có ảnh gốc, logo riêng (nếu đã tải lên) và JSON thiết lập; **Mở dự án** để chỉnh lại khi đổi máy/xóa dữ liệu web.
+- JPG đã đóng dấu chỉ có thể gỡ dấu sạch nếu có bản gốc cùng mã trong thư viện hoặc tệp dự án; file JPG đơn lẻ không lưu đủ thông tin để khôi phục nền.
+- Kiểu TimeMark cho phép nhãn **Time Mark** tùy chỉnh, không phải xác thực/ứng dụng TimeMark chính thức.

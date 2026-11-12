@@ -39,6 +39,7 @@ with sync_playwright() as pw:
  assert values['w']>values['h'], values
  assert values['r']>150 and values['g']<120, values # red top-left moved to top-right
  page.screenshot(path=str(P/'test-sensor-locked.png'),full_page=True)
+ page.locator('#burstMode').uncheck()
  page.locator('#shutterButton').click()
  page.wait_for_function('!document.getElementById("cameraReview").hidden',timeout=15000)
  page.locator('#acceptPhoto').click()

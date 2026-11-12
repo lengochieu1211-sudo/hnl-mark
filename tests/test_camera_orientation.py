@@ -55,6 +55,7 @@ with sync_playwright() as pw:
  assert page.evaluate('window.__calls')==1
  page.screenshot(path=str(P/'orientation-landscape-live.png'),full_page=True)
  # Capture horizontal
+ page.locator('#burstMode').uncheck()
  page.locator('#shutterButton').click()
  page.wait_for_function('!document.getElementById("cameraReview").hidden && document.querySelectorAll(".gallery-card").length===1',timeout=15000)
  # Review controls also remain OUTSIDE the photograph and in the right dock.
