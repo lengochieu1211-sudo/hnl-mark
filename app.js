@@ -867,5 +867,10 @@ $('logoInput').addEventListener('change',async e=>{const file=e.target.files&&e.
 $('clearLogo').addEventListener('click',()=>{if(logoImg&&logoImg.close)logoImg.close();logoImg=null;if(logoUrl)URL.revokeObjectURL(logoUrl);logoUrl=null;logoFile=null;logoAsset('delete').catch(showError);$('logoThumb').textContent='HNL';renderPreview();});
 $('resetStyle').addEventListener('click',()=>{const names=['fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','showBackground','showShadow','posX','posY','logoX','logoY','footerX','footerY','serialX','serialY'];names.forEach(key=>config[key]=defaultConfig[key]);fillForm();store();renderPreview();showToast('Đã đặt lại kiểu dáng và vị trí.');});$('previousPhoto').addEventListener('click',()=>{if(selected>0){selectPhoto(selected-1);}});$('nextPhoto').addEventListener('click',()=>{if(selected<photos.length-1){selectPhoto(selected+1);}});$('saveOne').addEventListener('click',saveOne);$('saveAll').addEventListener('click',saveAll);
 let installEvent=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvent=e;$('installBtn').hidden=false;});$('installBtn').addEventListener('click',async()=>{if(!installEvent)return;installEvent.prompt();await installEvent.userChoice;installEvent=null;$('installBtn').hidden=true;});if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));renderPreview();}
+// Shared overlay renderer: Video reuses photo stamp type, logo and layout.
+window.HNLVideoBridge={
+ drawStamp:(g,w,h,date,serial)=>drawOverlay(g,w,h,{serialCode:serial,exifDate:date,modifiedDate:date}),
+ photoCameraActive:()=>cameraActive
+};
 bind();
 })();
