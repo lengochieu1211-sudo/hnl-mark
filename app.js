@@ -1,4 +1,4 @@
-/* HNLMark v2.0.2 - mobile continuous camera, editable local library */
+/* HNLMark v2.0.3 - mobile continuous camera, editable local library */
 (function(){'use strict';
 const $=id=>document.getElementById(id), canvas=$('previewCanvas'), stage=$('stage'), ctx=canvas.getContext('2d',{alpha:false});
 const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Timemark',footerCaption:'100% Chân thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
@@ -439,6 +439,12 @@ async function saveAll(){if(busy||!photos.length)return;setBusy(true);let list=[
 
 /* Camera mode: in-place live preview rendered on the SAME canvas as exported photos.
    Camera frames are held in memory; no upload or network camera service is used. */
+// Keep the camera-system fallback available, but display it only if in-browser
+// camera is unavailable or a real attempt to open it failed.
+function cameraSystemFallback(show){
+  const label=$('cameraFallback')?.closest('.camera-fallback');
+  if(label)label.hidden=!show;
+}
 function cameraUi(){
   // The full-screen mobile camera prevents settings and long guidance from crowding the view.
   document.body.classList.toggle('hnl-camera-live',cameraActive||cameraShotPending);
@@ -595,7 +601,7 @@ async function startCamera(){
   if(busy||cameraActive)return;
   if(editTool!=='move')setEditTool('move');
   if(cameraShotPending){cameraShotPending=false;cameraShotUniqueId=null;}
-  if(!navigator.mediaDevices?.getUserMedia){showToast('Trình duyệt chưa hỗ trợ xem camera trực tiếp. Dùng Camera hệ thống (dự phòng).');return;}
+  if(!navigator.mediaDevices?.getUserMedia){cameraSystemFallback(true);showToast('Camera trực tiếp không được hỗ trợ. Bạn có thể dùng camera hệ thống.');return;}
   const request=++cameraRequest;
   try{
     $('openCamera').disabled=true;
@@ -607,6 +613,7 @@ async function startCamera(){
     const video=$('cameraVideo');video.srcObject=stream;video.muted=true;video.playsInline=true;
     await video.play();
     if(request!==cameraRequest){stopCamera();return;}
+    cameraSystemFallback(false);
     cameraActive=true;cameraCapturing=false;cameraLastDraw=0;
     cameraManualRotation=0;cameraSensorPortrait=null;cameraSensorSide=0;cameraSensorAt=0;cameraSensorCandidate='';cameraSensorSamples=0;
     cameraPreviewCode=createPhotoCode();burstCount=0;
@@ -621,6 +628,7 @@ async function startCamera(){
   }catch(e){
     if(request!==cameraRequest)return;
     stopCamera(false);
+    cameraSystemFallback(true);
     $('canvasSpinner').hidden=true;
     if(e?.name==='NotAllowedError'||e?.name==='PermissionDeniedError')showToast('Chưa cấp quyền camera. Hãy cho phép Camera trong cài đặt trình duyệt hoặc dùng nút dự phòng.');
     else if(e?.name==='NotFoundError')showToast('Không tìm thấy camera. Có thể chọn ảnh từ thư viện.');
@@ -715,7 +723,7 @@ async function importProject(file){
  }catch(e){showError(e);}
 }
 
-function bind(){fillForm();cameraUi();
+function bind(){fillForm();cameraSystemFallback(!navigator.mediaDevices?.getUserMedia);cameraUi();
  $('burstMode').addEventListener('change',e=>{burstEnabled=e.target.checked;showToast(burstEnabled?'Chụp liên tiếp: bật':'Xem lại từng ảnh: bật');});
  $('cameraLibrary').addEventListener('click',showLibrary);
  $('openLibrary').addEventListener('click',showLibrary);
@@ -724,8 +732,20 @@ function bind(){fillForm();cameraUi();
  $('backupProject').addEventListener('click',saveProject);
  $('projectInput').addEventListener('change',e=>{importProject(e.target.files?.[0]).catch(showError);e.target.value='';});
  $('toggleCameraFull').addEventListener('click',async()=>{
-  try{if(document.fullscreenElement)await document.exitFullscreen();else if($('cameraArea').requestFullscreen)await $('cameraArea').requestFullscreen();else showToast('Trình duyệt này không có chế độ toàn màn hình hệ thống.');}
-  catch(_){showToast('Máy không cho ẩn thanh trình duyệt; camera vẫn mở rộng hết khu vực xem.');}
+  try{
+    if(document.fullscreenElement)await document.exitFullscreen();
+    // Fullscreening #cameraArea resets its CSS transform in Chromium, which
+    // breaks physical landscape while Android has rotation lock enabled.
+    // Fullscreen the DOCUMENT instead; cameraArea stays an ordinary fixed
+    // child and retains its rotated preview, overlays and separate controls.
+    else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();
+    else showToast('Trình duyệt chưa hỗ trợ ẩn thanh hệ thống; camera vẫn mở toàn khung.');
+  }catch(_){showToast('Máy không cho ẩn thanh trình duyệt; camera vẫn mở trong vùng xem.');}
+ });
+ document.addEventListener('fullscreenchange',()=>{
+   // Some browsers change orientation or viewport dimensions when entering
+   // fullscreen. Recompute source-pixel rotation AND screen transform.
+   if(cameraActive){cameraOrientationKey='';cameraLastDraw=0;refreshCameraOrientation();}
  });
  updateLibraryCount().catch(()=>{});loadStoredLogo().catch(()=>{});
 

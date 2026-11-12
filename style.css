@@ -281,3 +281,17 @@
  }
  body.hnl-camera-live .camera-area.hnl-capture-screen .shutter-button span{width:45px;height:45px}
 }
+
+/* v2.0.3: hidden fallback must beat .camera-fallback { display:flex }.
+   Keep the system capture chooser accessible after a camera failure only. */
+.camera-fallback[hidden]{display:none!important}
+/* If a legacy WebView fullscreened the camera element directly, preserve its
+   portrait-locked landscape transform. Normal Full uses the document root. */
+#cameraArea:fullscreen.hnl-turn-left,
+#cameraArea:fullscreen.hnl-turn-right{
+  position:fixed!important;inset:auto!important;max-width:none!important;
+  max-height:none!important;width:100dvh!important;height:100dvw!important;
+  transform-origin:top left!important
+}
+#cameraArea:fullscreen.hnl-turn-left{left:0!important;top:100dvh!important;transform:rotate(-90deg)!important}
+#cameraArea:fullscreen.hnl-turn-right{left:100dvw!important;top:0!important;transform:rotate(90deg)!important}
