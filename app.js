@@ -1,4 +1,4 @@
-/* HNLMark v2.0.3 - mobile continuous camera, editable local library */
+/* HNLMark v2.0.4 - mobile continuous camera, editable local library */
 (function(){'use strict';
 const $=id=>document.getElementById(id), canvas=$('previewCanvas'), stage=$('stage'), ctx=canvas.getContext('2d',{alpha:false});
 const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Timemark',footerCaption:'100% Chân thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
@@ -21,6 +21,7 @@ let photoSequence=0,photos=[],selected=-1,logoImg=null,logoUrl=null,logoFile=nul
 let cameraActive=false,cameraStream=null,cameraRAF=0,cameraFacing='environment',cameraRequest=0,cameraCapturing=false,cameraShotPending=false,cameraShotUniqueId=null,cameraPreviewCode='',cameraLastDraw=0,cameraOrientationKey='';
 // Physical posture can differ from the browser viewport when Android auto-rotate is locked.
 let cameraSensorPortrait=null,cameraSensorSide=0,cameraSensorAt=0,cameraSensorCandidate='',cameraSensorSamples=0,cameraManualRotation=0;
+let cameraSensorCandidateAt=0,cameraSensorSource='',cameraMotionAt=0,cameraOrientationSide=0,cameraOrientationAt=0;
 let cameraViewTurn='';
 let burstEnabled=true;
 const usedSerials=new Set();
@@ -474,10 +475,10 @@ function stopCamera(showPrevious=true,preserveReviewLayout=false){
   cameraUi();
   if(showPrevious)renderPreview();
 }
-/* HNLMark 1.8: physical phone sensor first, screen ratio second, manual 90° correction last.
-   A browser viewport can remain portrait while the phone is held landscape due to
-   Android orientation lock. For a nearly flat phone, gravity cannot tell its
-   rotation; offer the explicit rotate control in that case. */
+/* v2.0.4: sensor fusion and fast physical orientation tracking.
+   A locked Android browser may report portrait forever even while the phone is
+   sideways. Motion gravity (x/y) is the first choice; beta/gamma is fallback.
+   Thresholds use hysteresis so a minor hand shake does not flip the UI. */
 function devicePortrait(){
   const media=window.matchMedia?.('(orientation: portrait)');
   if(media)return media.matches;
@@ -485,24 +486,68 @@ function devicePortrait(){
   if(orientation)return orientation.startsWith('portrait');
   return window.innerHeight>=window.innerWidth;
 }
+function acceptPhysicalOrientation(candidate,source){
+  if(!candidate||!cameraActive)return;
+  const now=performance.now();
+  // DeviceOrientation is not as robust as gravity if both APIs are available.
+  if(source==='orientation'&&cameraMotionAt&&now-cameraMotionAt<1600)return;
+  if(candidate!==cameraSensorCandidate){cameraSensorCandidate=candidate;cameraSensorSamples=1;cameraSensorCandidateAt=now;}
+  else cameraSensorSamples++;
+  // Three consecutive samples (typically ~50 ms), or two samples over 80 ms.
+  if(cameraSensorSamples<3&&!(cameraSensorSamples>=2&&now-cameraSensorCandidateAt>=80))return;
+  const portrait=candidate==='portrait',side=portrait?0:(candidate==='landscape-right'?1:-1);
+  cameraSensorAt=Date.now();
+  if(cameraSensorPortrait!==portrait||cameraSensorSide!==side||cameraSensorSource!==source){
+    cameraSensorPortrait=portrait;cameraSensorSide=side;cameraSensorSource=source;
+    refreshCameraOrientation();
+  }
+}
+function handleCameraMotion(e){
+  if(!cameraActive)return;
+  const gravity=e.accelerationIncludingGravity;
+  if(!gravity)return;
+  if(gravity.x==null||gravity.y==null)return;
+  const x=Number(gravity.x),y=Number(gravity.y);
+  if(!Number.isFinite(x)||!Number.isFinite(y))return;
+  const ax=Math.abs(x),ay=Math.abs(y),plane=Math.hypot(x,y);
+  // Nearly horizontal phones have no reliable left/right gravity direction.
+  if(plane<3.5)return;
+  cameraMotionAt=performance.now();
+  const currentPortrait=cameraSensorPortrait??devicePortrait();
+  // Enter the new axis after a modest 12% advantage; retain the current one
+  // near the 45 degree boundary. This responds earlier than v2.0.3's 55° gate.
+  let candidate='';
+  if(ax>ay*1.12&&ax>3.3){
+    const orientationSign=cameraOrientationAt&&performance.now()-cameraOrientationAt<1800&&cameraOrientationSide?cameraOrientationSide:Math.sign(x);
+    candidate=orientationSign>=0?'landscape-right':'landscape-left';
+  }else if(ay>ax*1.12&&ay>3.3)candidate='portrait';
+  // Do not erase the last good posture at the 45 degree crossover.
+  if(candidate)acceptPhysicalOrientation(candidate,'motion');
+}
 function handleCameraPosture(e){
   if(!cameraActive)return;
   const beta=Number(e.beta),gamma=Number(e.gamma);
   if(!Number.isFinite(beta)||!Number.isFinite(gamma))return;
   const b=Math.abs(beta),g=Math.abs(gamma);
-  // Require a decisive tilt, avoid flip-flopping around 45°.
+  if(g>24){cameraOrientationSide=Math.sign(gamma);cameraOrientationAt=performance.now();}
+  // Motion gravity has precedence; orientation events are a useful fallback on
+  // browsers without DeviceMotion permission or accelerationIncludingGravity.
+  if(cameraMotionAt&&performance.now()-cameraMotionAt<1600)return;
   let candidate='';
-  if(g>=55&&g>b+12)candidate=gamma>=0?'landscape-right':'landscape-left';
-  else if(b>=55&&b>g+12)candidate='portrait';
-  if(!candidate){cameraSensorCandidate='';cameraSensorSamples=0;return;}
-  if(candidate===cameraSensorCandidate)cameraSensorSamples++;
-  else {cameraSensorCandidate=candidate;cameraSensorSamples=1;}
-  if(cameraSensorSamples<2)return;
-  cameraSensorAt=Date.now();
-  const portrait=candidate==='portrait',side=portrait?0:(candidate==='landscape-right'?1:-1);
-  if(cameraSensorPortrait!==portrait||cameraSensorSide!==side){
-    cameraSensorPortrait=portrait;cameraSensorSide=side;refreshCameraOrientation();
+  if(g>=28&&g>b*1.12)candidate=gamma>=0?'landscape-right':'landscape-left';
+  else if(b>=28&&b>g*1.12)candidate='portrait';
+  if(candidate)acceptPhysicalOrientation(candidate,'orientation');
+}
+async function requestCameraSensorPermission(){
+  // Safari iOS requires this from a direct button tap; Android resolves
+  // without a prompt. Failure must not prevent taking photos or using manual rotate.
+  const requests=[];
+  for(const api of [window.DeviceMotionEvent,window.DeviceOrientationEvent]){
+    if(typeof api?.requestPermission==='function'){
+      try{requests.push(Promise.resolve(api.requestPermission()).catch(()=>null));}catch(_){/* optional sensor */}
+    }
   }
+  if(requests.length)await Promise.all(requests);
 }
 function cameraGeometry(video){
   const rawW=video.videoWidth,rawH=video.videoHeight;
@@ -537,7 +582,7 @@ function paintCameraFrame(g,video,frame,W,H){
   g.restore();
 }
 function cameraOrientationUi(frame){
-  const key=[frame.portrait?'doc':'ngang',frame.rotation,frame.sensor,frame.manual,frame.sensor?cameraSensorSide:0,devicePortrait()].join(':');
+  const key=[frame.portrait?'doc':'ngang',frame.rotation,frame.sensor,frame.manual,cameraSensorSource,frame.sensor?cameraSensorSide:0,devicePortrait()].join(':');
   if(cameraOrientationKey===key)return;
   cameraOrientationKey=key;
   const el=$('cameraOrientation');
@@ -615,7 +660,7 @@ async function startCamera(){
     if(request!==cameraRequest){stopCamera();return;}
     cameraSystemFallback(false);
     cameraActive=true;cameraCapturing=false;cameraLastDraw=0;
-    cameraManualRotation=0;cameraSensorPortrait=null;cameraSensorSide=0;cameraSensorAt=0;cameraSensorCandidate='';cameraSensorSamples=0;
+    cameraManualRotation=0;cameraSensorPortrait=null;cameraSensorSide=0;cameraSensorAt=0;cameraSensorCandidate='';cameraSensorSamples=0;cameraSensorCandidateAt=0;cameraSensorSource='';cameraMotionAt=0;cameraOrientationSide=0;cameraOrientationAt=0;
     cameraPreviewCode=createPhotoCode();burstCount=0;
     clearOrientationUi();
     ++isRendering;
@@ -760,10 +805,11 @@ window.addEventListener('resize',refreshCameraOrientation);
 if(screen.orientation?.addEventListener)screen.orientation.addEventListener('change',refreshCameraOrientation);
 // Physical motion information is optional; it fails safely if blocked by browser.
 window.addEventListener('deviceorientation',handleCameraPosture);
+window.addEventListener('devicemotion',handleCameraMotion);
 $('rotateCameraOverlay').addEventListener('click',rotateCameraAndStamp);
 const orientationMedia=window.matchMedia?.('(orientation: portrait)');
 if(orientationMedia?.addEventListener)orientationMedia.addEventListener('change',refreshCameraOrientation);
-$('openCamera').addEventListener('click',()=>startCamera().catch(showError));
+$('openCamera').addEventListener('click',()=>{requestCameraSensorPermission().catch(()=>{});startCamera().catch(showError);});
 $('closeCamera').addEventListener('click',()=>stopCamera());
 $('flipCamera').addEventListener('click',()=>{cameraFacing=cameraFacing==='environment'?'user':'environment';stopCamera(false);startCamera().catch(showError);});
 $('shutterButton').addEventListener('click',()=>takeCameraPhoto().catch(showError));

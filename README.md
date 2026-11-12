@@ -1,6 +1,13 @@
-# HNLMark v2.0.3 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
+# HNLMark v2.0.4 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
 
 **Trang chính:** https://hnl-photomark.vercel.app/
+
+## Bản vá camera v2.0.4 – tăng độ nhạy tự xoay
+- Dùng `devicemotion.accelerationIncludingGravity.x/y` (trọng lực theo trục thiết bị) làm nguồn nhận hướng chính khi trình duyệt hỗ trợ; `deviceorientation.beta/gamma` làm dự phòng.
+- Nhận dọc/ngang sớm hơn ngưỡng 55° cũ, 3 mẫu liên tiếp hoặc 2 mẫu ổn định từ 80 ms; giữ hướng gần góc 45° để hạn chế nhảy liên tục.
+- Giữ cùng hệ tọa độ cho ảnh camera và dấu Timemark, kể cả khi bật Full trong trình duyệt khóa xoay.
+- Trình duyệt iOS có thể yêu cầu quyền cảm biến khi bấm mở camera. Nếu cảm biến không có dữ liệu (ví dụ điện thoại đặt phẳng), dùng nút Xoay 90°.
+- Đã thử bằng Chromium với cảm biến mô phỏng, **chưa xác nhận phần cứng Android thực tế**.
 
 ## Tính năng mới
 - Chọn kiểu font chữ: hẹp theo mẫu, Arial, Roboto/hệ thống, Tahoma, Verdana, Georgia, monospace. Tùy chọn độ đậm.
@@ -39,7 +46,7 @@
 - Dấu được tạo bởi HNLMark, không chứng minh ảnh chưa bị chỉnh sửa.
 
 
-### Mobile v2.0.3
+### Mobile v2.0.4
 - Hướng dẫn camera rút còn một câu, thao tác nhanh theo thanh điều hướng mobile.
 - Khi chụp camera mở dạng màn hình riêng, nút nằm ngoài khung ảnh.
 - Khi trình duyệt bị khóa dọc nhưng cảm biến báo máy nghiêng ngang, xoay toàn bộ giao diện camera (bao gồm hình, dấu, điều khiển) theo hướng mắt người xem.
@@ -60,12 +67,12 @@
 - Tự chuyển những giá trị mặc định cũ `HNLMark`/`Ảnh đã chỉnh sửa` trong thiết lập lưu trên trình duyệt, thư viện từng ảnh, ảnh xuất JPG/ZIP và dự án ZIP; giữ nguyên nhãn tùy chỉnh khác.
 - Không thay đổi biểu tượng logo HNL, tên ứng dụng, dự án GitHub/Vercel, dữ liệu ảnh gốc.
 
-## Thay đổi v2.0.3
+## Thay đổi v2.0.4
 - Dấu góc phải dưới: `Timemark` viết liền; chữ **Time** màu nhấn, **mark** màu trắng. Dòng phụ giữ `100% Chân thực`.
 - Nhãn dọc cạnh mã ảnh hiển thị `Timemark Verified`; đây chỉ là dòng chữ tùy chỉnh, không phải chứng nhận xác thực hình ảnh hoặc mã xác minh do TimeMark phát hành. Cấu hình cũ có `HNLMark` hoặc `Time Mark` được chuẩn hóa khi mở lại.
 - Tên ứng dụng HNLMark không đổi.
 
-## Camera Full v2.0.3 – xoay ảnh và ẩn nút dự phòng
+## Camera Full v2.0.4 – xoay ảnh và ẩn nút dự phòng
 - Chế độ Full sử dụng fullscreen toàn tài liệu thay vì fullscreen trực tiếp phần tử camera, nên không đánh mất `transform` khi điện thoại khóa xoay dọc nhưng cảm biến báo cầm ngang.
 - Chuyển dọc ↔ ngang, vào Full và thoát Full không làm đổi góc giữa khung camera, lớp dấu và các nút điều khiển. Cùng một hàm vẽ camera cho preview và ảnh JPG chụp.
 - “Camera hệ thống (dự phòng)” được ẩn mặc định và khi camera web mở thành công. Chỉ hiện khi trình duyệt thiếu `getUserMedia` hoặc camera mở lỗi/từ chối quyền.
