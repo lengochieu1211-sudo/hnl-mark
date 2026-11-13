@@ -250,3 +250,122 @@ body.hnl-android-apk.hnl-angle-180 .video-ios-controls .video-settings-button sv
 }
 body.hnl-android-apk .camera-area [hidden],body.hnl-android-apk .video-studio [hidden]{display:none!important}
 @media(prefers-reduced-motion:reduce){body.hnl-android-apk *{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+
+/* v2.4.1 Android only: no application title bar; editor live preview stays
+   pinned immediately below the Android status bar. Native tabs stay at bottom.
+   Does not change the standalone full-screen camera dock. */
+body.hnl-android-apk .shell{padding:0 9px 12px!important}
+body.hnl-android-apk .workspace{
+ display:flex!important;flex-direction:column!important;
+ align-items:stretch!important;justify-content:flex-start!important;
+ gap:10px!important;min-width:0!important
+}
+body.hnl-android-apk .workspace > .viewer{
+ order:-1!important;position:sticky!important;top:0!important;z-index:80!important;
+ box-sizing:border-box!important;align-self:stretch!important;
+ display:flex!important;flex-direction:column!important;
+ height:clamp(180px,32dvh,252px)!important;
+ min-height:180px!important;max-height:252px!important;
+ margin:0 -9px 3px!important;padding:5px 10px 8px!important;
+ background:#ffffff!important;border:0!important;
+ border-bottom:1px solid #dce6f1!important;
+ border-radius:0 0 14px 14px!important;
+ box-shadow:0 4px 14px #102c4b16!important;
+ overflow:hidden!important;
+}
+body.hnl-android-apk .workspace > .editor{
+ order:0!important;flex:0 0 auto!important;align-self:stretch!important;
+ width:100%!important;min-width:0!important;overflow:visible!important
+}
+body.hnl-android-apk .viewer .viewer-top{
+ flex:0 0 27px!important;min-height:27px!important;
+ display:flex!important;align-items:center!important;
+ justify-content:space-between!important;gap:8px!important;
+ padding:0 2px 4px!important;margin:0!important
+}
+body.hnl-android-apk .viewer .viewer-top h2{
+ font-size:13px!important;line-height:1.2!important;margin:0!important;
+ color:var(--apk-navy)!important;font-weight:800!important
+}
+body.hnl-android-apk .viewer .viewer-top .eyebrow,
+body.hnl-android-apk .viewer .view-badge,
+body.hnl-android-apk .viewer .camera-hint,
+body.hnl-android-apk .viewer .preview-foot{display:none!important}
+body.hnl-android-apk .viewer #cameraArea{
+ display:flex!important;flex-direction:column!important;
+ flex:1 1 0!important;width:100%!important;min-height:0!important;
+ max-height:none!important;overflow:hidden!important
+}
+body.hnl-android-apk .viewer #cameraArea #stage{
+ flex:1 1 0!important;align-self:stretch!important;
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ width:100%!important;height:100%!important;
+ min-width:0!important;min-height:0!important;
+ max-width:none!important;max-height:none!important;
+ margin:0!important;overflow:hidden!important;
+ border-radius:9px!important;background:#081b31!important
+}
+body.hnl-android-apk .viewer #previewCanvas{
+ display:block!important;max-width:100%!important;max-height:100%!important;
+ width:auto!important;height:auto!important;object-fit:contain!important
+}
+body.hnl-android-apk .viewer .preview-toolbar{
+ flex:0 0 34px!important;height:34px!important;min-height:34px!important;
+ display:flex!important;align-items:center!important;justify-content:space-between!important;
+ margin:0!important;padding:3px 1px 0!important;gap:6px!important;
+ background:transparent!important
+}
+body.hnl-android-apk .viewer .preview-toolbar button{
+ font-size:11px!important;padding:4px 9px!important;min-height:28px!important;
+ height:28px!important;border-radius:8px!important
+}
+body.hnl-android-apk .viewer .preview-toolbar #photoIndex{
+ font-size:10px!important;white-space:nowrap!important;
+ text-overflow:ellipsis!important;overflow:hidden!important;max-width:36%!important
+}
+/* Form scroll targets remain visible beneath the pinned photo preview. */
+body.hnl-android-apk .editor input[id],
+body.hnl-android-apk .editor select[id],
+body.hnl-android-apk .editor textarea[id],
+body.hnl-android-apk .editor .panel{
+ scroll-margin-top:clamp(190px,34dvh,272px)!important
+}
+/* Users can read input text comfortably without oversized 22–24px glyphs. */
+body.hnl-android-apk .panel input:not([type="range"]):not([type="checkbox"]):not([type="color"]),
+body.hnl-android-apk .panel select,
+body.hnl-android-apk .panel textarea{
+ font-size:16px!important;line-height:1.35!important;font-weight:400!important;
+ min-height:40px!important;padding:8px 11px!important
+}
+body.hnl-android-apk .panel input::placeholder,
+body.hnl-android-apk .panel textarea::placeholder{
+ font-size:14px!important;font-weight:400!important;opacity:1!important;color:#91a0af!important
+}
+body.hnl-android-apk .panel .field label{font-size:12px!important}
+@media (orientation:landscape), (max-height:440px){
+ body.hnl-android-apk .workspace > .viewer{
+  height:clamp(120px,40dvh,200px)!important;
+  min-height:120px!important;max-height:200px!important
+ }
+ body.hnl-android-apk .editor input[id],
+ body.hnl-android-apk .editor select[id],
+ body.hnl-android-apk .editor textarea[id],
+ body.hnl-android-apk .editor .panel{
+  scroll-margin-top:clamp(130px,43dvh,212px)!important
+ }
+}
+/* In video editing mode show the actual video preview instead of a stale image. */
+body.hnl-android-apk.hnl-android-video-editing .workspace > .viewer{display:none!important}
+/* An active camera escapes the pinned editor view and uses the original
+   full-screen preview + bottom shutter dock, including landscape rotation. */
+body.hnl-android-apk.hnl-camera-live .workspace > .viewer{
+ position:static!important;overflow:visible!important;
+ height:auto!important;min-height:0!important;max-height:none!important
+}
+body.hnl-android-apk.hnl-camera-live .viewer #cameraArea{
+ overflow:visible!important;max-height:none!important
+}
+body.hnl-android-apk.hnl-camera-live .viewer #cameraArea #stage{
+ max-height:none!important;min-height:0!important;height:auto!important
+}
