@@ -17,7 +17,7 @@ jobs:
           node --check app.js
           node --check video.js
           node --check sw.js
-          grep -q 'video.js?v=2.1.0' index.html
+          grep -q 'video.js?v=2.1.1' index.html
           test -s video.js
           test -s index.html
           test -s style.css
