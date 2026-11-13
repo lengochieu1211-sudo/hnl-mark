@@ -10,9 +10,9 @@ function videoTurn({mode='camera',rawWidth=0,rawHeight=0,portrait=true,side=1,ma
  if(mode!=='camera')return normalize(manual);
  const rawPortrait=rawHeight>=rawWidth;
  if(rawPortrait===!!portrait)return normalize(manual);
- // A clockwise camera-frame rotation is opposite the UI compensation
- // already applied for physical landscape when the screen is rotation-locked.
- const base=portrait?90:(side>=0?270:90);
+ // Match the already-working still-camera sensor convention. Applying
+ // the *opposite* direction here was causing 180-degree video inversion.
+ const base=portrait?90:(side>=0?90:270);
  return normalize(base+manual);
 }
 const api=Object.freeze({videoTurn,normalize});
