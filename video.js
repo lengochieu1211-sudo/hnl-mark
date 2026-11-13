@@ -9,7 +9,8 @@ let mode='none', cameraStream=null, sourceUrl='', outputUrl='', outputBlob=null;
 let file=null, rotation=0, recorder=null, chunks=[], raf=0, exportStream=null, micStream=null;
 let recordingStart=0, recordingDate=null, importDate=null, recordingName='', recordingMime='', recordingMode='';
 let videoCode='', isBusy=false, audioContext=null, audioSource=null, audioDestination=null, fallbackNoAudio=false;
-let physicalPortrait=null, physicalSide=1, candidate='', samples=0, fixedTurn=null;
+let physicalPortrait=null, physicalSide=1, physicalInverted=false, candidate='', samples=0, fixedTurn=null;
+const workCanvas=document.createElement('canvas'),workCtx=workCanvas.getContext('2d',{alpha:false});
 let selectedMedia='photo',outputSaved=true;
 function updateMediaPicker(){
  const video=selectedMedia==='video';
@@ -51,7 +52,8 @@ function syncButtons(){
  if(label)label.textContent=mode==='file'?'↓ Xuất video có dấu':'● Quay video';
  studio.classList.toggle('video-camera-mode',mode==='camera');
  studio.classList.toggle('video-file-mode',mode==='file');
- $('videoRotate').disabled=rec;$('videoFlip').disabled=rec;
+ $('videoRotate').disabled=false;$('videoRotate180').disabled=false;$('videoFlip').disabled=rec;
+ for(const id of ['videoResolution','videoBitrate','videoFps'])$(id).disabled=rec;
  const play=$('videoPlayPause'),paused=media.paused;
  play.setAttribute('aria-label',paused?'Phát video':'Tạm dừng video');
  play.title=paused?'Phát video':'Tạm dừng video';
@@ -81,6 +83,7 @@ function physicalMotion(e){
 function physicalOrientation(e){
  if(mode!=='camera'||!Number.isFinite(e.gamma)||!Number.isFinite(e.beta))return;
  const g=Math.abs(e.gamma),b=Math.abs(e.beta);
+ if(b>45&&b>g*1.35)physicalInverted=e.beta<0;
  if(g>35&&g>b*1.2)setPhysical(e.gamma>=0?'right':'left');
  else if(b>35&&b>g*1.2)setPhysical('portrait');
 }
@@ -97,25 +100,36 @@ function drawFrame(){
  const w=media.videoWidth,h=media.videoHeight;
  if(w&&h&&media.readyState>=2){
   const portrait=mode==='camera'?effectivePortrait():h>=w;
-  const computedTurn=window.HNLVideoOrientation.videoTurn({
-   mode,rawWidth:w,rawHeight:h,portrait,side:physicalSide,manual:rotation
+  const turn=window.HNLVideoOrientation.videoTurn({
+   mode,rawWidth:w,rawHeight:h,portrait,side:physicalSide,
+   inverted:mode==='camera'&&physicalInverted,manual:rotation
   });
-  const turn=fixedTurn===null?computedTurn:fixedTurn,flip=turn===90||turn===270;
-  const max=Math.min(1,1920/Math.max(w,h)),width=Math.max(1,Math.round((flip?h:w)*max)),height=Math.max(1,Math.round((flip?w:h)*max));
-  // Dimensions are fixed during recording to prevent MediaRecorder renegotiation.
+  const flip=turn===90||turn===270;
+  const choice=$('videoResolution').value,limit=choice==='original'?Infinity:Number(choice);
+  const scale=Math.min(1,limit/Math.min(w,h),3840/Math.max(w,h));
+  const sourceWidth=flip?h:w,sourceHeight=flip?w:h;
+  const W=Math.max(2,Math.round(sourceWidth*scale/2)*2);
+  const H=Math.max(2,Math.round(sourceHeight*scale/2)*2);
+  if(workCanvas.width!==W||workCanvas.height!==H){workCanvas.width=W;workCanvas.height=H;}
+  const g=workCtx;
+  g.fillStyle='#000';g.fillRect(0,0,W,H);g.save();
+  if(turn===90){g.translate(W,0);g.rotate(Math.PI/2);g.drawImage(media,0,0,H,W);}
+  else if(turn===270){g.translate(0,H);g.rotate(-Math.PI/2);g.drawImage(media,0,0,H,W);}
+  else if(turn===180){g.translate(W,H);g.rotate(Math.PI);g.drawImage(media,0,0,W,H);}
+  else g.drawImage(media,0,0,W,H);
+  g.restore();
+  const date=mode==='file'?new Date(importDate.getTime()+(media.currentTime||0)*1000):new Date();
+  try{window.HNLVideoBridge?.drawStamp(g,W,H,date,videoCode,Number($('videoStampSize').value)/100);}
+  catch(e){if(!studio.dataset.stampError){studio.dataset.stampError='1';message('Không vẽ được dấu video: '+e.message);}}
+  // Keep encoding dimensions fixed. When rotated mid-recording, letterbox
+  // the ENTIRE composed image including overlays; never stretch.
   if(!recorder||recorder.state==='inactive'){
-   if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
+   if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}
   }
-  const W=canvas.width,H=canvas.height;
-  ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
-  ctx.save();
-  if(turn===90){ctx.translate(W,0);ctx.rotate(Math.PI/2);ctx.drawImage(media,0,0,H,W);}
-  else if(turn===270){ctx.translate(0,H);ctx.rotate(-Math.PI/2);ctx.drawImage(media,0,0,H,W);}
-  else if(turn===180){ctx.translate(W,H);ctx.rotate(Math.PI);ctx.drawImage(media,0,0,W,H);}
-  else ctx.drawImage(media,0,0,W,H);
-  ctx.restore();
-  const t=mode==='file'?new Date(importDate.getTime()+(media.currentTime||0)*1000):new Date();
-  try{window.HNLVideoBridge?.drawStamp(ctx,W,H,t,videoCode);}catch(e){if(!studio.dataset.stampError){studio.dataset.stampError='1';message('Không hiển thị được dấu video: '+e.message);}}
+  const ow=canvas.width,oh=canvas.height;
+  ctx.fillStyle='#000';ctx.fillRect(0,0,ow,oh);
+  const fit=Math.min(ow/W,oh/H),dw=Math.round(W*fit),dh=Math.round(H*fit);
+  ctx.drawImage(workCanvas,Math.round((ow-dw)/2),Math.round((oh-dh)/2),dw,dh);
  }
  if(recorder?.state==='recording'){
   const sec=Math.floor((performance.now()-recordingStart)/1000);
@@ -137,7 +151,7 @@ async function closeStudio(){
  if(recorder&&recorder.state==='recording'){message('Dừng quay trước khi đóng camera.');return;}
  media.pause();media.srcObject=null;media.removeAttribute('src');media.load();
  stopCameraTracks();resetFileUrl();clearOutput();
- mode='none';physicalPortrait=null;rotation=0;fixedTurn=null;
+ mode='none';physicalPortrait=null;physicalInverted=false;rotation=0;fixedTurn=null;
  studio.classList.remove('video-open','video-landscape','video-locked-left','video-locked-right');
  document.body.classList.remove('hnl-video-live');cancelAnimationFrame(raf);raf=0;
  message('Chọn video hoặc mở camera để bắt đầu.');syncButtons();
@@ -151,7 +165,7 @@ async function openCamera(){
  try{
   cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
   media.srcObject=cameraStream;media.muted=true;media.playsInline=true;await media.play();
-  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;candidate='';samples=0;fixedTurn=null;
+  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;candidate='';samples=0;fixedTurn=null;
   studio.classList.add('video-open');document.body.classList.add('hnl-video-live');applyPhysicalLayout();frameLoop();syncButtons();
   message('Camera video đã mở. Nhấn Quay video để bắt đầu. Có thể ghi âm nếu cấp quyền micro.');
  }catch(e){stopCameraTracks();message('Không mở được camera video: '+(e.message||e));}
@@ -163,7 +177,7 @@ async function importVideo(selected){
  if(!selected.type.startsWith('video/')&&!/\.(mp4|webm|mov|m4v|ogv)$/i.test(selected.name)){message('Hãy chọn tệp video MP4, WebM hoặc MOV mà trình duyệt hỗ trợ.');return;}
  await closeStudio();file=selected;importDate=new Date(selected.lastModified||Date.now());
  sourceUrl=URL.createObjectURL(selected);media.src=sourceUrl;media.muted=false;media.playsInline=true;
- mode='file';videoCode=makeVideoCode();rotation=0;fixedTurn=null;
+ mode='file';videoCode=makeVideoCode();rotation=0;physicalInverted=false;fixedTurn=null;
  try{
   await new Promise((resolve,reject)=>{
    media.addEventListener('loadedmetadata',resolve,{once:true});media.addEventListener('error',()=>reject(Error('Định dạng video chưa được hỗ trợ trên thiết bị.')),{once:true});
@@ -203,7 +217,7 @@ async function startRecording(){
    await new Promise(resolve=>{if(media.seeked||Math.abs(media.currentTime)<.05)setTimeout(resolve,60);else media.addEventListener('seeked',resolve,{once:true});});
    media.muted=false;await media.play();
   }
-  // Freeze exactly the same rotation as preview; avoid second auto-rotate.
+  // Set the initial output dimensions; do not freeze subsequent orientation.
   const rawPortrait=media.videoHeight>=media.videoWidth;
   const intendedPortrait=mode==='camera'?effectivePortrait():rawPortrait;
   fixedTurn=window.HNLVideoOrientation.videoTurn({
@@ -214,12 +228,12 @@ async function startRecording(){
   // same rendered time/logo as the live preview.
   await new Promise(resolve=>requestAnimationFrame(resolve));
   const audioTracks=await sourceAudioTracks();
-  const visual=canvas.captureStream(25);
+  const visual=canvas.captureStream(Number($('videoFps').value)||30);
   exportStream=new MediaStream([...visual.getVideoTracks(),...audioTracks]);
   recordingMode=mode;recordingDate=new Date();
   recordingName=mode==='file'?(file?.name||'Video').replace(/\.[^.]+$/,''):'HNLMark_Camera_'+recordingDate.toISOString().replace(/[T:.Z]/g,'-');
   recordingMime=mime;chunks=[];
-  recorder=new MediaRecorder(exportStream,{mimeType:mime,videoBitsPerSecond:3500000});
+  recorder=new MediaRecorder(exportStream,{mimeType:mime,videoBitsPerSecond:Number($('videoBitrate').value)||5000000});
   recorder.addEventListener('dataavailable',e=>{if(e.data?.size)chunks.push(e.data);});
   recorder.addEventListener('error',e=>message('Lỗi ghi video: '+(e.error?.message||'MediaRecorder')));
   recorder.addEventListener('stop',finishRecording,{once:true});
@@ -278,10 +292,9 @@ $('videoFlip').addEventListener('click',async()=>{
   }catch(e){message('Không đổi được camera: '+e.message);}
  }
 });
-$('videoRotate').addEventListener('click',()=>{
- if(recorder?.state==='recording'){message('Không đổi hướng trong lúc ghi; dừng trước khi xoay.');return;}
- rotation=(rotation+90)%360;message('Đã xoay khung video '+rotation+'°.');
-});
+$('videoRotate').addEventListener('click',()=>{rotation=(rotation+90)%360;message('Đã xoay video '+rotation+'°. Hình và dấu xoay cùng nhau.');});
+$('videoRotate180').addEventListener('click',()=>{rotation=(rotation+180)%360;message('Đã lật 180°: hình và dấu thời gian xoay cùng nhau.');});
+$('videoStampSize').addEventListener('input',()=>{$('videoStampSizeValue').textContent=$('videoStampSize').value+'%';});
 $('videoPlayPause').addEventListener('click',()=>{
  if(media.paused)media.play().catch(e=>message('Không mở video: '+e.message));else media.pause();
  syncButtons();
