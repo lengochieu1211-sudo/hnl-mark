@@ -14,6 +14,9 @@ import android.content.ClipData;
 import android.database.Cursor;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.provider.OpenableColumns;
+import android.content.ContentResolver;
+import android.webkit.MimeTypeMap;
 import android.util.Base64;
 import android.view.Gravity;
 import android.view.OrientationEventListener;
@@ -48,6 +51,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -58,6 +63,7 @@ public final class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
     private static final String ENTRY = "https://" + HOST + "/assets/www/index.html";
     private static final int REQ_FILES = 400;
+    private static final int REQ_NATIVE_GALLERY = 402;
     private static final int REQ_MEDIA_PERMISSIONS = 401;
     private static final int NAVY = Color.rgb(19, 38, 58);
     private static final int GOLD = Color.rgb(255, 210, 83);
@@ -75,6 +81,15 @@ public final class MainActivity extends Activity {
     private int lastPhysicalAngle = 0;
     private final Map<String, SaveSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, ShareSession> shares = new ConcurrentHashMap<>();
+    private final Map<String, PickedContent> pickedContents = new ConcurrentHashMap<>();
+    private static final class PickedContent {
+        final Uri uri;
+        final String mime;
+        final long until;
+        PickedContent(Uri uri,String mime){
+            this.uri=uri;this.mime=mime;this.until=System.currentTimeMillis()+20L*60*1000;
+        }
+    }
     private static final class ShareSession {
         final File file;
         final String mime;
@@ -168,6 +183,10 @@ public final class MainActivity extends Activity {
         item.addView(name, new LinearLayout.LayoutParams(-1, dp(18)));
         chromeTabs.addView(item, new LinearLayout.LayoutParams(0, -1, 1f));
         item.setOnClickListener(v -> {
+            if ("library".equals(command)) {
+                openDeviceGallery();
+                return;
+            }
             if (web != null) {
                 web.evaluateJavascript(
                     "window.HNLAndroidApp && window.HNLAndroidApp.chooseTab(" +
@@ -214,6 +233,26 @@ public final class MainActivity extends Activity {
         WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
             .setDomain(HOST)
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/picked/", path -> {
+                // Private in-memory URI allowlist, populated ONLY after Android
+                // returns a user-selected document/photo. Never proxy arbitrary paths.
+                String token = path==null?"":path.replace("/","");
+                PickedContent entry = pickedContents.get(token);
+                if(entry==null || entry.until<System.currentTimeMillis()
+                    || !"content".equals(entry.uri.getScheme())){
+                    pickedContents.remove(token);
+                    return new WebResourceResponse("text/plain","UTF-8",
+                        new ByteArrayInputStream(new byte[0]));
+                }
+                try{
+                    java.io.InputStream in = getContentResolver().openInputStream(entry.uri);
+                    if(in==null)throw new IOException("Selected media stream is empty");
+                    return new WebResourceResponse(entry.mime,null,in);
+                }catch(Exception err){
+                    return new WebResourceResponse("text/plain","UTF-8",
+                        new ByteArrayInputStream(new byte[0]));
+                }
+            })
             .build();
 
         web.setWebViewClient(new WebViewClient() {
@@ -254,56 +293,17 @@ public final class MainActivity extends Activity {
             }
             @Override public boolean onShowFileChooser(
                 WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
-                if(fileCallback != null)fileCallback.onReceiveValue(null);
+                if(fileCallback!=null)fileCallback.onReceiveValue(null);
                 fileCallback=callback;
-                List<String> accepts=Arrays.asList(params.getAcceptTypes());
                 boolean isZip=false;
-                for(String type:accepts){
+                for(String type:params.getAcceptTypes()){
                     if(type!=null&&(type.contains("zip")||type.contains("octet-stream")))isZip=true;
                 }
-                boolean multiple=params.getMode()==FileChooserParams.MODE_OPEN_MULTIPLE;
-                Intent pick;
-                if(!isZip && Build.VERSION.SDK_INT>=33){
-                    // Android Photo Picker: images/videos directly, no broad storage rights.
-                    pick=new Intent(MediaStore.ACTION_PICK_IMAGES);
-                    pick.setType("*/*");
-                    if(multiple){
-                        int max=Math.max(2,Math.min(MediaStore.getPickImagesMaxLimit(),20));
-                        pick.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX,max);
-                    }
-                }else if(isZip){
-                    pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    pick.addCategory(Intent.CATEGORY_OPENABLE);
-                    pick.setType("*/*");
-                    pick.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/zip","application/octet-stream"});
-                    pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
-                    pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                }else{
-                    // Android 10-12: system gallery picker fallback.
-                    pick=new Intent(Intent.ACTION_GET_CONTENT);
-                    pick.addCategory(Intent.CATEGORY_OPENABLE);
-                    pick.setType("*/*");
-                    pick.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
-                    pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
-                    pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                }
-                try{
-                    startActivityForResult(pick,REQ_FILES);
-                }catch(Exception e){
-                    if(!isZip && Build.VERSION.SDK_INT>=33){
-                        try{
-                            Intent fallback=new Intent(Intent.ACTION_GET_CONTENT);
-                            fallback.addCategory(Intent.CATEGORY_OPENABLE);
-                            fallback.setType("*/*");
-                            fallback.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
-                            fallback.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
-                            startActivityForResult(fallback,REQ_FILES);
-                            return true;
-                        }catch(Exception ignored){}
-                    }
-                    fileCallback.onReceiveValue(null);
+                final boolean multiple=params.getMode()==FileChooserParams.MODE_OPEN_MULTIPLE;
+                if(!startSystemPicker(REQ_FILES,multiple,isZip)){
                     fileCallback=null;
-                    toast("Không mở được thư viện thiết bị.");
+                    callback.onReceiveValue(null);
+                    toast("Không mở được trình chọn ảnh/video; kiểm tra ứng dụng Thư viện/Files.");
                 }
                 return true;
             }
@@ -366,12 +366,144 @@ public final class MainActivity extends Activity {
         else { p.deny(); toast("Chưa cấp quyền camera/micro."); }
     }
 
-    @Override protected void onActivityResult(int code, int resultCode, Intent data) {
-        super.onActivityResult(code, resultCode, data);
-        if (code != REQ_FILES || fileCallback == null) return;
-        ValueCallback<Uri[]> callback = fileCallback;
-        fileCallback = null;
-        callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
+    private Intent mediaIntent(boolean multiple,boolean zip,boolean usePhotoPicker) {
+        if(usePhotoPicker&&Build.VERSION.SDK_INT>=33&&!zip){
+            // IMPORTANT: For both PHOTO and VIDEO, ACTION_PICK_IMAGES must
+            // NOT use setType("*/*"). That broke the chooser on some Android ROMs.
+            Intent pick=new Intent(MediaStore.ACTION_PICK_IMAGES);
+            if(multiple){
+                int max=Math.max(2,Math.min(MediaStore.getPickImagesMaxLimit(),20));
+                pick.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX,max);
+            }
+            pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            return pick;
+        }
+        Intent intent=new Intent(zip?Intent.ACTION_OPEN_DOCUMENT:Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,zip
+            ?new String[]{"application/zip","application/octet-stream"}
+            :new String[]{"image/*","video/*"});
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return intent;
+    }
+
+    private boolean startSystemPicker(int requestCode,boolean multiple,boolean zip){
+        // Try Android Photo Picker first, then gallery/files chooser and finally
+        // the Storage Access Framework (most reliable on OEM Android variants).
+        for(int pass=0;pass<3;pass++){
+            if(pass==0&&(zip||Build.VERSION.SDK_INT<33))continue;
+            Intent intent=pass==2
+                ?new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                :mediaIntent(multiple,zip,pass==0);
+            if(pass==2){
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                intent.putExtra(Intent.EXTRA_MIME_TYPES,zip
+                  ?new String[]{"application/zip","application/octet-stream"}
+                  :new String[]{"image/*","video/*"});
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            }
+            try{
+                startActivityForResult(intent,requestCode);
+                return true;
+            }catch(Exception ignored){}
+        }
+        return false;
+    }
+
+    private void openDeviceGallery(){
+        runOnUiThread(()->{
+            if(fileCallback!=null){
+                toast("Hãy hoàn tất chọn tệp đang mở trước.");
+                return;
+            }
+            if(!startSystemPicker(REQ_NATIVE_GALLERY,true,false))
+                toast("Không mở được Thư viện máy. Hãy kiểm tra ứng dụng Thư viện/Files.");
+        });
+    }
+
+    private List<Uri> getPickedUris(int resultCode,Intent data){
+        List<Uri> list=new ArrayList<>();
+        if(resultCode!=RESULT_OK||data==null)return list;
+        if(data.getClipData()!=null){
+            ClipData clip=data.getClipData();
+            for(int i=0;i<clip.getItemCount()&&i<30;i++){
+                Uri uri=clip.getItemAt(i).getUri();
+                if(uri!=null&&"content".equalsIgnoreCase(uri.getScheme())
+                  &&!list.contains(uri))list.add(uri);
+            }
+        }
+        Uri single=data.getData();
+        if(single!=null&&"content".equalsIgnoreCase(single.getScheme())
+          &&!list.contains(single)&&list.size()<30)list.add(single);
+        return list;
+    }
+
+    private JSONObject describePickedUri(Uri uri){
+        if(!"content".equalsIgnoreCase(uri.getScheme()))return null;
+        String mime=getContentResolver().getType(uri);
+        String filename="HNLMark-media";
+        long length=-1;
+        try(Cursor cursor=getContentResolver().query(uri,
+              new String[]{OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE},
+              null,null,null)){
+            if(cursor!=null&&cursor.moveToFirst()){
+                int nameCol=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                int sizeCol=cursor.getColumnIndex(OpenableColumns.SIZE);
+                if(nameCol>=0&&!cursor.isNull(nameCol))filename=cursor.getString(nameCol);
+                if(sizeCol>=0&&!cursor.isNull(sizeCol))length=cursor.getLong(sizeCol);
+            }
+        }catch(Exception ignored){}
+        if(filename==null||filename.trim().isEmpty())filename="HNLMark-media";
+        filename=filename.replaceAll("[\\r\\n\\t]","_");
+        if(filename.length()>160)filename=filename.substring(filename.length()-160);
+        if(mime==null||mime.equals("application/octet-stream")){
+            String ext=filename.contains(".")?filename.substring(filename.lastIndexOf('.')+1):"";
+            mime=MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase(java.util.Locale.ROOT));
+        }
+        if(mime==null)mime="application/octet-stream";
+        if(!mime.startsWith("image/")&&!mime.startsWith("video/"))return null;
+        String token=UUID.randomUUID().toString();
+        pickedContents.put(token,new PickedContent(uri,mime));
+        try{
+            JSONObject result=new JSONObject();
+            result.put("url","https://"+HOST+"/picked/"+token);
+            result.put("name",filename);
+            result.put("type",mime);
+            result.put("size",length);
+            return result;
+        }catch(Exception error){pickedContents.remove(token);return null;}
+    }
+
+    @Override protected void onActivityResult(int code,int resultCode,Intent data){
+        super.onActivityResult(code,resultCode,data);
+        if(code!=REQ_FILES&&code!=REQ_NATIVE_GALLERY)return;
+        List<Uri> selected=getPickedUris(resultCode,data);
+        if(code==REQ_FILES){
+            ValueCallback<Uri[]> callback=fileCallback;
+            fileCallback=null;
+            if(callback!=null){
+                callback.onReceiveValue(selected.isEmpty()?null:selected.toArray(new Uri[0]));
+            }
+            return;
+        }
+        if(resultCode!=RESULT_OK)return;
+        JSONArray media=new JSONArray();
+        for(Uri uri:selected){
+            JSONObject item=describePickedUri(uri);
+            if(item!=null)media.put(item);
+        }
+        if(media.length()==0){
+            toast("Không nhận được ảnh/video hợp lệ từ thư viện.");
+            return;
+        }
+        if(web!=null){
+            String script="window.HNLAndroidApp?.receivePickedMedia("+media.toString()+")";
+            web.post(()->web.evaluateJavascript(script,null));
+        }
     }
 
     private void setChromeVisible(boolean visible) {
@@ -580,6 +712,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public boolean appendShare(String token,String chunk){return appendShareFile(token,chunk);}
         @JavascriptInterface public boolean finishShare(String token){return finishShareFile(token);}
         @JavascriptInterface public void abortShare(String token){abortShareFile(token);}
+        @JavascriptInterface public void openDeviceGallery(){MainActivity.this.openDeviceGallery();}
         @JavascriptInterface public void cameraState(boolean active) {
             runOnUiThread(() -> {
                 cameraImmersive = active;
