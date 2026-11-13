@@ -1,3 +1,11 @@
+# HNLMark v2.1.1 — Ảnh/Video chung khu vực đầu, icon khiên dấu tích
+
+- Nhánh DEV: gộp nút chế độ **Ảnh / Video** ngay panel đầu. Sau khi chọn, chỉ còn hai lựa chọn tại cùng vị trí: **Chụp ảnh / Quay video** và **Chọn ảnh / Chọn video từ máy**. Không phải kéo xuống một panel Video khác.
+- Khi chọn Video, các nút khởi tạo vẫn ở trên; vùng chỉnh/xuất video chỉ hiện trong cùng panel nếu đang dùng Video. Chế độ Ảnh giữ nguyên thư viện ảnh, ZIP dự án và ảnh đang mở.
+- Nếu video đã xuất nhưng chưa bấm Lưu, hiển thị xác nhận trước khi chuyển sang Ảnh hoặc chọn video khác. Không cho chuyển chế độ khi đang quay.
+- Biểu tượng đầu dòng mã đứng bên phải đổi thành **tấm khiên có dấu tích**, giữ nguyên màu `serialColor` hiện có (mặc định trắng). Áp dụng cả ảnh và video qua chung bộ vẽ dấu Timemark.
+- Chỉ cập nhật `dev`, không rollback `main`/Production. CI chỉ kiểm tra cú pháp và tài sản, chưa thay thế kiểm thử camera/âm thanh Android thật.
+
 # HNLMark v2.1.0 — Video thử nghiệm và camera gọn hơn
 
 ## Video (DEV, chưa Runtime Golden)
