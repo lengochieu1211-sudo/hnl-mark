@@ -1,3 +1,14 @@
+# HNLMark v2.2.0 — Mẫu dấu/Font, cắt ảnh đúng tỷ lệ, chất lượng ảnh/video & sửa xoay video (DEV)
+
+- Source GitHub dev, không sửa main/production.
+- Mẫu dấu bổ sung: Hiện đại, Kỹ thuật, Điện ảnh, Một dòng, Chỉ giờ, **Không dấu**. Không dấu thực sự không vẽ chữ/logo/mã. Mặc định giữ Timemark.
+- Thêm font hệ thống, Trebuchet, Impact, Times New Roman, Courier New. Độ đậm và cỡ từng nhóm chữ điều chỉnh trên ảnh. Các font tùy độ sẵn có của máy, fallback theo hệ thống.
+- Chuẩn hóa tỷ lệ cắt 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, 4:5, 5:4, 21:9, gốc hoặc tự do. Nút Tạo khung giữa, kéo theo tỷ lệ, lưu dưới dạng edit non-destructive.
+- Ảnh: JPG 75/85/92/100%, PNG không giảm chất lượng JPEG; thêm 3000 và 3840px, không nâng độ phân giải gốc.
+- Video: chọn giới hạn độ phân giải (720/1080/1440/2160 hoặc theo nguồn), bitrate 2.5–24 Mbps, 24/30/60 FPS (trình duyệt có thể giới hạn), dấu trên video mặc định 65% so với ảnh.
+- Sửa hướng: dùng cùng phép quay đã kiểm tra của camera Ảnh để xử lý hướng ngang Video, phân biệt tư thế ngược khi cảm biến cho phép, nút lật 180° thủ công. Ghép khung hình và mọi dấu/giờ/logo vào canvas tạm rồi mới đưa vào canvas xuất; ghi hình giữ kích thước cố định và letterbox khi máy đổi hướng, tránh kéo dãn.
+- **Chưa runtime golden:** kiểm thử cảm biến, ghi âm, video thực tế trên điện thoại; CI kiểm tra code/logic không thay thế thử máy. Video trên web không bảo đảm mức bitrate/fps mà trình duyệt có thể thay đổi.
+
 # HNLMark v2.1.3 DEV — camera tối giản, sửa xoay ngược video
 
 - **Source chuẩn** GitHub dev; không chỉnh main, không thay Vercel Production.
