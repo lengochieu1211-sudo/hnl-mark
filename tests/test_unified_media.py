@@ -62,4 +62,23 @@ assert "drawShieldCheck(g,f*1.2,config.serialColor)" in photo
 assert 'HNLVideoBridge' in photo and 'drawStamp' in video
 assert '.media-combined-actions' in css
 assert '.video-studio .video-ios-controls .video-icon[hidden]' in css
-print('PASS: one combined picker, symmetric photo/video shutter, modes and existing badge')
+# New V2.2.0 preferences and crop settings must be complete DOM controls.
+for name in ['cropRatio','cropCenter','videoResolution','videoBitrate','videoFps','videoStampSize','videoRotate180','quality','outputSize','outputFormat','fontFamily','fontWeight']:
+    assert name in by_id, 'Missing control: '+name
+assert html.count('data-preset="none"')==1
+for style in ('clean','tech','cinema','compact','clock'):
+    assert html.count('data-preset="'+style+'"')==1
+for n in ('1:1','4:3','3:4','3:2','2:3','16:9','9:16','4:5','5:4','21:9'):
+    assert '<option value="'+n+'">' in html
+assert 'crop-ratios.js?v=2.2.0' in html
+assert "if(config.preset==='none')return" in photo
+assert 'function drawModernStamp(' in photo
+assert "window.HNLCropRatio.fromDrag" in photo
+assert "window.HNLCropRatio.center" in photo
+assert "Number($('videoStampSize').value)/100" in video
+assert "videoBitsPerSecond:Number($('videoBitrate').value)" in video
+assert "canvas.captureStream(Number($('videoFps').value)" in video
+assert "window.HNLVideoOrientation.videoTurn" in video
+assert '.video-quality-panel' in css and '.crop-ratio-options' in css
+
+print('PASS: one combined picker, symmetric photo/video shutter, modes and all V2.2 media and quality controls')
