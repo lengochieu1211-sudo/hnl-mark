@@ -369,7 +369,7 @@ public final class MainActivity extends Activity {
     private Intent mediaIntent(boolean multiple,boolean zip,boolean usePhotoPicker) {
         if(usePhotoPicker&&Build.VERSION.SDK_INT>=33&&!zip){
             // IMPORTANT: For both PHOTO and VIDEO, ACTION_PICK_IMAGES must
-            // NOT use setType("*/*"). That broke the chooser on some Android ROMs.
+            // NOT request a wildcard MIME type. Some Android ROMs reject it.
             Intent pick=new Intent(MediaStore.ACTION_PICK_IMAGES);
             if(multiple){
                 int max=Math.max(2,Math.min(MediaStore.getPickImagesMaxLimit(),20));
