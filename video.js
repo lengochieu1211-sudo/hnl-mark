@@ -13,17 +13,10 @@ let physicalPortrait=null, physicalSide=1, candidate='', samples=0, fixedTurn=nu
 let selectedMedia='photo',outputSaved=true;
 function updateMediaPicker(){
  const video=selectedMedia==='video';
- $('mediaModePhoto').classList.toggle('active',!video);
- $('mediaModeVideo').classList.toggle('active',video);
- $('mediaModePhoto').setAttribute('aria-pressed',String(!video));
- $('mediaModeVideo').setAttribute('aria-pressed',String(video));
- $('dropzone').hidden=video;
- $('videoPicker').hidden=!video;
- $('openCamera').hidden=video;
- $('openVideoCamera').hidden=!video;
  $('photoLibraryArea').hidden=video;
  $('videoPanel').hidden=!video;
  $('photoCount').hidden=video;
+ // Opening the camera and selecting a file always remain in the SAME top row.
 }
 async function chooseMedia(next){
  if(next===selectedMedia){updateMediaPicker();return true;}
@@ -52,7 +45,12 @@ function syncButtons(){
  $('videoRecord').hidden=!active||rec;$('videoStop').hidden=!rec;
  $('videoFlip').hidden=mode!=='camera';$('videoPlayPause').hidden=mode!=='file'||rec;
  $('videoSave').disabled=!outputBlob;
- $('videoRecord').textContent=mode==='file'?'● Xuất video có dấu':'● Quay video';
+ const buttonLabel=mode==='file'?'Xuất video có dấu':'Quay video';
+ $('videoRecord').setAttribute('aria-label',buttonLabel);
+ const label=$('videoRecord').querySelector('.video-button-label');
+ if(label)label.textContent=mode==='file'?'↓ Xuất video có dấu':'● Quay video';
+ studio.classList.toggle('video-camera-mode',mode==='camera');
+ studio.classList.toggle('video-file-mode',mode==='file');
  $('videoRotate').disabled=rec;$('videoFlip').disabled=rec;
  $('videoPlayPause').textContent=media.paused?'▶ Xem thử':'Ⅱ Tạm dừng';
  $('videoStudio').classList.toggle('is-recording',rec);
@@ -249,17 +247,15 @@ function saveResult(){
  message('Đã gửi yêu cầu tải video. Kiểm tra thư mục Tải xuống.');
 }
 function switchToPhoto(){
- chooseMedia('photo').catch(err=>message(err.message));
+ const wasLive=mode==='camera';
+ chooseMedia('photo').then(ok=>{if(ok&&wasLive)$('openCamera')?.click();}).catch(err=>message(err.message));
 }
-$('mediaModePhoto').addEventListener('click',()=>chooseMedia('photo').catch(err=>message(err.message)));
-$('mediaModeVideo').addEventListener('click',()=>chooseMedia('video').catch(err=>message(err.message)));
-$('videoFileInput').addEventListener('change',e=>{const selected=e.target.files?.[0];e.target.value='';importVideo(selected).catch(err=>message(err.message));});
-$('openVideoCamera').addEventListener('click',()=>{openCamera().catch(err=>message(err.message));});
+$('videoFileShortcut').addEventListener('click',()=>{if(recorder?.state==='recording'){message('Dừng quay trước khi chọn file.');return;}$('photoInput').click();});
 $('photoToVideo').addEventListener('click',()=>{openCamera().catch(err=>message(err.message));});
 $('videoRecord').addEventListener('click',()=>startRecording().catch(err=>message(err.message)));
 $('videoStop').addEventListener('click',stopRecording);
 $('videoSave').addEventListener('click',saveResult);
-$('videoClose').addEventListener('click',()=>closeStudio());
+$('videoClose').addEventListener('click',()=>{if(outputBlob&&!outputSaved&&!window.confirm('Video chưa được lưu xuống máy. Đóng và bỏ bản xuất này?'))return;closeStudio().catch(err=>message(err.message));});
 $('videoFlip').addEventListener('click',async()=>{
  if(recorder?.state==='recording'){message('Không đổi camera khi đang quay.');return;}
  if(mode==='camera'){
@@ -288,5 +284,6 @@ window.addEventListener('devicemotion',physicalMotion);window.addEventListener('
 window.addEventListener('resize',applyPhysicalLayout);
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&recorder?.state==='recording')stopRecording();});
 window.addEventListener('pagehide',()=>{if(recorder?.state==='recording')recorder.stop();stopCameraTracks();});
+window.HNLVideoStudio={importVideo:(file)=>importVideo(file),openCamera:()=>openCamera(),getMode:()=>mode};
 updateMediaPicker();syncButtons();
 })();
