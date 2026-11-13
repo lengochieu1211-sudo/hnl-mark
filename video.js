@@ -10,6 +10,7 @@ let file=null, rotation=0, recorder=null, chunks=[], raf=0, exportStream=null, m
 let recordingStart=0, recordingDate=null, importDate=null, recordingName='', recordingMime='', recordingMode='';
 let videoCode='', isBusy=false, audioContext=null, audioSource=null, audioDestination=null, fallbackNoAudio=false;
 let physicalPortrait=null, physicalSide=1, physicalInverted=false, initialPortraitBetaSign=null, candidate='', samples=0, fixedTurn=null;
+let lastMotionAt=0,lastOrientationAt=0,lastOrientationSide=0;
 const workCanvas=document.createElement('canvas'),workCtx=workCanvas.getContext('2d',{alpha:false});
 let selectedMedia='photo',outputSaved=true;
 function updateMediaPicker(){
@@ -77,15 +78,25 @@ function physicalMotion(e){
  if(mode!=='camera'||!e.accelerationIncludingGravity)return;
  const {x,y}=e.accelerationIncludingGravity;if(!Number.isFinite(x)||!Number.isFinite(y))return;
  const ax=Math.abs(x),ay=Math.abs(y);if(Math.hypot(x,y)<3.5)return;
- if(ax>ay*1.16&&ax>3.6)setPhysical(x>=0?'right':'left');
- else if(ay>ax*1.16&&ay>3.6)setPhysical('portrait');
+ lastMotionAt=performance.now();
+ if(ax>ay*1.12&&ax>3.3){
+  const gammaSign=lastOrientationAt&&lastMotionAt-lastOrientationAt<1800?lastOrientationSide:0;
+  setPhysical((gammaSign||Math.sign(x))>=0?'right':'left');
+ }else if(ay>ax*1.12&&ay>3.3)setPhysical('portrait');
 }
 function physicalOrientation(e){
  if(mode!=='camera'||!Number.isFinite(e.gamma)||!Number.isFinite(e.beta))return;
- const g=Math.abs(e.gamma),b=Math.abs(e.beta);
- if(b>45&&b>g*1.35){const sign=Math.sign(e.beta);if(initialPortraitBetaSign===null)initialPortraitBetaSign=sign;physicalInverted=sign!==initialPortraitBetaSign;}
- if(g>35&&g>b*1.2)setPhysical(e.gamma>=0?'right':'left');
- else if(b>35&&b>g*1.2)setPhysical('portrait');
+ const g=Math.abs(e.gamma),b=Math.abs(e.beta),now=performance.now();
+ if(g>24){lastOrientationSide=Math.sign(e.gamma);lastOrientationAt=now;}
+ if(b>45&&b>g*1.35){
+  const sign=Math.sign(e.beta);
+  if(initialPortraitBetaSign===null)initialPortraitBetaSign=sign;
+  physicalInverted=sign!==initialPortraitBetaSign;
+ }
+ // Gravity is more stable than beta/gamma on Android while locked.
+ if(lastMotionAt&&now-lastMotionAt<1600)return;
+ if(g>=28&&g>b*1.12)setPhysical(e.gamma>=0?'right':'left');
+ else if(b>=28&&b>g*1.12)setPhysical('portrait');
 }
 function devicePortrait(){return matchMedia('(orientation: portrait)').matches;}
 function effectivePortrait(){return physicalPortrait??devicePortrait();}
@@ -151,7 +162,7 @@ async function closeStudio(){
  if(recorder&&recorder.state==='recording'){message('Dừng quay trước khi đóng camera.');return;}
  media.pause();media.srcObject=null;media.removeAttribute('src');media.load();
  stopCameraTracks();resetFileUrl();clearOutput();
- mode='none';physicalPortrait=null;physicalInverted=false;initialPortraitBetaSign=null;rotation=0;fixedTurn=null;
+ mode='none';physicalPortrait=null;physicalInverted=false;initialPortraitBetaSign=null;rotation=0;lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;fixedTurn=null;
  studio.classList.remove('video-open','video-landscape','video-locked-left','video-locked-right');
  document.body.classList.remove('hnl-video-live');cancelAnimationFrame(raf);raf=0;
  message('Chọn video hoặc mở camera để bắt đầu.');syncButtons();
@@ -165,7 +176,7 @@ async function openCamera(){
  try{
   cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
   media.srcObject=cameraStream;media.muted=true;media.playsInline=true;await media.play();
-  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';samples=0;fixedTurn=null;
+  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;samples=0;fixedTurn=null;
   studio.classList.add('video-open');document.body.classList.add('hnl-video-live');applyPhysicalLayout();frameLoop();syncButtons();
   message('Camera video đã mở. Nhấn Quay video để bắt đầu. Có thể ghi âm nếu cấp quyền micro.');
  }catch(e){stopCameraTracks();message('Không mở được camera video: '+(e.message||e));}
