@@ -95,7 +95,7 @@ assert 'font-size:10px!important' in fix_css
 assert 'flex:0 0 64px!important' in fix_css
 assert 'flex:0 0 45px!important' in fix_css
 def button_icon(id):
-    match=re.search(r'<button[^>]*\\bid="'+id+r'"[^>]*>(.*?)</button>', html, re.S)
+    match=re.search(r'<button[^>]*\bid="'+id+r'"[^>]*>(.*?)</button>', html, re.S)
     assert match, 'Missing camera rotate button '+id
     svg=re.search(r'<svg.*?</svg>',match.group(1), re.S)
     assert svg, 'SVG missing from '+id
