@@ -1,3 +1,13 @@
+# HNLMark v2.1.2 — Một nút chọn ảnh/video, camera cân tâm theo cách sử dụng iPhone
+
+- Source chỉ cập nhật nhánh `dev`; không thay `main`, production, projectId.
+- Trên đầu trang dùng đúng một nút **Chọn ảnh / video** (`input accept=image/*,video/*`, multiple). Tệp được nhận dạng theo MIME/đuôi; ảnh vẫn đi vào bộ sửa ảnh/thư viện gốc, video đầu tiên được chuyển đến trình xử lý video. Nhiều video cùng lúc sẽ báo rõ chỉ xử lý từng video một.
+- Duy trì đúng một nút **Mở camera**. Khi mở mặc định vào ẢNH; chuyển **ẢNH ↔ VIDEO** bằng thanh chế độ ngay trong camera giống nguyên tắc điều khiển của iPhone, không phải quay lại đầu trang.
+- Cả Ảnh và Video sử dụng nút tròn chính ở **tâm chính xác** theo CSS grid 1fr / 70px / 1fr; hai biểu tượng Thư viện và Đổi camera cân xứng hai bên. Nút Ảnh màu trắng, nút Video màu đỏ và chuyển Dừng khi đang quay. Màn hình ngang (kể cả Android khóa xoay) dùng rail dọc bên phải, shutter căn theo tâm chiều ngang rail.
+- Tùy chọn Full, xoay, đóng thành biểu tượng nhỏ; tránh nút phụ che ảnh. Vẫn giữ chế độ chụp liên tiếp và nhãn mã đứng có khiên dấu tích với màu cấu hình cũ.
+- Xử lý video giữ nguyên theo MediaRecorder (WebM/MP4 tùy trình duyệt), âm thanh khi có quyền và hỗ trợ, không ghi đè video gốc. Video chưa lưu vẫn được cảnh báo trước khi bỏ.
+- Đây là bản preview DEV, CI chỉ gồm syntax/static test; **chưa Runtime Golden trên Android/iOS thật**.
+
 # HNLMark v2.1.1 — Ảnh/Video chung khu vực đầu, icon khiên dấu tích
 
 - Nhánh DEV: gộp nút chế độ **Ảnh / Video** ngay panel đầu. Sau khi chọn, chỉ còn hai lựa chọn tại cùng vị trí: **Chụp ảnh / Quay video** và **Chọn ảnh / Chọn video từ máy**. Không phải kéo xuống một panel Video khác.
