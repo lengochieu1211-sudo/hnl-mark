@@ -609,24 +609,30 @@ async function requestCameraSensorPermission(){
 }
 function cameraGeometry(video){
   const rawW=video.videoWidth,rawH=video.videoHeight;
-  const physicalSensor=cameraSensorPortrait!==null;
-  const expectedPortrait=physicalSensor?cameraSensorPortrait:devicePortrait();
+  // The portrait-locked APK receives a reliable physical angle from Android.
+  // DeviceMotion can be unavailable in WebView; use native pose when present.
+  const nativeAngle=window.HNLAndroidApp?.getDeviceAngle?.();
+  const nativePose=Number.isFinite(nativeAngle)&&[0,90,180,270].includes(nativeAngle);
+  const physicalSensor=nativePose||cameraSensorPortrait!==null;
+  const expectedPortrait=nativePose?nativeAngle%180===0:(physicalSensor?cameraSensorPortrait:devicePortrait());
+  const side=nativePose?(nativeAngle===270?-1:1):cameraSensorSide;
   let baseRotation=0;
   // The video frame might be landscape-native while the phone is portrait,
   // or vice versa. Rotate source pixels, not only the canvas with CSS.
   if((rawH>=rawW)!==expectedPortrait){
-    if(physicalSensor&&!expectedPortrait)baseRotation=cameraSensorSide===1?90:-90;
+    if(physicalSensor&&!expectedPortrait)baseRotation=side===1?90:-90;
     else {
       const angle=Number(screen.orientation?.angle);
       const secondary=screen.orientation?.type?.endsWith('secondary')||false;
       baseRotation=expectedPortrait?(secondary||angle===180?-90:90):(secondary||angle===270?90:-90);
     }
   }
+  if(nativePose&&nativeAngle===180)baseRotation=(baseRotation+180)%360;
   const rotation=((baseRotation+cameraManualRotation)%360+360)%360;
   const turns90=rotation===90||rotation===270;
   const width=turns90?rawH:rawW,height=turns90?rawW:rawH;
   return {rawW,rawH,portrait:height>=width,rotation,width,height,
-    sensor:physicalSensor,manual:cameraManualRotation!==0};
+    sensor:physicalSensor,nativeAngle:nativePose?nativeAngle:null,manual:cameraManualRotation!==0};
 }
 function paintCameraFrame(g,video,frame,W,H){
   g.save();g.filter=cameraControls?.getFilter()||'none';
@@ -653,14 +659,14 @@ function cameraOrientationUi(frame){
   // When the browser stays portrait while the physical handset is landscape,
   // display the *whole live camera* turned in the opposite direction. This
   // includes the canvas, the stamp and every control. Saved pixels are unchanged.
-  const turn=frame.sensor&&cameraSensorPortrait!==null&&cameraSensorPortrait!==screenPortrait
+  const turn=window.HNLAndroidApp?'':frame.sensor&&cameraSensorPortrait!==null&&cameraSensorPortrait!==screenPortrait
     ?(cameraSensorSide>=0?'left':'right') : '';
   cameraViewTurn=turn;
   $('cameraArea').classList.toggle('hnl-turn-left',turn==='left');
   $('cameraArea').classList.toggle('hnl-turn-right',turn==='right');
   // The actual handset can be horizontal while CSS remains portrait (rotation lock).
   // Keep the actions in a compact dock on the user's right in BOTH cases.
-  const dockRight=cameraSensorPortrait===false||(cameraSensorPortrait===null&&!screenPortrait);
+  const dockRight=!window.HNLAndroidApp&&(cameraSensorPortrait===false||(cameraSensorPortrait===null&&!screenPortrait));
   $('cameraArea').classList.toggle('hnl-landscape-dock',dockRight);
   const btn=$('rotateCameraOverlay');
   if(btn){btn.title='Xoay cả hình camera và dấu HNLMark 90° (đang bù '+cameraManualRotation+'°)';btn.setAttribute('aria-label',btn.title);}
