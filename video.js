@@ -52,10 +52,16 @@ function syncButtons(){
  studio.classList.toggle('video-camera-mode',mode==='camera');
  studio.classList.toggle('video-file-mode',mode==='file');
  $('videoRotate').disabled=rec;$('videoFlip').disabled=rec;
- $('videoPlayPause').textContent=media.paused?'▶ Xem thử':'Ⅱ Tạm dừng';
+ const play=$('videoPlayPause'),paused=media.paused;
+ play.setAttribute('aria-label',paused?'Phát video':'Tạm dừng video');
+ play.title=paused?'Phát video':'Tạm dừng video';
+ play.innerHTML=paused
+  ?'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M8 5 19 12 8 19Z"/></svg>'
+  :'<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>';
  $('videoStudio').classList.toggle('is-recording',rec);
- $('videoCameraMode').hidden=mode!=='camera';
- $('videoFileMode').hidden=mode!=='file';
+ $('videoCameraMode').hidden=true;
+ $('videoFileMode').hidden=true;
+ $('videoFileShortcut').hidden=mode==='file';
  $('videoElapsed').hidden=!rec;
 }
 function setPhysical(candidateName){
@@ -91,9 +97,10 @@ function drawFrame(){
  const w=media.videoWidth,h=media.videoHeight;
  if(w&&h&&media.readyState>=2){
   const portrait=mode==='camera'?effectivePortrait():h>=w;
-  const mismatch=(h>=w)!==portrait;
-  const base=mismatch?(portrait?90:(physicalSide>=0?90:270)):0;
-  const turn=fixedTurn===null?(base+rotation)%360:fixedTurn,flip=turn===90||turn===270;
+  const computedTurn=window.HNLVideoOrientation.videoTurn({
+   mode,rawWidth:w,rawHeight:h,portrait,side:physicalSide,manual:rotation
+  });
+  const turn=fixedTurn===null?computedTurn:fixedTurn,flip=turn===90||turn===270;
   const max=Math.min(1,1920/Math.max(w,h)),width=Math.max(1,Math.round((flip?h:w)*max)),height=Math.max(1,Math.round((flip?w:h)*max));
   // Dimensions are fixed during recording to prevent MediaRecorder renegotiation.
   if(!recorder||recorder.state==='inactive'){
@@ -144,7 +151,7 @@ async function openCamera(){
  try{
   cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
   media.srcObject=cameraStream;media.muted=true;media.playsInline=true;await media.play();
-  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;candidate='';samples=0;
+  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;candidate='';samples=0;fixedTurn=null;
   studio.classList.add('video-open');document.body.classList.add('hnl-video-live');applyPhysicalLayout();frameLoop();syncButtons();
   message('Camera video đã mở. Nhấn Quay video để bắt đầu. Có thể ghi âm nếu cấp quyền micro.');
  }catch(e){stopCameraTracks();message('Không mở được camera video: '+(e.message||e));}
@@ -156,7 +163,7 @@ async function importVideo(selected){
  if(!selected.type.startsWith('video/')&&!/\.(mp4|webm|mov|m4v|ogv)$/i.test(selected.name)){message('Hãy chọn tệp video MP4, WebM hoặc MOV mà trình duyệt hỗ trợ.');return;}
  await closeStudio();file=selected;importDate=new Date(selected.lastModified||Date.now());
  sourceUrl=URL.createObjectURL(selected);media.src=sourceUrl;media.muted=false;media.playsInline=true;
- mode='file';videoCode=makeVideoCode();rotation=0;
+ mode='file';videoCode=makeVideoCode();rotation=0;fixedTurn=null;
  try{
   await new Promise((resolve,reject)=>{
    media.addEventListener('loadedmetadata',resolve,{once:true});media.addEventListener('error',()=>reject(Error('Định dạng video chưa được hỗ trợ trên thiết bị.')),{once:true});
@@ -196,10 +203,13 @@ async function startRecording(){
    await new Promise(resolve=>{if(media.seeked||Math.abs(media.currentTime)<.05)setTimeout(resolve,60);else media.addEventListener('seeked',resolve,{once:true});});
    media.muted=false;await media.play();
   }
-  // Freeze output orientation when recording begins, like a phone camera.
+  // Freeze exactly the same rotation as preview; avoid second auto-rotate.
   const rawPortrait=media.videoHeight>=media.videoWidth;
   const intendedPortrait=mode==='camera'?effectivePortrait():rawPortrait;
-  fixedTurn=((rawPortrait!==intendedPortrait?(intendedPortrait?90:(physicalSide>=0?90:270)):0)+rotation)%360;
+  fixedTurn=window.HNLVideoOrientation.videoTurn({
+   mode,rawWidth:media.videoWidth,rawHeight:media.videoHeight,
+   portrait:intendedPortrait,side:physicalSide,manual:rotation
+  });
   // Give video frames a full paint before capturing, and preserve the
   // same rendered time/logo as the live preview.
   await new Promise(resolve=>requestAnimationFrame(resolve));
