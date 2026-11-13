@@ -109,9 +109,9 @@ addUnifiedAction(document.querySelector('.video-result-actions'),'video','apkVid
 
 // Keep original save/share buttons in DOM because their callbacks own the
 // actual rendering, share MIME and backup logic. Hide only their visual UI.
+const apkPreviewModes={photo:'large',video:'large'};
 function updatePreview(){
  const angle=window.HNLAndroidApp?.getDeviceAngle?.()??0;
- const portrait=angle===0||angle===180;
  for(const [mode,stageId,canvasId,selector] of [
   ['photo','stage','previewCanvas','hnl-camera-live'],
   ['video',null,'videoCanvas','hnl-video-live']
@@ -120,23 +120,25 @@ function updatePreview(){
   const canvas=$(canvasId),active=body.classList.contains(selector);
   if(!stage||!canvas)continue;
   if(!active){
-   canvas.classList.remove('apk-rotated-preview');
-   canvas.style.removeProperty('--apk-preview-width');
-   canvas.style.removeProperty('--apk-preview-height');
-   canvas.style.removeProperty('--apk-preview-turn');
+   canvas.classList.remove('apk-geometry-preview','apk-rotated-preview');
+   for(const prop of ['--apk-preview-width','--apk-preview-height','--apk-preview-turn'])
+    canvas.style.removeProperty(prop);
    continue;
   }
   const rect=stage.getBoundingClientRect();
-  const w=canvas.width,h=canvas.height;
-  if(!rect.width||!rect.height||!w||!h)continue;
-  const viewW=portrait?rect.width:rect.height,viewH=portrait?rect.height:rect.width;
-  const scale=Math.min(viewW/w,viewH/h);
-  const displayW=Math.max(1,Math.floor(w*scale)),displayH=Math.max(1,Math.floor(h*scale));
-  canvas.style.setProperty('--apk-preview-width',displayW+'px');
-  canvas.style.setProperty('--apk-preview-height',displayH+'px');
-  const rotate=angle===90?-90:angle===270?90:angle===180?180:0;
-  canvas.style.setProperty('--apk-preview-turn',rotate+'deg');
-  canvas.classList.toggle('apk-rotated-preview',rotate!==0);
+  const geometry=window.HNLPreviewGeometry?.calculate({
+   stageWidth:rect.width,stageHeight:rect.height,
+   canvasWidth:canvas.width,canvasHeight:canvas.height,angle,
+   view:apkPreviewModes[mode]
+  });
+  if(!geometry)continue;
+  canvas.style.setProperty('--apk-preview-width',geometry.width+'px');
+  canvas.style.setProperty('--apk-preview-height',geometry.height+'px');
+  const turn=angle===90?-90:angle===270?90:angle===180?180:0;
+  canvas.style.setProperty('--apk-preview-turn',turn+'deg');
+  canvas.classList.add('apk-geometry-preview');
+  canvas.classList.toggle('apk-rotated-preview',turn!==0);
+  stage.dataset.apkPreviewMode=geometry.mode;
  }
 }
 let frame=0;
@@ -153,6 +155,29 @@ for(const [stage,canvas] of [
 ]){
  if(stage&&typeof ResizeObserver!=='undefined')new ResizeObserver(schedulePreview).observe(stage);
  if(canvas)new MutationObserver(schedulePreview).observe(canvas,{attributes:true,attributeFilter:['width','height']});
+}
+// Single display control on the *top bar*, not a moving bottom button.
+// A "large" preview fills the view when it needs only modest edge trimming;
+// "fit" guarantees even the outer time stamp is visible in the preview.
+for(const [mode,rootId] of [['photo','cameraArea'],['video','videoStudio']]){
+ const bar=document.querySelector('#'+rootId+' > .apk-camera-topbar');
+ if(!bar)continue;
+ const button=document.createElement('button');button.type='button';
+ button.className='apk-preview-toggle is-on';
+ button.title='Đổi khung ngắm lớn / xem toàn bộ khung hình';
+ button.setAttribute('aria-label','Đang dùng khung ngắm lớn. Chạm để xem toàn bộ ảnh');
+ button.setAttribute('aria-pressed','true');
+ button.innerHTML='<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><path d="M3 8l5-5m8 0 5 5M3 16l5 5m8 0 5-5"/></svg>';
+ button.addEventListener('click',()=>{
+  const view=apkPreviewModes[mode]==='large'?'fit':'large';
+  apkPreviewModes[mode]=view;
+  const large=view==='large';
+  button.classList.toggle('is-on',large);
+  button.setAttribute('aria-pressed',String(large));
+  button.setAttribute('aria-label',large?'Đang dùng khung ngắm lớn. Chạm để xem toàn bộ ảnh':'Đang xem toàn bộ ảnh. Chạm để phóng khung ngắm');
+  schedulePreview();
+ });
+ bar.appendChild(button);
 }
 window.HNLAndroidCameraLayout&&(window.HNLAndroidCameraLayout.syncPreviewOrientation=schedulePreview);
 schedulePreview();
