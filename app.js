@@ -1,7 +1,7 @@
 /* HNLMark v2.0.5 - mobile continuous camera, editable local library and compact landscape dock */
 (function(){'use strict';
 const $=id=>document.getElementById(id), canvas=$('previewCanvas'), stage=$('stage'), ctx=canvas.getContext('2d',{alpha:false});
-const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Timemark',footerCaption:'100% Chân thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
+const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Timemark',footerCaption:'100% Chân thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,cropRatio:'free',fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
 let saved={};try{saved=JSON.parse(localStorage.getItem('hnlmark-config-v1')||localStorage.getItem('hnl-photomark-config-v3')||'{}')||{};}catch(_){ }
 // Migrate old stamp labels in saved preferences AND per-photo settings, even when
 // an older one-time migration flag exists. Custom user captions/brands remain intact.
@@ -165,9 +165,9 @@ function updateImageEditor(){
 function regionValid(){return editSelection&&Math.abs(editSelection.x2-editSelection.x1)>=.016&&Math.abs(editSelection.y2-editSelection.y1)>=.016;}
 function normalizeRegion(){if(!regionValid())return null;const r=editSelection;return {x:clamp(Math.min(r.x1,r.x2),0,1),y:clamp(Math.min(r.y1,r.y2),0,1),w:clamp(Math.abs(r.x2-r.x1),0,1),h:clamp(Math.abs(r.y2-r.y1),0,1)};}
 function setEditTool(value){editTool=value;editSelection=null;canvas.classList.toggle('edit-select',value!=='move');updateImageEditor();renderPreview();}
-function stampFont(size,weight=400){const faces={condensed:'"Arial Narrow","Roboto Condensed",Arial,sans-serif',arial:'Arial,sans-serif',roboto:'Roboto,"Segoe UI",Arial,sans-serif',tahoma:'Tahoma,Arial,sans-serif',verdana:'Verdana,Arial,sans-serif',serif:'Georgia,"Times New Roman",serif',mono:'Consolas,"Courier New",monospace'};return (Number(weight)||400)+' '+Math.max(6,Math.round(size))+'px '+(faces[config.fontFamily]||faces.condensed);}
+function stampFont(size,weight=400){const faces={condensed:'"Arial Narrow","Roboto Condensed",Arial,sans-serif',arial:'Arial,sans-serif',roboto:'Roboto,"Segoe UI",Arial,sans-serif',tahoma:'Tahoma,Arial,sans-serif',verdana:'Verdana,Arial,sans-serif',serif:'Georgia,"Times New Roman",serif',mono:'Consolas,"Courier New",monospace',system:'system-ui,"Segoe UI",sans-serif',trebuchet:'"Trebuchet MS",Arial,sans-serif',impact:'Impact,"Arial Black",sans-serif',times:'"Times New Roman",Times,serif',courier:'"Courier New",Courier,monospace'};return (Number(weight)||400)+' '+Math.max(6,Math.round(size))+'px '+(faces[config.fontFamily]||faces.condensed);}
 function fontStack(){return stampFont(16).split('px ').slice(1).join('px ');}
-function fillForm(){const ids=['timeMode','batchDate','dateFormat','timeFormat','brandText','projectText','addressText','noteText','symbolType','logoMode','footerBrand','footerCaption','serialMode','serialText','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','outputSize','outputFormat','quality'];ids.forEach(id=>{const el=$(id);if(el)el.value=config[id];});['showDate','showTime','showBackground','showShadow','showFooter','showSerial'].forEach(id=>$(id).checked=!!config[id]);updateOutputs();updatePreset();updatePositionGrid();updateTarget();updateSelectionUI();}
+function fillForm(){const ids=['timeMode','batchDate','dateFormat','timeFormat','brandText','projectText','addressText','noteText','symbolType','logoMode','footerBrand','footerCaption','serialMode','serialText','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','outputSize','outputFormat','quality','cropRatio'];ids.forEach(id=>{const el=$(id);if(el)el.value=config[id];});['showDate','showTime','showBackground','showShadow','showFooter','showSerial'].forEach(id=>$(id).checked=!!config[id]);updateOutputs();updatePreset();updatePositionGrid();updateTarget();updateSelectionUI();}
 function updateOutputs(){$('fontSizeValue').textContent=Number(config.fontSize).toFixed(1)+'%';$('bgValue').textContent=config.bgOpacity+'%';$('logoScaleValue').textContent=config.logoScale+'%';$('qualityValue').textContent=config.quality+'%';$('serialPreview').textContent=photoSerial(previewIndex());$('accentLabel').textContent=config.accentColor.toUpperCase();$('textLabel').textContent=config.textColor.toUpperCase();['timeScale','dateScale','addressScale','footerScale','serialScale'].forEach(id=>{$(id+'Value').textContent=config[id]+'%';});['dateColor','addressColor','footerColor','serialColor'].forEach(id=>{$(id+'Label').textContent=config[id].toUpperCase();});}
 function updatePreset(){document.querySelectorAll('.preset').forEach(el=>el.classList.toggle('active',el.dataset.preset===config.preset));}
 function updateTarget(){document.querySelectorAll('#moveTarget button').forEach(el=>el.classList.toggle('active',el.dataset.target===config.moveTarget));updatePositionGrid();}
@@ -349,7 +349,44 @@ g.restore();return{x:px,y:py,width:sw,height:sh};}
 function drawFloatingLogo(g,W,H){if(config.logoMode!=='floating')return null;const scale=Number(config.logoScale)/100,base=Math.min(W,H)*.13*scale;let width=Math.max(40,base*1.6),height=Math.max(24,base*.7);if(logoImg){const ir=(logoImg.width||logoImg.naturalWidth)/(logoImg.height||logoImg.naturalHeight);if(ir>1){width=Math.min(W*.48,base*2*ir/2);height=width/ir;}else{height=Math.min(H*.25,base*1.1);width=height*ir;} }else{width=base*1.7;height=base*.87;}
 width=clamp(width,22,W*.53);height=clamp(height,20,H*.3);const x=clamp(config.logoX*W-width/2,2,W-width-2),y=clamp(config.logoY*H-height/2,2,H-height-2);
 g.save();if(logoImg){if(config.showBackground){g.fillStyle='rgba(255,255,255,.82)';roundRect(g,x-5,y-5,width+10,height+10,Math.min(14,W*.012));g.fill();}drawContained(g,logoImg,x,y,width,height);}else{g.fillStyle='rgba(20,37,59,'+(config.bgOpacity/100)+')';roundRect(g,x,y,width,height,Math.min(12,width*.12));g.fill();g.fillStyle=config.accentColor;g.fillRect(x,y,width*.07,height);g.fillStyle=config.textColor;g.font='900 '+Math.round(height*.51)+'px Arial,sans-serif';g.textBaseline='middle';g.fillText('HNL',x+width*.20,y+height*.52);}g.restore();return{x,y,width,height};}
-function drawOverlay(g,W,H,p){if(config.preset==='timemark'){drawReferenceStamp(g,W,H,p);drawReferenceFooter(g,W,H);drawVerticalSerial(g,W,H,p);}else{drawStamp(g,W,H,p);}drawFloatingLogo(g,W,H);}
+function drawModernStamp(g,W,H,p){
+ const d=stampData(p),style=config.preset;
+ const size=Math.max(13,Math.min(W,H)*Number(config.fontSize)/105);
+ const time=d.timeString,date=d.dateString,location=d.location;
+ const main=style==='clock'?time:style==='compact'?[time,date].filter(Boolean).join('  •  '):time;
+ const secondary=style==='clock'?'':style==='tech'?[date,d.project||'CAMERA 01'].filter(Boolean).join('  |  '):style==='cinema'?[date,d.note].filter(Boolean).join('  •  '):date;
+ const x=clamp(config.posX*W,W*.02,W*.95),y=clamp(config.posY*H,H*.02,H*.96);
+ g.save();g.textBaseline='alphabetic';g.textAlign='left';
+ const primarySize=size*(style==='cinema'?2.3:style==='compact'?1.1:style==='tech'?1.7:style==='clock'?2.45:1.95);
+ g.font=stampFont(primarySize,Number(config.fontWeight)||700);
+ const pwidth=g.measureText(main).width;
+ const secondarySize=size*(style==='compact'?.66:.83);
+ g.font=stampFont(secondarySize,500);
+ const p2width=Math.max(g.measureText(secondary).width,g.measureText(style==='clock'?'':location).width);
+ const totalWidth=Math.max(pwidth,p2width)+size*1.5;
+ const totalHeight=primarySize*1.35+(secondary?secondarySize*1.55:0)+(location&&style!=='clock'?secondarySize*1.35:0);
+ const left=clamp(x-totalWidth*.5,Math.max(4,W*.018),Math.max(4,W-totalWidth-W*.018));
+ const top=clamp(y-totalHeight*.5,Math.max(4,H*.012),Math.max(4,H-totalHeight-H*.012));
+ if(config.showBackground){g.fillStyle='rgba(10,21,34,'+(Number(config.bgOpacity)/100)+')';roundRect(g,left,top,totalWidth,totalHeight,size*.25);g.fill();}
+ if(config.showShadow){g.shadowColor='rgba(0,0,0,.7)';g.shadowBlur=size*.2;}
+ if(style==='tech'){g.fillStyle=config.accentColor;g.fillRect(left,top,size*.1,totalHeight);}
+ if(style==='cinema'){g.fillStyle=config.accentColor;g.fillRect(left,top+totalHeight-size*.13,totalWidth,size*.13);}
+ let py=top+primarySize*1.08,px=left+size*.55;
+ g.font=stampFont(primarySize,Number(config.fontWeight)||700);g.fillStyle=config.textColor;
+ g.fillText(ellipsis(g,main,Math.max(size,W-px-W*.025)),px,py);
+ if(secondary){py+=secondarySize*1.55;g.fillStyle=config.dateColor;g.font=stampFont(secondarySize,500);g.fillText(ellipsis(g,secondary,W-px-W*.025),px,py);}
+ if(location&&style!=='clock'){py+=secondarySize*1.35;g.fillStyle=config.addressColor;g.font=stampFont(secondarySize*.93,400);g.fillText(ellipsis(g,location,W-px-W*.025),px,py);}
+ g.restore();
+ if(config.showFooter)drawReferenceFooter(g,W,H);
+ if(config.showSerial)drawVerticalSerial(g,W,H,p);
+}
+function drawOverlay(g,W,H,p){
+ if(config.preset==='none')return;
+ if(config.preset==='timemark'){drawReferenceStamp(g,W,H,p);drawReferenceFooter(g,W,H);drawVerticalSerial(g,W,H,p);}
+ else if(['clean','tech','cinema','compact','clock'].includes(config.preset))drawModernStamp(g,W,H,p);
+ else drawStamp(g,W,H,p);
+ drawFloatingLogo(g,W,H);
+}
 function drawPlaceholder(){const W=1000,H=600;canvas.width=W;canvas.height=H;const sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#4c758d');sky.addColorStop(.60,'#9fb5bd');sky.addColorStop(1,'#516778');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);for(let i=0;i<17;i++){const x=i*74-25,bh=115+(i*37)%200;ctx.fillStyle=i%2?'#435e72':'#526f80';ctx.fillRect(x,H-bh,66,bh);ctx.strokeStyle='#a9c0c7';ctx.lineWidth=2;for(let yy=H-bh+18;yy<H-10;yy+=29){ctx.beginPath();ctx.moveTo(x+8,yy);ctx.lineTo(x+60,yy);ctx.stroke();}}ctx.strokeStyle='#d6e2e5';ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(640,70);ctx.lineTo(640,520);ctx.moveTo(640,95);ctx.lineTo(900,95);ctx.moveTo(640,95);ctx.lineTo(430,175);ctx.stroke();ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(835,95);ctx.lineTo(835,400);ctx.stroke();ctx.fillStyle='rgba(13,25,40,.35)';ctx.fillRect(0,0,W,H);ctx.fillStyle='rgba(255,255,255,.91)';ctx.textAlign='center';ctx.font='800 26px Arial';ctx.fillText('ẢNH MINH HỌA',500,63);ctx.font='400 16px Arial';ctx.fillText('Chọn ảnh thật để xem và xuất dấu thời gian',500,92);ctx.textAlign='start';drawOverlay(ctx,W,H,{exifDate:new Date(2026,8,20,9,30,25),modifiedDate:new Date(2026,8,20,9,30,25)});$('previewDimensions').textContent='Bản xem mẫu';}
 
 /* Nondestructive per-photo image operations. Coordinates stay normalized after
@@ -894,7 +931,11 @@ $('resetStyle').addEventListener('click',()=>{const names=['fontSize','fontFamil
 let installEvent=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvent=e;$('installBtn').hidden=false;});$('installBtn').addEventListener('click',async()=>{if(!installEvent)return;installEvent.prompt();await installEvent.userChoice;installEvent=null;$('installBtn').hidden=true;});if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));renderPreview();}
 // Shared overlay renderer: Video reuses photo stamp type, logo and layout.
 window.HNLVideoBridge={
- drawStamp:(g,w,h,date,serial)=>drawOverlay(g,w,h,{serialCode:serial,exifDate:date,modifiedDate:date}),
+ drawStamp:(g,w,h,date,serial,scale=1)=>{
+  const previous=config.fontSize;
+  try{config.fontSize=Math.max(.4,Number(previous)*Math.min(1.4,Math.max(.3,scale||1)));drawOverlay(g,w,h,{serialCode:serial,exifDate:date,modifiedDate:date});}
+  finally{config.fontSize=previous;}
+},
  photoCameraActive:()=>cameraActive
 };
 bind();
