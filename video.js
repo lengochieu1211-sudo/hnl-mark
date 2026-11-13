@@ -116,12 +116,19 @@ function physicalOrientation(e){
  else if(b>=28&&b>g*1.12)setPhysical('portrait');
 }
 function devicePortrait(){return matchMedia('(orientation: portrait)').matches;}
-function effectivePortrait(){return physicalPortrait??devicePortrait();}
+function androidPhysicalPose(){
+ const angle=window.HNLAndroidApp?.getDeviceAngle?.();
+ if(!Number.isFinite(angle)||![0,90,180,270].includes(angle))return null;
+ return {portrait:angle%180===0,side:angle===270?-1:1,inverted:angle===180};
+}
+function effectivePortrait(){return androidPhysicalPose()?.portrait??physicalPortrait??devicePortrait();}
+function effectiveSide(){return androidPhysicalPose()?.side??physicalSide;}
+function effectiveInverted(){return androidPhysicalPose()?.inverted??physicalInverted;}
 function applyPhysicalLayout(){
  const landscape=!effectivePortrait(),locked=landscape&&devicePortrait();
  studio.classList.toggle('video-landscape',landscape);
- studio.classList.toggle('video-locked-left',locked&&physicalSide>=0);
- studio.classList.toggle('video-locked-right',locked&&physicalSide<0);
+ studio.classList.toggle('video-locked-left',locked&&effectiveSide()>=0);
+ studio.classList.toggle('video-locked-right',locked&&effectiveSide()<0);
 }
 function drawFrame(){
  if(mode==='none')return;
@@ -129,8 +136,8 @@ function drawFrame(){
  if(w&&h&&media.readyState>=2){
   const portrait=mode==='camera'?effectivePortrait():h>=w;
   const turn=window.HNLVideoOrientation.videoTurn({
-   mode,rawWidth:w,rawHeight:h,portrait,side:physicalSide,
-   inverted:mode==='camera'&&physicalInverted,manual:rotation
+   mode,rawWidth:w,rawHeight:h,portrait,side:effectiveSide(),
+   inverted:mode==='camera'&&effectiveInverted(),manual:rotation
   });
   const flip=turn===90||turn===270;
   const choice=$('videoResolution').value,limit=choice==='original'?Infinity:Number(choice);
@@ -253,7 +260,8 @@ async function startRecording(){
   const intendedPortrait=mode==='camera'?effectivePortrait():rawPortrait;
   fixedTurn=window.HNLVideoOrientation.videoTurn({
    mode,rawWidth:media.videoWidth,rawHeight:media.videoHeight,
-   portrait:intendedPortrait,side:physicalSide,manual:rotation
+   portrait:intendedPortrait,side:effectiveSide(),
+   inverted:mode==='camera'&&effectiveInverted(),manual:rotation
   });
   // Give video frames a full paint before capturing, and preserve the
   // same rendered time/logo as the live preview.
