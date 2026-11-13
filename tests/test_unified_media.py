@@ -79,6 +79,9 @@ assert "Number($('videoStampSize').value)/100" in video
 assert "videoBitsPerSecond:Number($('videoBitrate').value)" in video
 assert "canvas.captureStream(Number($('videoFps').value)" in video
 assert "window.HNLVideoOrientation.videoTurn" in video
+assert 'videoSettingsToggle' in by_id and 'videoQualityPanel' in by_id
+assert 'toggleVideoSettings' in video and 'closeVideoSettings' in video
+assert '.video-settings-button' in css
 assert '.video-quality-panel' in css and '.crop-ratio-options' in css
 
 print('PASS: one combined picker, symmetric photo/video shutter, modes and all V2.2 media and quality controls')
