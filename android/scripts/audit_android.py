@@ -158,7 +158,8 @@ assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 geom=r("android/preview-geometry.js")
 preview_css=r("android/android-preview-v253.css")
 assert "window.HNLPreviewGeometry?.calculate" in ux
-assert "apkPreviewModes={photo:'large',video:'large'}" in ux
+assert "apkPreviewModes={photo:'auto',video:'auto'}" in ux
+assert "angle%180!==0?'large':'fit'" in ux
 assert "apk-geometry-preview" in ux and "apk-preview-toggle" in ux
 assert "mode:scale===fit?'fit':'cover'" in geom
 assert "ratio<=1.65?cover:fit" in geom
