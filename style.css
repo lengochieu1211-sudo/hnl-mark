@@ -915,3 +915,33 @@ body.hnl-camera-live .camera-area .camera-review[hidden]{display:none!important}
 .preset-grid .preset{min-width:0}
 @media(min-width:750px){.preset-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.video-quality-panel{grid-template-columns:repeat(3,minmax(0,1fr))}.video-quality-panel .field:last-child{grid-column:1}}
 @media(max-width:360px){.crop-ratio-options{grid-template-columns:minmax(0,1fr)}.crop-ratio-options #cropCenter{width:100%}}
+
+
+/* Live Video quick settings: compact gear, rotated together with the dock. */
+.video-settings-button{
+ display:inline-flex;align-items:center;justify-content:center;
+ flex:0 0 27px;width:27px;height:27px;border-radius:50%;
+ border:1px solid #5b6d83;background:#29435f;color:white;padding:3px;cursor:pointer
+}
+.video-settings-button[hidden]{display:none!important}
+.video-settings-button svg{width:16px;height:16px}
+#videoStudio.video-open{isolation:isolate}
+#videoStudio.video-open.video-settings-open .video-quality-panel{
+ position:absolute!important;inset:8px 8px auto 8px;z-index:50;
+ display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));
+ width:auto!important;max-height:calc(100% - 16px);overflow:auto;
+ background:#edf4fc;border:2px solid #578ce8;
+ padding:12px;box-shadow:0 12px 40px #0009;border-radius:12px
+}
+#videoStudio.video-open.video-settings-open .video-quality-panel:after{
+ content:'Chọn chất lượng rồi nhấn lại biểu tượng bánh răng để đóng';
+ grid-column:1/-1;color:#334e69;font-size:10px;line-height:1.4
+}
+body.hnl-video-live #videoStudio.video-landscape.video-settings-open .video-quality-panel{
+ grid-template-columns:1fr 1fr;inset:5px 114px 5px 5px;
+ max-height:none;gap:5px;padding:7px
+}
+@media(max-width:430px){
+ #videoStudio.video-open.video-settings-open .video-quality-panel{grid-template-columns:1fr 1fr}
+ #videoStudio.video-open.video-settings-open .video-quality-panel select{font-size:11px}
+}
