@@ -174,7 +174,8 @@ async function openCamera(){
  await closeStudio();
  if(!navigator.mediaDevices?.getUserMedia){message('Trình duyệt không hỗ trợ camera trực tiếp.');return;}
  try{
-  cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
+  const requested=Number($('videoResolution').value)||1080,rate=Number($('videoFps').value)||30;
+  cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:Math.round(requested*16/9)},height:{ideal:requested},frameRate:{ideal:rate}}});
   media.srcObject=cameraStream;media.muted=true;media.playsInline=true;await media.play();
   mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;samples=0;fixedTurn=null;
   studio.classList.add('video-open');document.body.classList.add('hnl-video-live');applyPhysicalLayout();frameLoop();syncButtons();
@@ -298,7 +299,8 @@ $('videoFlip').addEventListener('click',async()=>{
   if(cameraStream)cameraStream.getTracks().forEach(t=>t.stop());
   try{
    const face=current==='user'?'environment':'user';
-   cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:face}},audio:false});
+   const req=Number($('videoResolution').value)||1080,rate=Number($('videoFps').value)||30;
+   cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:face},width:{ideal:Math.round(req*16/9)},height:{ideal:req},frameRate:{ideal:rate}},audio:false});
    media.srcObject=cameraStream;await media.play();frameLoop();
   }catch(e){message('Không đổi được camera: '+e.message);}
  }
