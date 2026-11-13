@@ -9,14 +9,19 @@ function gallery(){el('#photoInput')?.click();}
 const tabs={
  capture:()=>el('#openCamera')?.click(),
  library:gallery,
- stamp:()=>goto('#fontFamily'),
- export:()=>goto('#saveOne')
+ stamp:()=>window.HNLAndroidSections?.reveal('#fontFamily')||goto('#fontFamily'),
+ export:()=>window.HNLAndroidSections?.reveal('#apkPhotoActions')||goto('.export-panel')
 };
 function chooseTab(tab){(tabs[tab]||tabs.capture)();}
+let physicalAngle=0;
 function setDeviceOrientation(angle){
  const value=[0,90,180,270].includes(Number(angle))?Number(angle):0;
+ const changed=value!==physicalAngle;
+ physicalAngle=value;
  for(const a of [0,90,180,270])document.body.classList.toggle('hnl-angle-'+a,a===value);
  document.body.dataset.hnlAngle=String(value);
+ if(changed)window.dispatchEvent(new CustomEvent('hnlmark:physical-orientation',{detail:{angle:value}}));
+ window.HNLAndroidCameraLayout?.syncPreviewOrientation?.();
 }
 async function saveSlice(blob){
  return new Promise((resolve,reject)=>{
@@ -94,5 +99,5 @@ const cameraState=()=>{
 new MutationObserver(cameraState).observe(document.body,{attributes:true,attributeFilter:['class']});
 cameraState();
 setDeviceOrientation(matchMedia('(orientation:landscape)').matches?90:0);
-window.HNLAndroidApp={chooseTab,openGallery:gallery,saveBlob,shareBlob,setDeviceOrientation,version:'2.5.0-dev'};
+window.HNLAndroidApp={chooseTab,openGallery:gallery,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.1-dev'};
 })();
