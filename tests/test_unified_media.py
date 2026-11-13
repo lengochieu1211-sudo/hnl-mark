@@ -70,7 +70,7 @@ for style in ('clean','tech','cinema','compact','clock'):
     assert html.count('data-preset="'+style+'"')==1
 for n in ('1:1','4:3','3:4','3:2','2:3','16:9','9:16','4:5','5:4','21:9'):
     assert '<option value="'+n+'">' in html
-assert 'crop-ratios.js?v=2.2.0' in html
+assert 'crop-ratios.js?v=2.2.1' in html
 assert "if(config.preset==='none')return" in photo
 assert 'function drawModernStamp(' in photo
 assert "window.HNLCropRatio.fromDrag" in photo
