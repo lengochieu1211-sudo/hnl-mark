@@ -1,3 +1,21 @@
+# HNLMark Android v2.4.1-dev — Ghim preview trên đầu, giữ thanh điều hướng phía đáy
+
+## Thay đổi riêng APK
+- Bỏ hoàn toàn native header xanh đậm có logo/tên HNLMark/OFFLINE; logo ứng dụng ngoài màn hình và icon tài nguyên giữ nguyên.
+- Trên màn hình chỉnh dấu, preview ảnh được đưa lên đầu và ghim khi cuộn form. Xem ảnh khác qua hai nút điều hướng phía dưới preview. Giữ vùng xem trước nhỏ gọn, không phủ lên ô nhập.
+- Bốn nút native **Chụp / Thư viện máy / Cài dấu / Xuất** luôn cố định bên dưới vùng cuộn; không bị cuộn mất cùng biểu mẫu.
+- Màn hình chụp ảnh và quay video vẫn có bố cục toàn màn hình cùng cụm nút chụp/quay ở cạnh dưới, kể cả khi xoay ngang. Không ghim preview thu nhỏ chồng lên camera.
+- Khi chọn Video từ thư viện, preview ảnh cũ tạm ẩn để không gây nhầm với video đang xử lý.
+- Giữ nguyên màu giao diện APK, logo đã chốt, Photo Picker, chia sẻ trực tiếp, lấy nét/độ sáng/zoom và xử lý ảnh/video.
+- Chỉnh font trong form về 16px và placeholder 14px để dễ đọc mà không phóng to bất thường; chỉ áp dụng APK.
+
+## Phạm vi kiểm tra
+- Android compile Debug + JS/Python static audit.
+- Cần thử thực tế Android: ghim preview khi cuộn dài; chuyển ẢNH/VIDEO; portrait và landscape; bàn phím khi nhập liệu; nút điều hướng dưới; camera Full; nhập/thư viện; tải/chia sẻ file.
+- Không rollback/không thay GitHub `main` hay Web Production.
+- APK Debug có thể không cài đè được vì khóa ký khác lần build trước. Sao lưu dự án .ZIP trước khi gỡ.
+
+---
 # HNLMark Android v2.4.0-dev — Native gallery, direct share, bottom dock & camera adjustment
 
 ## UX: riêng cho APK, không áp sang Web
