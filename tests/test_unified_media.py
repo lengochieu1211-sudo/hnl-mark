@@ -61,4 +61,5 @@ assert "if(next==='photo'&&outputBlob&&!outputSaved" in video
 assert "drawShieldCheck(g,f*1.2,config.serialColor)" in photo
 assert 'HNLVideoBridge' in photo and 'drawStamp' in video
 assert '.media-combined-actions' in css
+assert '.video-studio .video-ios-controls .video-icon[hidden]' in css
 print('PASS: one combined picker, symmetric photo/video shutter, modes and existing badge')
