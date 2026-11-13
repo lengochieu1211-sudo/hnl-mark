@@ -300,11 +300,7 @@ public final class MainActivity extends Activity {
                     if(type!=null&&(type.contains("zip")||type.contains("octet-stream")))isZip=true;
                 }
                 final boolean multiple=params.getMode()==FileChooserParams.MODE_OPEN_MULTIPLE;
-                if(!startSystemPicker(REQ_FILES,multiple,isZip)){
-                    fileCallback=null;
-                    callback.onReceiveValue(null);
-                    toast("Không mở được trình chọn ảnh/video; kiểm tra ứng dụng Thư viện/Files.");
-                }
+                showMediaSourceDialog(REQ_FILES,multiple,isZip);
                 return true;
             }
             @Override public void onShowCustomView(View view, CustomViewCallback callback) {
@@ -389,23 +385,28 @@ public final class MainActivity extends Activity {
         return intent;
     }
 
+    private boolean startDocumentPicker(int requestCode,boolean multiple,boolean zip){
+        // Separate Files route for OEM galleries which launch but hide media.
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,zip
+            ?new String[]{"application/zip","application/octet-stream"}
+            :new String[]{"image/*","video/*"});
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try{
+            startActivityForResult(intent,requestCode);
+            return true;
+        }catch(Exception ignored){return false;}
+    }
+
     private boolean startSystemPicker(int requestCode,boolean multiple,boolean zip){
-        // Try Android Photo Picker first, then gallery/files chooser and finally
-        // the Storage Access Framework (most reliable on OEM Android variants).
+        // Android 13+ Photo Picker, then GET_CONTENT, then Documents fallback.
         for(int pass=0;pass<3;pass++){
             if(pass==0&&(zip||Build.VERSION.SDK_INT<33))continue;
-            Intent intent=pass==2
-                ?new Intent(Intent.ACTION_OPEN_DOCUMENT)
-                :mediaIntent(multiple,zip,pass==0);
-            if(pass==2){
-                intent.addCategory(Intent.CATEGORY_OPENABLE);
-                intent.setType("*/*");
-                intent.putExtra(Intent.EXTRA_MIME_TYPES,zip
-                  ?new String[]{"application/zip","application/octet-stream"}
-                  :new String[]{"image/*","video/*"});
-                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            }
+            if(pass==2)return startDocumentPicker(requestCode,multiple,zip);
+            Intent intent=mediaIntent(multiple,zip,pass==0);
             try{
                 startActivityForResult(intent,requestCode);
                 return true;
@@ -414,14 +415,46 @@ public final class MainActivity extends Activity {
         return false;
     }
 
+    private void cancelPendingFileChooser(int requestCode){
+        if(requestCode==REQ_FILES&&fileCallback!=null){
+            ValueCallback<Uri[]> pending=fileCallback;
+            fileCallback=null;
+            pending.onReceiveValue(null);
+        }
+    }
+
+    private void showMediaSourceDialog(int requestCode,boolean multiple,boolean zip){
+        // Document ZIP import is unchanged and needs no media source dialog.
+        if(zip){
+            if(!startSystemPicker(requestCode,multiple,true)){
+                cancelPendingFileChooser(requestCode);
+                toast("Không mở được trình chọn tệp ZIP.");
+            }
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Chọn ảnh / video")
+            .setItems(new String[]{"Thư viện ảnh / video","Duyệt tệp trong máy"},(dialog,which)->{
+                boolean started=which==0
+                    ?startSystemPicker(requestCode,multiple,false)
+                    :startDocumentPicker(requestCode,multiple,false);
+                if(!started){
+                    cancelPendingFileChooser(requestCode);
+                    toast("Không mở được Thư viện/Files trên thiết bị.");
+                }
+            })
+            .setNegativeButton("Hủy",(dialog,which)->cancelPendingFileChooser(requestCode))
+            .setOnCancelListener(dialog->cancelPendingFileChooser(requestCode))
+            .show();
+    }
+
     private void openDeviceGallery(){
         runOnUiThread(()->{
             if(fileCallback!=null){
                 toast("Hãy hoàn tất chọn tệp đang mở trước.");
                 return;
             }
-            if(!startSystemPicker(REQ_NATIVE_GALLERY,true,false))
-                toast("Không mở được Thư viện máy. Hãy kiểm tra ứng dụng Thư viện/Files.");
+            showMediaSourceDialog(REQ_NATIVE_GALLERY,true,false);
         });
     }
 

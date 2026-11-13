@@ -20,5 +20,9 @@ assert "window.HNLAndroidApp?.receivePickedMedia(" in java
 assert "HNLMediaImport.acceptFiles(files)" in app
 assert "window.HNLMediaImport={acceptFiles:(files)=>routeMediaFiles(files)}" in web
 assert "document.getElementById('photoInput')" not in java
-assert "startSystemPicker(REQ_FILES,multiple,isZip)" in java
+assert "showMediaSourceDialog(REQ_FILES,multiple,isZip)" in java
+assert "showMediaSourceDialog(REQ_NATIVE_GALLERY,true,false)" in java
+assert "startDocumentPicker(requestCode,multiple,false)" in java
+assert "cancelPendingFileChooser(requestCode)" in java
+assert '"Duyệt tệp trong máy"' in java
 print("PASS: gallery native tab + web input + image/video mixed picker + safe URI transport")

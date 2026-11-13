@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"portrait\"" in manifest
-assert "versionCode 2505" in gradle and "versionName '2.5.5-test'" in gradle
+assert "versionCode 2506" in gradle and "versionName '2.5.6-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -88,7 +88,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.5-test'" in bridge
+assert "version:'2.5.6-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -154,10 +154,10 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial255'" in gradle
-assert "HNLMark TEST 5" in gradle
+assert "applicationIdSuffix '.trial256'" in gradle
+assert "HNLMark TEST 6" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.5" in ux
+assert "TEST v2.5.6" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 
@@ -186,7 +186,7 @@ assert "Intent.ACTION_OPEN_DOCUMENT" in java
 assert 'new Intent(MediaStore.ACTION_PICK_IMAGES)' in java
 assert 'pick.setType("*/*")' not in java
 assert "REQ_NATIVE_GALLERY = 402" in java
-assert "startSystemPicker(REQ_NATIVE_GALLERY,true,false)" in java
+assert "showMediaSourceDialog(REQ_NATIVE_GALLERY,true,false)" in java
 assert '"library".equals(command)' in java
 assert "getPickedUris(resultCode,data)" in java
 assert "getClipData()" in java and "getData()" in java
@@ -200,7 +200,10 @@ assert "receivePickedMedia(items)" in bridge
 assert "native?.openDeviceGallery" in bridge
 assert "new File([blob],name" in bridge
 assert "HNLMediaImport.acceptFiles(files)" in bridge
-assert "startSystemPicker(REQ_FILES,multiple,isZip)" in java
+assert "showMediaSourceDialog(REQ_FILES,multiple,isZip)" in java
+assert "startDocumentPicker(requestCode,multiple,false)" in java
+assert "cancelPendingFileChooser(requestCode)" in java
+assert '"Duyệt tệp trong máy"' in java
 
 print("PASS: offline assets, Photo Picker, FileProvider direct share, safe bridge,")
 print("      focus/EV/zoom/torch capability gates and bottom-fixed rotating icons")

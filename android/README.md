@@ -1,3 +1,12 @@
+# HNLMark TEST v2.5.6 — chọn ảnh/video qua Thư viện hoặc Files
+
+- Nhánh DEV, tiếp tục từ exact HEAD d7dcecbb234e1692fb2230fb28984a246164e4a7; không thay main/Production.
+- Khi chọn ảnh/video từ thanh dưới hoặc đầu trang APK, chọn nguồn: **Thư viện ảnh/video** (Android Photo Picker, có fallback) hoặc **Duyệt tệp trong máy** (ACTION_OPEN_DOCUMENT).
+- Khi hủy chọn tệp qua WebView, giải phóng callback để có thể thử lại; thư viện native không làm mất tệp sẵn có.
+- ZIP dự án vẫn mở trực tiếp Android Documents, không có menu media.
+- TEST 6 cài song song bằng applicationId `vn.hnl.xaydung.hnlmark.trial256`, không gỡ hay ghi đè TEST 5. Thư viện offline của các bản TEST tách riêng.
+- Phải thử trên Android thật: ảnh đơn/nhiều, video, Files, hủy rồi mở lại, xoay camera, lưu và chia sẻ. CI không phải Runtime Golden.
+
 # HNLMark TEST v2.5.5 — logo APK không khung tối và rút gọn ghi chú
 
 ## Kết luận từ ảnh người dùng
