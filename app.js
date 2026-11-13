@@ -176,6 +176,17 @@ function changeConfig(name,value){config[name]=value;store();stashPhotoSettings(
 function ellipsis(g,s,maxWidth){s=String(s||'').replace(/\s+/g,' ').trim();if(g.measureText(s).width<=maxWidth)return s;while(s.length&&g.measureText(s+'…').width>maxWidth)s=s.slice(0,-1);return s+'…';}
 function roundRect(g,x,y,w,h,r){r=Math.min(r,w/2,h/2);g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
 function emojiFor(v){return{construction:'🏗',location:'📍',camera:'📷',check:'✓',clock:'◷',none:''}[v]||'';}
+// Rounded shield with a tick, using the EXISTING vertical label color.
+function drawShieldCheck(g,size,color){
+ g.save();g.scale(size/24,size/24);
+ g.strokeStyle=color;g.lineWidth=1.9;g.lineCap='round';g.lineJoin='round';
+ g.beginPath();g.moveTo(0,-10);g.lineTo(8,-7);g.lineTo(8,-.5);
+ g.bezierCurveTo(8,4.5,4.8,8.4,0,10);
+ g.bezierCurveTo(-4.8,8.4,-8,4.5,-8,-.5);
+ g.lineTo(-8,-7);g.closePath();g.stroke();
+ g.beginPath();g.moveTo(-3.1,0);g.lineTo(-.5,2.6);g.lineTo(4.2,-2.2);g.stroke();
+ g.restore();
+}
 function drawContained(g,img,x,y,w,h){if(!img)return;const iw=img.width||img.naturalWidth,ih=img.height||img.naturalHeight;if(!iw||!ih)return;const ratio=Math.min(w/iw,h/ih);const dw=iw*ratio,dh=ih*ratio;g.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);}
 function stampData(p){const date=photoDate(p),dateString=config.showDate?fmtDate(date):'',timeString=config.showTime?fmtTime(date):'';return{dateString,timeString,weekday:['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'][date.getDay()],brand:textSafe(config.brandText),project:textSafe(config.projectText),location:textSafe(config.addressText),note:textSafe(config.noteText).replace(/\n/g,' · ')};}
 function photoSerial(p){
@@ -303,10 +314,11 @@ function drawVerticalSerial(g,W,H,p){
   g.translate(x,y);g.rotate(-Math.PI/2);
   if(config.showShadow){g.shadowColor='rgba(0,0,0,.84)';g.shadowBlur=f*.27;}
   g.fillStyle=config.serialColor;g.fillText(text,0,0);
-  // Minimal shield icon, placed next to serial; this is a decorative ID, not a verified mark.
-  const ix=-len*.5-f*1.65;g.save();g.translate(ix,0);g.lineWidth=Math.max(1,f*.09);
-  g.strokeStyle='rgba(255,255,255,.88)';g.beginPath();g.moveTo(-f*.42,-f*.52);g.lineTo(f*.44,-f*.52);g.lineTo(f*.52,-f*.05);g.lineTo(0,f*.55);g.lineTo(-f*.52,-f*.05);g.closePath();g.stroke();
-  g.beginPath();g.moveTo(-f*.19,-f*.02);g.lineTo(-f*.01,f*.18);g.lineTo(f*.24,-f*.18);g.stroke();g.restore();g.restore();
+  // Timemark-style shield-check at the START of the vertical photo code.
+  // Decorative only: it does not certify authenticity.
+  const ix=-len*.5-f*.84;g.save();g.translate(ix,0);
+  drawShieldCheck(g,f*1.2,config.serialColor);
+  g.restore();g.restore();
 }
 function drawStamp(g,W,H,p){const d=stampData(p),f=Math.max(9,Math.min(W,H)*Number(config.fontSize)/100),scale=f/24,pad=f*.62,inside=config.logoMode==='inside',symbol=emojiFor(config.symbolType),radius=f*.43;
 const isMinimal=config.preset==='minimal',isRibbon=config.preset==='ribbon',isSite=config.preset==='site';const font=s=>Math.round(s)+'px '+fontStack();const maxWidth=W*.90;
