@@ -14,7 +14,7 @@ let videoCode='', isBusy=false, audioContext=null, audioSource=null, audioDestin
 let physicalPortrait=null, physicalSide=1, physicalInverted=false, initialPortraitBetaSign=null, candidate='', samples=0, fixedTurn=null;
 let lastMotionAt=0,lastOrientationAt=0,lastOrientationSide=0;
 const workCanvas=document.createElement('canvas'),workCtx=workCanvas.getContext('2d',{alpha:false});
-let selectedMedia='photo',outputSaved=true;
+let selectedMedia='photo',outputSaved=true,videoSaveTask=null;
 let cameraOpenGeneration=0;
 function updateMediaPicker(){
  const video=selectedMedia==='video';
@@ -26,6 +26,7 @@ function updateMediaPicker(){
 async function chooseMedia(next){
  if(next===selectedMedia){updateMediaPicker();return true;}
  if(recorder?.state==='recording'){message('Hãy dừng quay hoặc xuất video trước khi chuyển chế độ.');return false;}
+ if(videoSaveTask){message('Video đang lưu vào bộ nhớ máy; vui lòng hoàn tất trước khi chuyển chế độ.');return false;}
  if(next==='photo'&&outputBlob&&!outputSaved&&!window.confirm('Video vừa tạo chưa được lưu xuống máy. Vẫn chuyển sang Ảnh và bỏ bản xuất này?'))return false;
  if(next==='video'&&window.HNLVideoBridge?.photoCameraActive())$('closeCamera')?.click();
  if(next==='photo')await closeStudio();
@@ -66,7 +67,7 @@ function syncButtons(){
  $('videoRecord').hidden=!active||rec;$('videoStop').hidden=!rec;
  $('videoSettingsToggle').hidden=mode!=='camera';
  $('videoFlip').hidden=mode!=='camera';$('videoPlayPause').hidden=mode!=='file'||rec;
- $('videoSave').disabled=!outputBlob;
+ $('videoSave').disabled=!outputBlob||!!videoSaveTask;
  const buttonLabel=mode==='file'?'Xuất video có dấu':'Quay video';
  $('videoRecord').setAttribute('aria-label',buttonLabel);
  const label=$('videoRecord').querySelector('.video-button-label');
@@ -193,6 +194,7 @@ function clearOutput(){
  $('videoResult').hidden=true;syncButtons();
 }
 async function closeStudio(){
+ if(videoSaveTask){message('Video đang lưu vào bộ nhớ máy; hãy chờ hoàn tất trước khi đóng.');return false;}
  if(recorder&&recorder.state==='recording'){message('Dừng quay trước khi đóng camera.');return false;}
  ++cameraOpenGeneration; // Invalidate a getUserMedia() request still waiting for Android permissions.
  closeVideoSettings();
@@ -261,6 +263,7 @@ async function sourceAudioTracks(){
  }catch(_){fallbackNoAudio=true;return [];}
 }
 async function startRecording(){
+ if(videoSaveTask){message('Video trước đang lưu vào máy. Hãy đợi hoàn tất trước khi quay tiếp.');return;}
  if(!supportsCapture()){message('Trình duyệt này không hỗ trợ ghi video có dấu bằng MediaRecorder/canvas.captureStream.');return;}
  if(recorder?.state==='recording'||isBusy||!['file','camera'].includes(mode))return;
  const mime=mimeType();if(!mime){message('Không có định dạng video tương thích để xuất trên trình duyệt này.');return;}
@@ -317,26 +320,41 @@ async function finishRecording(){
   outputSaved=false;outputBlob=result;outputUrl=URL.createObjectURL(result);output.src=outputUrl;
   $('videoResult').hidden=false;
   $('videoSavedFormat').textContent=extFor(result.type||recordingMime).toUpperCase()+' · '+(result.size/1048576).toFixed(1)+' MB';
-  message('Đã tạo video có dấu. Chọn Lưu video để tải về máy'+(fallbackNoAudio?' (không có âm thanh).':'.'));
+  if(recordingMode==='camera'&&window.HNLAndroidApp?.saveBlob){
+   message('Đã quay xong. Đang tự lưu video vào Movies/HNLMark…');
+   void persistVideoResult().catch(()=>{}); // The result Blob remains available for manual retry.
+  }else message('Đã tạo video có dấu. Chọn Lưu video để tải về máy'+(fallbackNoAudio?' (không có âm thanh).':'.'));
   if(document.body.classList.contains('hnl-android-apk'))requestAnimationFrame(()=>$('videoResult').scrollIntoView({behavior:'smooth',block:'start'}));
  }else message('Video trống; hãy thử quay lại.');
  syncButtons();
 }
-function saveResult(){
- if(!outputBlob||!outputUrl)return;
- const ext=extFor(outputBlob.type||recordingMime);
- const name=recordingName+'_Timemark_'+videoCode+'.'+ext;
+function persistVideoResult(){
+ if(!outputBlob||!outputUrl)return Promise.reject(Error('Chưa có video hoàn chỉnh để lưu.'));
+ if(outputSaved)return Promise.resolve(true);
+ if(videoSaveTask)return videoSaveTask;
+ const blob=outputBlob,ext=extFor(blob.type||recordingMime);
+ const name=recordingName+'_HNLMark_'+videoCode+'.'+ext;
+ let task;
  if(window.HNLAndroidApp?.saveBlob){
-  message('Đang lưu video vào Tải xuống/HNLMark…');
-  window.HNLAndroidApp.saveBlob(outputBlob,name)
-   .then(()=>{outputSaved=true;message('Đã lưu video trong Tải xuống/HNLMark.');})
-   .catch(e=>message('Không lưu được video: '+(e.message||e)));
-  return;
+  message('Đang lưu video vào Movies/HNLMark…');
+  task=window.HNLAndroidApp.saveBlob(blob,name);
+ }else{
+  const a=document.createElement('a');a.href=outputUrl;a.download=name;
+  document.body.appendChild(a);a.click();a.remove();
+  task=Promise.resolve(true);
  }
- const a=document.createElement('a');a.href=outputUrl;a.download=name;
- document.body.appendChild(a);a.click();a.remove();outputSaved=true;
- message('Đã gửi yêu cầu tải video. Kiểm tra thư mục Tải xuống.');
+ videoSaveTask=Promise.resolve(task).then(()=>{
+  if(outputBlob===blob)outputSaved=true;
+  message(window.HNLAndroidApp?.saveBlob?'✓ Video đã lưu vào Movies/HNLMark (Thư viện máy).':'Đã gửi yêu cầu tải video xuống máy.');
+  return true;
+ }).catch(e=>{
+  message('Không lưu được video. Bản quay vẫn nằm trong ứng dụng; hãy nhấn Lưu video để thử lại: '+(e.message||e));
+  throw e;
+ }).finally(()=>{videoSaveTask=null;syncButtons();});
+ syncButtons();
+ return videoSaveTask;
 }
+function saveResult(){void persistVideoResult().catch(()=>{});}
 function switchToPhoto(){
  const wasLive=mode==='camera';
  chooseMedia('photo').then(ok=>{if(ok&&wasLive)$('openCamera')?.click();}).catch(err=>message(err.message));
@@ -348,6 +366,7 @@ $('videoRecord').addEventListener('click',()=>startRecording().catch(err=>messag
 $('videoStop').addEventListener('click',stopRecording);
 $('videoSave').addEventListener('click',saveResult);
 $('videoClose').addEventListener('click',()=>{
+ if(videoSaveTask){message('Đang lưu video, không thể đóng trước khi lưu hoàn tất.');return;}
  if(outputBlob&&!outputSaved&&!window.confirm('Video chưa được lưu xuống máy. Đóng và bỏ bản xuất này?'))return;
  // Closing a video must exit Video mode; otherwise Android CSS hides the photo preview forever.
  closeStudio().then(ok=>{if(!ok)return;selectedMedia='photo';updateMediaPicker();}).catch(err=>message(err.message));

@@ -114,7 +114,12 @@ public final class MainActivity extends Activity {
     private static final class SaveSession {
         final Uri uri;
         final OutputStream stream;
-        SaveSession(Uri uri, OutputStream stream) { this.uri = uri; this.stream = stream; }
+        final String destination;
+        SaveSession(Uri uri, OutputStream stream, String destination) {
+            this.uri = uri;
+            this.stream = stream;
+            this.destination = destination;
+        }
     }
 
     private int dp(float v) {
@@ -613,20 +618,33 @@ public final class MainActivity extends Activity {
             .replaceAll("[\\\\/:*?\"<>|\\r\\n]", "_");
         if (name.length() > 120) name = name.substring(name.length() - 120);
         if (name.isEmpty()) name = "HNLMark";
+        // Public Android media collections: visible in device Gallery, unlike WebView IndexedDB.
+        // ZIP/project exports remain in Downloads/HNLMark. Android 10+ does not need broad storage access.
+        String type = mime == null || mime.isEmpty() ? "application/octet-stream" : mime.split(";", 2)[0].trim().toLowerCase(java.util.Locale.ROOT);
+        final Uri destinationCollection;
+        final String relativePath;
+        if (type.startsWith("image/")) {
+            destinationCollection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+            relativePath = Environment.DIRECTORY_PICTURES + "/HNLMark";
+        } else if (type.startsWith("video/")) {
+            destinationCollection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+            relativePath = Environment.DIRECTORY_MOVIES + "/HNLMark";
+        } else {
+            destinationCollection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+            relativePath = Environment.DIRECTORY_DOWNLOADS + "/HNLMark";
+        }
         ContentValues values = new ContentValues();
         values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-        values.put(MediaStore.MediaColumns.MIME_TYPE,
-            mime == null || mime.isEmpty() ? "application/octet-stream" : mime);
-        values.put(MediaStore.MediaColumns.RELATIVE_PATH,
-            Environment.DIRECTORY_DOWNLOADS + "/HNLMark");
+        values.put(MediaStore.MediaColumns.MIME_TYPE, type);
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
         values.put(MediaStore.MediaColumns.IS_PENDING, 1);
-        Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        Uri uri = getContentResolver().insert(destinationCollection, values);
         if (uri == null) return "";
         try {
             OutputStream stream = getContentResolver().openOutputStream(uri);
             if (stream == null) throw new IOException("No output stream");
             String token = UUID.randomUUID().toString();
-            sessions.put(token, new SaveSession(uri, stream));
+            sessions.put(token, new SaveSession(uri, stream, relativePath));
             return token;
         } catch (Exception e) {
             getContentResolver().delete(uri, null, null);
@@ -653,7 +671,7 @@ public final class MainActivity extends Activity {
             done.put(MediaStore.MediaColumns.IS_PENDING, 0);
             if (getContentResolver().update(s.uri, done, null, null) < 1)
                 throw new IOException("MediaStore finalization rejected");
-            toast("Đã lưu vào Tải xuống/HNLMark");
+            toast("Đã lưu vào " + s.destination);
             return true;
         } catch (Exception e) {
             try { s.stream.close(); } catch (Exception ignored) {}

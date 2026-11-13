@@ -44,15 +44,27 @@ def generate(root: Path, app: Path):
     artwork=_cut_out_neutral_plate(Image.open(source))
     drawable=app/'res'/'drawable'
     drawable.mkdir(parents=True,exist_ok=True)
-    background=Image.new('RGBA',(CANVAS,CANVAS),(10,30,65,255))
+    # The original H/N are dark sapphire; a dark-navy matte made them nearly invisible
+    # on MIUI. A full-bleed blue matte, not a white outlined square, preserves their pixels.
+    background=Image.new('RGBA',(CANVAS,CANVAS),(166,201,223,255))
     draw=ImageDraw.Draw(background)
     for y in range(CANVAS):
-        draw.line((0,y,CANVAS,y),fill=(int(9+y*.010),int(30+y*.032),int(66+y*.042),255))
+        draw.line((0,y,CANVAS,y),fill=(int(166-y*.12),int(201-y*.13),int(223-y*.09),255))
     background.save(drawable/'hnlmark_icon.png')
     foreground=Image.new('RGBA',(CANVAS,CANVAS),(0,0,0,0))
     foreground.alpha_composite(artwork.resize((ARTWORK,ARTWORK),Image.Resampling.LANCZOS),
                                ((CANVAS-ARTWORK)//2,(CANVAS-ARTWORK)//2))
     foreground.save(drawable/'hnlmark_foreground.png')
+    # Match the robust density-specific legacy launcher resource path used by HNL QLTC,
+    # while Android 8+ keeps its adaptive icon layers. Both variants share EXACT artwork.
+    combined=background.copy()
+    combined.alpha_composite(foreground)
+    for density,size in [('mdpi',48),('hdpi',72),('xhdpi',96),('xxhdpi',144),('xxxhdpi',192)]:
+        mipmap=app/'res'/('mipmap-'+density)
+        mipmap.mkdir(parents=True,exist_ok=True)
+        image=combined.resize((size,size),Image.Resampling.LANCZOS)
+        image.save(mipmap/'ic_launcher.png')
+        image.save(mipmap/'ic_launcher_round.png')
     left,top,right,bottom=foreground.getchannel('A').getbbox()
     assert 55<=left<right<=377 and 55<=top<bottom<=377
     assert foreground.getpixel((0,0))[3]==0

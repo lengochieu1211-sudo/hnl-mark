@@ -1,3 +1,12 @@
+# HNLMark DEV TEST v2.5.10 — Media auto-save and icon/preview polish
+
+- Android photos captured by HNLMark: editable original remains in app IndexedDB; separately auto-save a stamped export to Pictures/HNLMark with MediaStore.Images, visible in phone gallery. Imported photos are not duplicated automatically. If auto-save fails, keep the editable original and show an explicit warning.
+- Android camera video: auto-save finished recorded output in Movies/HNLMark with MediaStore.Video. Keep video result for retry on failure; do not close while a save is active. Video import/export still requires explicit Save.
+- Manual image/video save goes to Pictures/HNLMark and Movies/HNLMark, respectively; ZIP/source exports remain in Downloads/HNLMark. No broad storage permission is required on Android 10+.
+- TEST 10 uses an isolated install identifier vn.hnl.xaydung.hnlmark.trial2510; do not uninstall previous versions before backup.
+- UI: clearer contrast for source-logo dark HNL text (light blue full-bleed launcher, no cream/white square border), compact preview zoom controls and elegant expand icon.
+- Build and static checks alone are not device Runtime Golden; verify on a real phone for camera, video, gallery indexing, icon launcher, offline edits and backup.
+
 # HNLMark TEST v2.5.9 — Video recover, touch zoom/focus, original logo matte, adjustable preview
 
 - Development-only: exact HEAD governed by GitHub `dev`. TEST 9 package `vn.hnl.xaydung.hnlmark.trial259`, distinct offline library. Do not uninstall any current install before creating a complete ZIP backup from it.

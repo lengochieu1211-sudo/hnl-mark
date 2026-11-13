@@ -35,3 +35,4 @@ jobs:
           node --check camera-controls.js
           node --check android/android-preview-zoom-v259.js
           python3 tests/test_video_reopen_source_v259.py
+          python3 tests/test_device_media_save_v2510.py

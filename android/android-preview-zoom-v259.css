@@ -38,3 +38,40 @@ body.hnl-android-apk.hnl-android-video-editing .apk-photo-preview-resizer{displa
  body.hnl-android-apk .apk-photo-preview-tools button{width:27px;min-width:27px;height:27px}
  body.hnl-android-apk .apk-photo-preview-tools .apk-preview-reset{width:41px;min-width:41px}
 }
+
+/* TEST 10 — one balanced zoom capsule and a clean native-style expand icon. */
+body.hnl-android-apk .apk-photo-preview-tools{
+ gap:6px;flex:0 0 auto;align-items:center;justify-content:flex-end
+}
+body.hnl-android-apk .apk-preview-zoom-group{
+ display:flex;align-items:center;gap:1px;
+ padding:2px;border:1px solid #dae4ef;background:#f3f6fa;border-radius:12px;
+}
+body.hnl-android-apk .apk-photo-preview-tools .apk-preview-zoom-group button{
+ border:0;background:transparent;color:#31597c;
+ width:25px;min-width:25px;height:27px;border-radius:8px;
+ font-size:16px;box-shadow:none
+}
+body.hnl-android-apk .apk-photo-preview-tools .apk-preview-zoom-group .apk-preview-reset{
+ width:45px;min-width:45px;font-size:11px;font-weight:700;color:#153b60;
+}
+body.hnl-android-apk .apk-photo-preview-tools .apk-preview-expand{
+ width:32px;min-width:32px;height:32px;border:1px solid #d9e4f0;
+ border-radius:11px;background:#edf3fa;color:#31597c;
+ font-size:0;box-shadow:none
+}
+body.hnl-android-apk .apk-photo-preview-tools .apk-preview-expand svg{
+ width:17px;height:17px;display:block
+}
+body.hnl-android-apk .apk-photo-preview-tools .apk-preview-expand[aria-pressed="true"]{
+ border-color:#edc04f;background:#fff4d1;color:#28496a
+}
+body.hnl-android-apk .apk-photo-preview-tools button:focus-visible{
+ outline:2px solid #e1ae25;outline-offset:1px
+}
+@media(max-width:360px){
+ body.hnl-android-apk .apk-photo-preview-tools{gap:4px}
+ body.hnl-android-apk .apk-preview-zoom-group{padding:1px}
+ body.hnl-android-apk .apk-photo-preview-tools .apk-preview-zoom-group button{width:23px;min-width:23px}
+ body.hnl-android-apk .apk-photo-preview-tools .apk-preview-zoom-group .apk-preview-reset{width:40px;min-width:40px}
+}

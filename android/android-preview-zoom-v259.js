@@ -7,10 +7,12 @@ const body=document.body, viewer=document.querySelector('.workspace > .viewer'),
 if(!body.classList.contains('hnl-android-apk')||!viewer||!stage||!canvas||!header)return;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const tools=document.createElement('div');tools.className='apk-photo-preview-tools';
-tools.innerHTML='<button type="button" class="apk-preview-minus" aria-label="Thu nhỏ xem trước">−</button>'+
+tools.innerHTML='<div class="apk-preview-zoom-group">'+
+ '<button type="button" class="apk-preview-minus" aria-label="Thu nhỏ xem trước">−</button>'+
  '<button type="button" class="apk-preview-reset" aria-label="Hiển thị vừa khung">100%</button>'+
- '<button type="button" class="apk-preview-plus" aria-label="Phóng to xem trước">+</button>'+
- '<button type="button" class="apk-preview-expand" aria-label="Mở rộng khung xem trước" aria-pressed="false">⤢</button>';
+ '<button type="button" class="apk-preview-plus" aria-label="Phóng to xem trước">+</button></div>'+
+ '<button type="button" class="apk-preview-expand" aria-label="Mở rộng khung xem trước" aria-pressed="false">'+
+ '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 3.5h-5v5M15.5 3.5h5v5M3.5 15.5v5h5M20.5 15.5v5h-5"/></svg></button>';
 header.appendChild(tools);
 const grip=document.createElement('div');grip.className='apk-photo-preview-resizer';grip.title='Kéo để tăng hoặc giảm chiều cao khung xem trước';
 grip.setAttribute('role','separator');grip.setAttribute('aria-label','Kéo điều chỉnh độ cao khung xem trước');grip.setAttribute('aria-orientation','horizontal');

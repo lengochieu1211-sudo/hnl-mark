@@ -35,6 +35,8 @@ async function saveSlice(blob){
  });
 }
 let writing=false;
+// Serialize saves/shares so burst photos cannot fail with a misleading "already writing" error.
+let transferQueue=Promise.resolve();
 async function transfer(blob,filename,sharing){
  if(!native)throw Error('Chỉ hỗ trợ trong bản APK Android');
  if(writing)throw Error('Đang chuyển một tệp khác; hãy hoàn tất trước.');
@@ -43,7 +45,7 @@ async function transfer(blob,filename,sharing){
  try{
   const type=String(blob.type||'application/octet-stream'),name=String(filename||'HNLMark');
   token=sharing?native.beginShare(name,type):native.beginSave(name,type);
-  if(!token)throw Error(sharing?'Không tạo được tệp chia sẻ tạm.':'Không lưu được file vào Downloads');
+  if(!token)throw Error(sharing?'Không tạo được tệp chia sẻ tạm.':'Không tạo được tệp trong bộ nhớ điện thoại');
   const step=128*1024;
   for(let start=0;start<blob.size;start+=step){
    const b64=await saveSlice(blob.slice(start,Math.min(start+step,blob.size)));
@@ -58,8 +60,13 @@ async function transfer(blob,filename,sharing){
   throw e;
  }finally{writing=false;}
 }
-const saveBlob=(blob,name)=>transfer(blob,name,false);
-const shareBlob=(blob,name)=>transfer(blob,name,true);
+function enqueueTransfer(blob,name,sharing){
+ const next=transferQueue.then(()=>transfer(blob,name,sharing));
+ transferQueue=next.catch(()=>{}); // A failed file never blocks later saves.
+ return next;
+}
+const saveBlob=(blob,name)=>enqueueTransfer(blob,name,false);
+const shareBlob=(blob,name)=>enqueueTransfer(blob,name,true);
 function addShareAction(parent,id,label,fn){
  if(!parent||document.getElementById(id))return;
  const button=document.createElement('button');button.type='button';button.id=id;
@@ -144,5 +151,5 @@ const cameraState=()=>{
 new MutationObserver(cameraState).observe(document.body,{attributes:true,attributeFilter:['class']});
 cameraState();
 setDeviceOrientation(matchMedia('(orientation:landscape)').matches?90:0);
-window.HNLAndroidApp={chooseTab,openGallery:gallery,receivePickedMedia,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.9-test'};
+window.HNLAndroidApp={chooseTab,openGallery:gallery,receivePickedMedia,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.10-test'};
 })();
