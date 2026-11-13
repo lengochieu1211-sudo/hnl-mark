@@ -6,3 +6,6 @@
 /local.properties
 *.jks
 *.keystore
+
+/app/src/main/res/drawable/hnlmark_foreground.png
+/app/src/main/res/drawable/hnlmark_icon.png

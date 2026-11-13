@@ -16,6 +16,7 @@ import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.view.Gravity;
+import android.view.OrientationEventListener;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -70,6 +71,8 @@ public final class MainActivity extends Activity {
     private PermissionRequest pendingMediaRequest;
     private String[] pendingResources;
     private boolean cameraImmersive;
+    private OrientationEventListener cameraOrientationListener;
+    private int lastPhysicalAngle = 0;
     private final Map<String, SaveSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, ShareSession> shares = new ConcurrentHashMap<>();
     private static final class ShareSession {
@@ -145,6 +148,7 @@ public final class MainActivity extends Activity {
         setContentView(root);
         tidyShares();
         initializeWeb();
+        setupCameraOrientationListener();
     }
 
     private void addTab(String label, int iconId, String command) {
@@ -177,9 +181,26 @@ public final class MainActivity extends Activity {
             && HOST.equalsIgnoreCase(uri.getHost());
     }
 
+    private void setupCameraOrientationListener(){
+        cameraOrientationListener = new OrientationEventListener(this){
+            @Override public void onOrientationChanged(int value){
+                if(value == ORIENTATION_UNKNOWN)return;
+                int snapped=((value+45)/90*90)%360;
+                if(snapped==lastPhysicalAngle)return;
+                lastPhysicalAngle=snapped;
+                if(web!=null){
+                    web.post(()->web.evaluateJavascript(
+                        "window.HNLAndroidApp?.setDeviceOrientation("+snapped+")",null));
+                }
+            }
+        };
+        if(cameraOrientationListener.canDetectOrientation())cameraOrientationListener.enable();
+    }
+
     private void initializeWeb() {
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true);
+        settings.setTextZoom(100);
         settings.setDomStorageEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false);
@@ -215,7 +236,7 @@ public final class MainActivity extends Activity {
                 if (trusted(Uri.parse(url))) {
                     view.evaluateJavascript(
                         "document.body.classList.add('hnl-android-apk');" +
-                        "window.HNLAndroidApp && window.HNLAndroidApp.setDeviceOrientation(" + screenAngle() + ")",
+                        "window.HNLAndroidApp && window.HNLAndroidApp.setDeviceOrientation(" + lastPhysicalAngle + ")",
                         null);
                 }
             }
@@ -373,7 +394,7 @@ public final class MainActivity extends Activity {
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
         if (web != null) web.post(() ->
-            web.evaluateJavascript("window.HNLAndroidApp?.setDeviceOrientation(" + screenAngle() + ");window.dispatchEvent(new Event('resize'))", null));
+            web.evaluateJavascript("window.HNLAndroidApp?.setDeviceOrientation(" + lastPhysicalAngle + ");window.dispatchEvent(new Event('resize'))", null));
     }
 
     @Override public void onBackPressed() {
@@ -396,15 +417,18 @@ public final class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        if(cameraOrientationListener!=null && cameraOrientationListener.canDetectOrientation())cameraOrientationListener.enable();
         if (web != null) web.onResume();
     }
 
     @Override protected void onPause() {
+        if(cameraOrientationListener!=null)cameraOrientationListener.disable();
         if (web != null) web.onPause();
         super.onPause();
     }
 
     @Override protected void onDestroy() {
+        if(cameraOrientationListener!=null)cameraOrientationListener.disable();
         for (String token : new ArrayList<>(sessions.keySet())) abortSession(token);
         for (String token : new ArrayList<>(shares.keySet())) abortShareFile(token);
         if (web != null) {

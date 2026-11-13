@@ -94,5 +94,5 @@ const cameraState=()=>{
 new MutationObserver(cameraState).observe(document.body,{attributes:true,attributeFilter:['class']});
 cameraState();
 setDeviceOrientation(matchMedia('(orientation:landscape)').matches?90:0);
-window.HNLAndroidApp={chooseTab,openGallery:gallery,saveBlob,shareBlob,setDeviceOrientation,version:'2.4.1-dev'};
+window.HNLAndroidApp={chooseTab,openGallery:gallery,saveBlob,shareBlob,setDeviceOrientation,version:'2.5.0-dev'};
 })();

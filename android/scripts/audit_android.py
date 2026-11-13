@@ -34,8 +34,8 @@ assert "android:usesCleartextTraffic=\"false\"" in manifest
 assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
-assert "android:screenOrientation=\"fullSensor\"" in manifest
-assert "versionCode 2401" in gradle and "versionName '2.4.1-dev'" in gradle
+assert "android:screenOrientation=\"portrait\"" in manifest
+assert "versionCode 2500" in gradle and "versionName '2.5.0-dev'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -88,7 +88,41 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.4.1-dev'" in bridge
+assert "version:'2.5.0-dev'" in bridge
+
+# User-reported Android camera + form + launcher regressions (v2.5).
+camera_ui=r("android/android-camera-v25.css")
+camera_js=r("android/android-camera-v25.js")
+select_ui=r("android/android-select-v25.css")
+select_js=r("android/android-select-v25.js")
+launcher=r("android/scripts/make_launcher_icon.py")
+for token in ('OrientationEventListener','lastPhysicalAngle','cameraOrientationListener',
+              'setTextZoom(100)'):
+    assert token in java,token
+assert 'cameraOrientationListener.enable()' in java
+assert 'cameraOrientationListener.disable()' in java
+assert 'android:icon="@mipmap/ic_launcher"' in manifest
+assert '@mipmap/ic_launcher' in manifest
+assert 'android:screenOrientation="portrait"' in manifest
+assert "Image.open(source).convert('RGBA')" in launcher
+assert "foreground.save(drawable/'hnlmark_foreground.png')" in launcher
+assert (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()
+assert 'hnlmark_icon_bg' in r("android/app/src/main/res/values/colors.xml")
+for token in ('apk-camera-topbar','apk-grid-toggle','syncCameraToolbar',
+              'wrapModeLabels','apk-rotate-label'):
+    assert token in camera_js,token
+for token in ('order:0!important','order:1!important','order:2!important',
+              'grid-template-columns:minmax(0,1fr) 76px minmax(0,1fr)',
+              '#shutterButton','video-record-symbol','video-stop-symbol'):
+    assert token in camera_ui,token
+assert 'apk-select-sheet' in select_js and 'apk-select-source' in select_js
+assert "select.dispatchEvent(new Event('change',{bubbles:true}))" in select_js
+assert 'font-size:14px!important' in select_ui
+for file in ('android-camera-v25.css','android-camera-v25.js',
+             'android-select-v25.css','android-select-v25.js'):
+    assert (root/"android/app/src/main/assets/www"/file).exists(),file
+assert (root/"android/app/src/main/res/drawable/hnlmark_foreground.png").exists()
+assert (root/"android/app/src/main/res/drawable/hnlmark_icon.png").exists()
 
 print("PASS: offline assets, Photo Picker, FileProvider direct share, safe bridge,")
 print("      focus/EV/zoom/torch capability gates and bottom-fixed rotating icons")

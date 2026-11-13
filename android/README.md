@@ -1,3 +1,27 @@
+# HNLMark Android 2.5.0 DEV — Camera bố trí theo ảnh mẫu + UI chữ nhỏ + adaptive icon
+
+## Android camera (không đổi web)
+- Android Activity khóa bố cục **portrait** để cụm điều khiển không chuyển từ dưới lên bên phải khi xoay thiết bị.
+- Android OrientationEventListener đọc tư thế thực và thông báo cho WebView: **chỉ xoay SVG, chữ ẢNH/VIDEO ngay trong nút**, không xoay thanh điều khiển.
+- Ba vùng luôn tách: công cụ nền đen phía trên, preview camera chiếm vùng giữa, phần chọn chế độ rồi hàng thumbnail — nút chụp/quay — đổi camera phía dưới. Nút quay đỏ/stop căn tâm cùng vị trí với nút chụp trắng.
+- Các nút phía trên đều có hành vi: Full (trên APK ẩn vì đã Full), xoay 90°, đóng camera, bật/tắt lưới căn hình. Các điều khiển lấy nét, EV, zoom, flash chỉ xuất hiện khi hỗ trợ.
+- Để tránh sửa core Web, script `android-camera-v25.js` chỉ di chuyển các DOM nút hiện có sang top bar khi camera live; trả về đúng chỗ khi đóng/chỉnh video từ máy. Giữ nguyên các event listener và thuật toán xuất.
+
+## Form & dropdown
+- Giảm cỡ chữ nhập 15px, placeholder 14px, cố định WebView textZoom=100.
+- Các select trong editor dùng dropdown nhỏ riêng (Android-only) 14px; giá trị gốc vẫn nằm ở select thật và phát sự kiện change, giữ tương thích bộ xử lý.
+- Giữ điều hướng APK Chụp/Thư viện máy/Cài dấu/Xuất cố định đáy và preview ảnh ghim trên đầu ở màn biên tập.
+
+## Launcher icon
+- Logo JPEG/PNG gốc vẫn giữ nguyên trong repo, không vẽ lại hoặc đổi màu.
+- Build script chỉ bỏ **vùng nền trắng ngoài cùng** được nối tới biên ảnh, tạo foreground trong suốt và adaptive icon có nền navy, không còn khung trắng vuông quanh icon APK.
+- Web/PWA logo nguồn không bị thay đổi.
+
+## Test bắt buộc
+- CI: kiểm tra syntax JS, audit Android, build APK, checksum SHA-256.
+- Điện thoại Android thật: thử dọc/ngang trái/ngang phải; xem nút giữ góc dưới; icon xoay tại chỗ; chụp/quay/stop/review/video file; dropdown không che preview; icon màn hình chính; Photo Picker/Share/ZIP.
+- Build Debug không phải Runtime Golden, không sửa Production, không mất dữ liệu người dùng. Sao lưu ZIP trước khi gỡ/cài lại APK Debug có chữ ký khác.
+
 # HNLMark Android v2.4.1-dev — Ghim preview trên đầu, giữ thanh điều hướng phía đáy
 
 ## Thay đổi riêng APK

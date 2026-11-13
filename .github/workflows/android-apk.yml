@@ -40,12 +40,16 @@ jobs:
           SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           test -n "$SDKMANAGER"
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Pillow for lossless launcher-mask conversion
+        run: python3 -m pip install --disable-pip-version-check pillow==11.1.0
       - name: Bundle offline HTML and native Android UI
         run: |
           python3 android/scripts/package_web.py
           python3 android/scripts/audit_android.py
           node --check android/android-app.js
           node --check camera-controls.js
+          node --check android/android-camera-v25.js
+          node --check android/android-select-v25.js
           node --check app.js
           node --check video.js
       - name: Compile debug APK

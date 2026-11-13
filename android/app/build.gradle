@@ -9,8 +9,8 @@ android {
         applicationId 'vn.hnl.xaydung.hnlmark'
         minSdk 29
         targetSdk 35
-        versionCode 2401
-        versionName '2.4.1-dev'
+        versionCode 2500
+        versionName '2.5.0-dev'
     }
     buildTypes {
         debug { debuggable true }

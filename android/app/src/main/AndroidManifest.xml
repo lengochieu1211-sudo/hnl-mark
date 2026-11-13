@@ -6,8 +6,8 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <application
         android:label="HNLMark"
-        android:icon="@drawable/hnlmark_icon"
-        android:roundIcon="@drawable/hnlmark_icon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false"
         android:allowBackup="false"

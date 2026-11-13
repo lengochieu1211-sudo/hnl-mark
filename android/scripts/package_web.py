@@ -19,25 +19,31 @@ for name in resources:
         raise SystemExit(f"Missing web source: {source}")
     shutil.copy2(source, WWW / name)
 
-shutil.copy2(ROOT / "android" / "android-app.js", WWW / "android-app.js")
-shutil.copy2(ROOT / "android" / "android-ui.css", WWW / "android-ui.css")
+for addon in ("android-app.js","android-ui.css","android-camera-v25.js","android-camera-v25.css","android-select-v25.js","android-select-v25.css"):
+    shutil.copy2(ROOT / "android" / addon, WWW / addon)
+
+# APK-only UI add-ons are loaded after the shared web stylesheet.
+
+
 
 index = (WWW / "index.html").read_text(encoding="utf-8")
 assert "</head>" in index and "</body>" in index
 assert "orientation.js" in index and "video.js" in index
 index = index.replace(
     "</head>",
-    '<link rel="stylesheet" href="./android-ui.css"><link rel="stylesheet" href="./camera-controls.css"></head>',
+    '<link rel="stylesheet" href="./android-ui.css"><link rel="stylesheet" href="./camera-controls.css"><link rel="stylesheet" href="./android-camera-v25.css"><link rel="stylesheet" href="./android-select-v25.css"></head>',
     1,
 )
 index = index.replace(
     "</body>",
-    '<script src="./camera-controls.js" defer></script><script src="./android-app.js" defer></script></body>',
+    '<script src="./camera-controls.js" defer></script><script src="./android-camera-v25.js" defer></script><script src="./android-select-v25.js" defer></script><script src="./android-app.js" defer></script></body>',
     1,
 )
 (WWW / "index.html").write_text(index, encoding="utf-8")
 
 drawable = APP / "res" / "drawable"
 drawable.mkdir(parents=True, exist_ok=True)
-shutil.copy2(ROOT / "hnl-logo-192.png", drawable / "hnlmark_icon.png")
+from make_launcher_icon import generate
+generate(ROOT, APP)
+
 print("PASS: packaged", len(resources), "original web assets + native UI/bridge/icon")
