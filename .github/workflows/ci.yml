@@ -32,3 +32,6 @@ jobs:
           test -s hnl-logo-192.png
           test -s hnl-logo-512.png
           python3 tests/test_unified_media.py
+          node --check camera-controls.js
+          node --check android/android-preview-zoom-v259.js
+          python3 tests/test_video_reopen_source_v259.py

@@ -1,0 +1,40 @@
+/* HNLMark TEST 9 — zoom only affects preview canvas, never the saved media. */
+body.hnl-android-apk:not(.hnl-camera-live):not(.hnl-android-video-editing) .workspace > .viewer{
+ height:var(--apk-photo-preview-height,clamp(180px,32dvh,252px))!important;
+ min-height:145px!important;max-height:78dvh!important;
+}
+body.hnl-android-apk:not(.hnl-camera-live) .viewer .viewer-top{
+ flex-basis:36px!important;min-height:36px!important;gap:5px!important
+}
+body.hnl-android-apk .apk-photo-preview-tools{
+ display:flex;align-items:center;justify-content:flex-end;gap:3px;min-width:0;flex:1 1 auto
+}
+body.hnl-android-apk .apk-photo-preview-tools button{
+ border:1px solid #bed1e7;background:#f5f8fc;color:#22496e;
+ width:29px;min-width:29px;height:29px;border-radius:7px;
+ display:grid;place-items:center;padding:0;font-size:17px;font-weight:800
+}
+body.hnl-android-apk .apk-photo-preview-tools .apk-preview-reset{width:47px;min-width:47px;font-size:11px}
+body.hnl-android-apk .apk-photo-preview-tools button:disabled{opacity:.35}
+body.hnl-android-apk .apk-photo-preview-resizer{
+ display:flex;align-items:center;justify-content:center;
+ flex:0 0 12px;height:12px;min-height:12px;width:100%;
+ cursor:ns-resize;touch-action:none;user-select:none;outline-offset:-1px
+}
+body.hnl-android-apk .apk-photo-preview-resizer span{
+ display:block;width:56px;height:4px;border-radius:8px;background:#8b9fb2
+}
+body.hnl-android-apk:not(.hnl-camera-live) .viewer #cameraArea #stage{
+ touch-action:none!important;isolation:isolate!important
+}
+body.hnl-android-apk:not(.hnl-camera-live) .viewer #previewCanvas{
+ transform-origin:50% 50%;will-change:transform;
+}
+body.hnl-android-apk.hnl-camera-live .apk-photo-preview-tools,
+body.hnl-android-apk.hnl-camera-live .apk-photo-preview-resizer,
+body.hnl-android-apk.hnl-android-video-editing .apk-photo-preview-tools,
+body.hnl-android-apk.hnl-android-video-editing .apk-photo-preview-resizer{display:none!important}
+@media(max-width:350px){
+ body.hnl-android-apk .apk-photo-preview-tools button{width:27px;min-width:27px;height:27px}
+ body.hnl-android-apk .apk-photo-preview-tools .apk-preview-reset{width:41px;min-width:41px}
+}

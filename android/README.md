@@ -1,3 +1,14 @@
+# HNLMark TEST v2.5.9 — Video recover, touch zoom/focus, original logo matte, adjustable preview
+
+- Development-only: exact HEAD governed by GitHub `dev`. TEST 9 package `vn.hnl.xaydung.hnlmark.trial259`, distinct offline library. Do not uninstall any current install before creating a complete ZIP backup from it.
+- Video: close mode returns to photo preview, and opening camera again in Video mode goes to video camera; waiting `getUserMedia` calls are invalidated on close. Recorded output is scrolled into view for save/share.
+- Photo/video camera: pinch **two fingers** 1–3x, tap to focus; remove permanently visible focus/zoom buttons from APK. If hardware zoom is unavailable, use explicit digital crop rendered into saved output (not the source file).
+- APK photo viewer only: 100–400% preview zoom with +/- and two-finger pan; drag resize handle for greater/smaller preview viewport; no effect on original photo or stamped export. Single-finger dragging stamp remains available.
+- Crop ratio and Create Center Frame controls are aligned to equal-width columns; HNL internal library button matches the first main media picker column.
+- Video monitor: disable white corner/pseudo-element/grid overlays in preview; display CSS only, not encoded overlay.
+- Launcher: original HNL source PNG is unchanged. Generate adaptive icon foreground with original HNL letter/camera pixels on a navy background, removing the cream/white exterior matte rather than shrinking a square white logo.
+- Never mark Android Runtime Golden until real Android hardware evidence covers capture, rotate, repeat video, mic, zoom, picker, save/share and offline persistence.
+
 # HNLMark TEST v2.5.8 — 12 mẫu dấu thời gian độc lập
 
 - Branch DEV, kế thừa v2.5.7, không đổi main/Production.

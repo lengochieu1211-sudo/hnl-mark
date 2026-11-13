@@ -15,6 +15,7 @@ let physicalPortrait=null, physicalSide=1, physicalInverted=false, initialPortra
 let lastMotionAt=0,lastOrientationAt=0,lastOrientationSide=0;
 const workCanvas=document.createElement('canvas'),workCtx=workCanvas.getContext('2d',{alpha:false});
 let selectedMedia='photo',outputSaved=true;
+let cameraOpenGeneration=0;
 function updateMediaPicker(){
  const video=selectedMedia==='video';
  $('photoLibraryArea').hidden=video;
@@ -192,29 +193,37 @@ function clearOutput(){
  $('videoResult').hidden=true;syncButtons();
 }
 async function closeStudio(){
- if(recorder&&recorder.state==='recording'){message('Dừng quay trước khi đóng camera.');return;}
+ if(recorder&&recorder.state==='recording'){message('Dừng quay trước khi đóng camera.');return false;}
+ ++cameraOpenGeneration; // Invalidate a getUserMedia() request still waiting for Android permissions.
  closeVideoSettings();
  media.pause();media.srcObject=null;media.removeAttribute('src');media.load();
  stopCameraTracks();resetFileUrl();clearOutput();
  mode='none';physicalPortrait=null;physicalInverted=false;initialPortraitBetaSign=null;rotation=0;lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;fixedTurn=null;
  studio.classList.remove('video-open','video-landscape','video-locked-left','video-locked-right');
  document.body.classList.remove('hnl-video-live');cancelAnimationFrame(raf);raf=0;
- message('Chọn video hoặc mở camera để bắt đầu.');syncButtons();
+ message('Chọn video hoặc mở camera để bắt đầu.');syncButtons();return true;
 }
 async function openCamera(){
  if(isBusy||recorder?.state==='recording')return;
+ if(outputBlob&&!outputSaved&&!window.confirm('Video vừa quay chưa được lưu. Quay lại và bỏ video này?'))return;
  if(!await chooseMedia('video'))return;
- if(window.HNLVideoBridge?.photoCameraActive()){$('closeCamera')?.click();}
- await closeStudio();
+ if(window.HNLVideoBridge?.photoCameraActive())$('closeCamera')?.click();
+ if(!await closeStudio())return;
+ const generation=cameraOpenGeneration;
  if(!navigator.mediaDevices?.getUserMedia){message('Trình duyệt không hỗ trợ camera trực tiếp.');return;}
  try{
   const requested=Number($('videoResolution').value)||1080,rate=Number($('videoFps').value)||30;
-  cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:Math.round(requested*16/9)},height:{ideal:requested},frameRate:{ideal:rate}}});
-  media.srcObject=cameraStream;media.muted=true;media.playsInline=true;await media.play();
+  const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:Math.round(requested*16/9)},height:{ideal:requested},frameRate:{ideal:rate}}});
+  if(generation!==cameraOpenGeneration){stream.getTracks().forEach(t=>t.stop());return;}
+  cameraStream=stream;media.srcObject=stream;media.muted=true;media.playsInline=true;await media.play();
+  if(generation!==cameraOpenGeneration){stream.getTracks().forEach(t=>t.stop());return;}
   mode='camera';if(window.HNLCameraControls){cameraControls=window.HNLCameraControls.create({stage:studio.querySelector('.video-canvas-wrap'),dock:studio.querySelector('.video-ios-controls'),track:()=>cameraStream?.getVideoTracks()[0],active:()=>mode==='camera',rotation:()=>window.HNLVideoOrientation.videoTurn({mode,rawWidth:media.videoWidth,rawHeight:media.videoHeight,portrait:effectivePortrait(),side:physicalSide,inverted:physicalInverted,manual:rotation})});}videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;samples=0;fixedTurn=null;
   studio.classList.add('video-open');document.body.classList.add('hnl-video-live');applyPhysicalLayout();frameLoop();syncButtons();
   message('Camera video đã mở. Nhấn Quay video để bắt đầu. Có thể ghi âm nếu cấp quyền micro.');
- }catch(e){stopCameraTracks();message('Không mở được camera video: '+(e.message||e));}
+ }catch(e){
+  if(generation!==cameraOpenGeneration)return;
+  stopCameraTracks();message('Không mở được camera video: '+(e.message||e));
+ }
 }
 async function importVideo(selected){
  if(!selected||recorder?.state==='recording')return;
@@ -309,6 +318,7 @@ async function finishRecording(){
   $('videoResult').hidden=false;
   $('videoSavedFormat').textContent=extFor(result.type||recordingMime).toUpperCase()+' · '+(result.size/1048576).toFixed(1)+' MB';
   message('Đã tạo video có dấu. Chọn Lưu video để tải về máy'+(fallbackNoAudio?' (không có âm thanh).':'.'));
+  if(document.body.classList.contains('hnl-android-apk'))requestAnimationFrame(()=>$('videoResult').scrollIntoView({behavior:'smooth',block:'start'}));
  }else message('Video trống; hãy thử quay lại.');
  syncButtons();
 }
@@ -337,7 +347,11 @@ $('photoToVideo').addEventListener('click',()=>{openCamera().catch(err=>message(
 $('videoRecord').addEventListener('click',()=>startRecording().catch(err=>message(err.message)));
 $('videoStop').addEventListener('click',stopRecording);
 $('videoSave').addEventListener('click',saveResult);
-$('videoClose').addEventListener('click',()=>{if(outputBlob&&!outputSaved&&!window.confirm('Video chưa được lưu xuống máy. Đóng và bỏ bản xuất này?'))return;closeStudio().catch(err=>message(err.message));});
+$('videoClose').addEventListener('click',()=>{
+ if(outputBlob&&!outputSaved&&!window.confirm('Video chưa được lưu xuống máy. Đóng và bỏ bản xuất này?'))return;
+ // Closing a video must exit Video mode; otherwise Android CSS hides the photo preview forever.
+ closeStudio().then(ok=>{if(!ok)return;selectedMedia='photo';updateMediaPicker();}).catch(err=>message(err.message));
+});
 $('videoFlip').addEventListener('click',async()=>{
  if(recorder?.state==='recording'){message('Không đổi camera khi đang quay.');return;}
  if(mode==='camera'){
@@ -367,6 +381,7 @@ window.addEventListener('resize',applyPhysicalLayout);
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&recorder?.state==='recording')stopRecording();});
 window.addEventListener('pagehide',()=>{if(recorder?.state==='recording')recorder.stop();stopCameraTracks();});
 window.HNLVideoStudio={importVideo:(file)=>importVideo(file),openCamera:()=>openCamera(),getMode:()=>mode,
+ isVideoSelected:()=>selectedMedia==='video',
  shareCurrent:async()=>{
   if(!outputBlob)throw Error('Chưa có video đã xuất để chia sẻ');
   if(!window.HNLAndroidApp?.shareBlob)throw Error('Chỉ hỗ trợ trong APK Android');

@@ -20,7 +20,9 @@
   stage.classList.add('hnl-has-camera-adjust');stage.appendChild(box);
   let caps={},brightness=0,hwExposure=false,zoom=1,torch=false,lastTap={x:.5,y:.5},destroyed=false;
   let hwZoom=false, zoomMax=3;
-  const dockBar=dock?document.createElement('div'):null;
+  // APK uses two-finger pinch + tap-to-focus, not a permanent slider/icon dock.
+  const apk=typeof document!=='undefined'&&document.body.classList.contains('hnl-android-apk');
+  const dockBar=dock&&!apk?document.createElement('div'):null;
   if(dockBar){
    dockBar.className='hnl-camera-dock-adjust';
    dockBar.innerHTML='<button type="button" class="hnl-focus-center" aria-label="Chạm để lấy nét giữa khung">◎ <span>Lấy nét</span></button>'+
@@ -31,7 +33,7 @@
    dock.appendChild(dockBar);
    quick.hidden=true;
   }
-  let shownAt=0, hideJob=0;const pointers=new Map();let pinchLength=0,pinchZoom=1;
+  let shownAt=0, hideJob=0;const pointers=new Map();let pinchLength=0,pinchZoom=1,pinchInProgress=false;
   const getTrack=()=>typeof track==='function'?track():track;
   const isActive=()=>!destroyed&&(!active||active());
   function showRing(x,y){
@@ -107,13 +109,13 @@
    pointers.set(e.pointerId,pos(e));
    if(pointers.size===2){
     const [p,q]=[...pointers.values()];
-    pinchLength=Math.hypot(p.x-q.x,p.y-q.y);pinchZoom=zoom;
+    pinchLength=Math.hypot(p.x-q.x,p.y-q.y);pinchZoom=zoom;pinchInProgress=true;
    }
   }
   function onMove(e){
    if(!isActive()||!pointers.has(e.pointerId))return;
    pointers.set(e.pointerId,pos(e));
-   if(pointers.size===2&&pinchLength>0&&caps.zoom){
+   if(pointers.size===2&&pinchLength>0){
     const [p,q]=[...pointers.values()];
     const factor=Math.hypot(p.x-q.x,p.y-q.y)/pinchLength;
     void setZoom(pinchZoom*factor);
@@ -123,8 +125,8 @@
    if(!isActive())return;
    if(!pointers.has(e.pointerId))return;
    const count=pointers.size,p=pos(e);pointers.delete(e.pointerId);
-   if(count===1&&e.type!=='pointercancel')void requestFocus(p.x,p.y);
-   if(pointers.size===0)pinchLength=0;
+   if(count===1&&!pinchInProgress&&e.type!=='pointercancel')void requestFocus(p.x,p.y);
+   if(pointers.size===0){pinchLength=0;pinchInProgress=false;}
   }
   function stopEvent(e){e.stopPropagation();}
   box.addEventListener('pointerdown',stopEvent);
@@ -147,7 +149,7 @@
   if(caps.zoom?.max>=1.1&&getTrack()?.applyConstraints){
    hwZoom=true;zoomMax=Math.min(3,caps.zoom.max);zoom=1;
   }else{hwZoom=false;zoomMax=3;zoom=1;}
-  zoomBtn.hidden=Boolean(dockBar);
+  zoomBtn.hidden=Boolean(dockBar)||apk;
   syncZoom();
   if(caps.torch===true)torchBtn.hidden=false;
   quick.hidden=Boolean(dockBar)||(zoomBtn.hidden&&torchBtn.hidden);

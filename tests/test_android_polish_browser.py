@@ -13,9 +13,9 @@ with sync_playwright() as pw:
   html=re.sub(r'<script src="[^"]+" defer></script>', '', html)
   html=re.sub(r'<link rel="stylesheet" href="[^"]+">', '', html)
   page.set_content(html)
-  for file in ['style.css','android/android-ui.css','camera-controls.css','android/android-camera-v25.css','android/android-select-v25.css','android/android-ux-v251.css','android/android-preview-v253.css','android/android-polish-v257.css']:
+  for file in ['style.css','android/android-ui.css','camera-controls.css','android/android-camera-v25.css','android/android-select-v25.css','android/android-ux-v251.css','android/android-preview-v253.css','android/android-polish-v257.css','android/android-preview-zoom-v259.css']:
    page.add_style_tag(content=(R/file).read_text(encoding='utf8'))
-  for file in ['crop-ratios.js','app.js','orientation.js','video.js','camera-controls.js','android/android-camera-v25.js','android/android-select-v25.js','android/android-app.js','android/preview-geometry.js','android/android-ux-v251.js','android/android-polish-v257.js']:
+  for file in ['crop-ratios.js','app.js','orientation.js','video.js','camera-controls.js','android/android-camera-v25.js','android/android-select-v25.js','android/android-app.js','android/preview-geometry.js','android/android-ux-v251.js','android/android-polish-v257.js','android/android-preview-zoom-v259.js']:
    page.add_script_tag(content=(R/file).read_text(encoding='utf8'))
   page.wait_for_function("document.body.classList.contains('hnl-android-apk')")
   styles=page.evaluate('''() => ({input:getComputedStyle(document.getElementById('projectText')).fontSize,
@@ -35,7 +35,7 @@ with sync_playwright() as pw:
    page.wait_for_function("document.body.classList.contains('hnl-video-live')",timeout=5000)
   except Exception as err:
     raise AssertionError('Video could not open: '+str(err))
-  dock=page.locator('#videoStudio .hnl-camera-dock-adjust');assert dock.is_visible()
+  dock=page.locator('#videoStudio .hnl-camera-dock-adjust');assert dock.count()==0
   page.locator('#videoSettingsToggle').click()
   page.wait_for_function("document.body.classList.contains('apk-video-quality-open')")
   box=page.locator('#videoQualityPanel').bounding_box();assert box is not None

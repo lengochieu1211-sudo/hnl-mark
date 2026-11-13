@@ -1041,7 +1041,11 @@ window.addEventListener('devicemotion',handleCameraMotion);
 $('rotateCameraOverlay').addEventListener('click',rotateCameraAndStamp);
 const orientationMedia=window.matchMedia?.('(orientation: portrait)');
 if(orientationMedia?.addEventListener)orientationMedia.addEventListener('change',refreshCameraOrientation);
-$('openCamera').addEventListener('click',()=>{requestCameraSensorPermission().catch(()=>{});startCamera().catch(showError);});
+$('openCamera').addEventListener('click',()=>{
+ requestCameraSensorPermission().catch(()=>{});
+ if(window.HNLVideoStudio?.isVideoSelected?.())window.HNLVideoStudio.openCamera().catch(showError);
+ else startCamera().catch(showError);
+});
 $('closeCamera').addEventListener('click',()=>stopCamera());
 $('flipCamera').addEventListener('click',()=>{cameraFacing=cameraFacing==='environment'?'user':'environment';stopCamera(false);startCamera().catch(showError);});
 $('shutterButton').addEventListener('click',()=>takeCameraPhoto().catch(showError));
@@ -1101,13 +1105,14 @@ $('resetFilters').addEventListener('click',()=>{const p=previewIndex();if(!p)ret
 $('applyFiltersAll').addEventListener('click',()=>{const p=previewIndex();if(!p)return;const filters={...photoEdits(p).filters};for(const photo of photos){photoEdits(photo).filters={...filters};scheduleSavePhoto(photo);}showToast('Đã dùng cài đặt màu cho '+photos.length+' ảnh.');renderPreview();});
 function selectPosition(e){const r=canvas.getBoundingClientRect();return{x:clamp((e.clientX-r.left)/r.width,0,1),y:clamp((e.clientY-r.top)/r.height,0,1)};}
 let dragging=false;function move(e){
+ if(window.HNLPreviewZoom?.isGesturing?.())return;
  if(editDragging){const pos=selectPosition(e),end=editTool==='crop'?window.HNLCropRatio.fromDrag({x:editSelection.x1,y:editSelection.y1},pos,config.cropRatio,canvas.width,canvas.height):{x2:pos.x,y2:pos.y};editSelection.x2=end.x2;editSelection.y2=end.y2;drawEditSelection();updateImageEditor();return;}
  if(!dragging)return;const r=canvas.getBoundingClientRect();const x=clamp((e.clientX-r.left)/r.width,.02,.98),y=clamp((e.clientY-r.top)/r.height,.02,.98);const prefix=config.moveTarget==='logo'?'logo':config.moveTarget==='footer'?'footer':config.moveTarget==='serial'?'serial':'pos';config[prefix+'X']=x;config[prefix+'Y']=y;updatePositionGrid();renderPreview();
 }
 canvas.addEventListener('pointerdown',e=>{
  if(cameraActive||!previewIndex())return;e.preventDefault();canvas.setPointerCapture(e.pointerId);
  if(editTool!=='move'){const pos=selectPosition(e);editDragging=true;editSelection={x1:pos.x,y1:pos.y,x2:pos.x,y2:pos.y};drawEditSelection();return;}
- dragging=true;move(e);
+ dragging=true; // Dragging a stamp begins on movement, not on a touch that could become a pinch.
 });
 canvas.addEventListener('pointermove',move);
 const end=()=>{dragging=false;if(editDragging){editDragging=false;updateImageEditor();}store();stashPhotoSettings();};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
