@@ -1,3 +1,25 @@
+# HNLMark TEST v2.5.4 — sửa không chọn được ảnh và video trên APK
+
+## Kết quả audit
+- Nút Thư viện máy của thanh điều hướng Android trước đây chỉ gọi `photoInput.click()` thông qua `evaluateJavascript`. Lệnh đó không có trusted user-gesture trong WebView nên bộ chọn tệp có thể bị chặn.
+- Android 13+ Photo Picker trước đây dùng `ACTION_PICK_IMAGES` với `setType("*/*")`, không cần thiết khi chọn cả ảnh lẫn video và có thể không tương thích với ROM Android tùy biến.
+- Bộ nhận file trước đây chỉ trả `ValueCallback<Uri[]>` cho input HTML; không có đường nhận riêng cho nút Thư viện máy thực sự.
+
+## Sửa lỗi
+- Nút native **Thư viện máy** gọi trực tiếp Activity Photo Picker. Trên Android 13+, không gán MIME `*/*` để Photo Picker cho chọn cả ảnh/video; có phương án dự phòng Android GET_CONTENT và OPEN_DOCUMENT.
+- Chấp nhận cả URI đơn `data.getData()` và nhiều URI trong `ClipData`; kiểm tra scheme content, MIME image/video.
+- Android tạo token ngẫu nhiên chứa URI đã chọn, phục vụ lại nội bộ trên nguồn `https://appassets.androidplatform.net/picked/<token>` bằng WebViewAssetLoader trong tối đa 20 phút. Không cần quyền đọc mọi ảnh và không lộ đường dẫn máy ra web công khai.
+- WebView nhận tệp thành `File` và chuyển vào **chính hàm routeMediaFiles** đã được dùng cho ô chọn ảnh/video. Nút thumbnail ở camera Ảnh và Video cũng được nối với Photo Picker Android.
+- Form chọn ZIP giữ ACTION_OPEN_DOCUMENT, không sửa quy trình nhập/khôi phục dự án.
+- Nếu máy không có Photo Picker, mở Android Gallery/File picker thay thế.
+- Không tự ghi gì vào thư viện gốc, không xóa ảnh. Lõi xử lý dấu, khung hình và camera đã có được giữ nguyên.
+
+## Test/bàn giao
+- Android Build và bộ kiểm tra mã nguồn phải PASS. Bắt buộc thử trên Android thật: nút Thư viện máy dưới đáy, nút Chọn ảnh/video trên form, chọn 1 ảnh, nhiều ảnh, 1 video, nhiều ảnh + video; đóng picker, từ chối quyền, quay lại camera.
+- APK TEST có package mới `vn.hnl.xaydung.hnlmark.trial254` và tên **HNLMark TEST 4**, cài song song để không ảnh hưởng dữ liệu ở bản cũ. APK debug vẫn chưa Runtime Golden.
+- Hiện chưa có thiết bị Android được điều khiển trực tiếp trong phiên này; không được báo lỗi đã hoàn toàn hết chỉ từ CI.
+- GitHub main và Vercel Production không thay đổi.
+
 # HNLMark Android v2.5.3 TEST – Sửa preview camera theo ảnh máy thật
 
 ## Đối chiếu ảnh lỗi người dùng (13/11/2026)
