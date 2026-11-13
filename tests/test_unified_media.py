@@ -84,4 +84,26 @@ assert 'toggleVideoSettings' in video and 'closeVideoSettings' in video
 assert '.video-settings-button' in css
 assert '.video-quality-panel' in css and '.crop-ratio-options' in css
 
-print('PASS: one combined picker, symmetric photo/video shutter, modes and all V2.2 media and quality controls')
+# Camera UI regression reported on Android: VIDEO was 18px while ẢNH was 11px.
+# The newer ID-targeting rules must take precedence over the legacy override.
+import re
+fix_css=css.split('/* v2.2.1 — mode labels and rotation icons:')[1]
+assert '.camera-ios-modes #photoToVideo' in fix_css
+assert '.video-ios-modes #videoPhotoMode' in fix_css
+assert 'font-size:12px!important' in fix_css
+assert 'font-size:10px!important' in fix_css
+assert 'flex:0 0 64px!important' in fix_css
+assert 'flex:0 0 45px!important' in fix_css
+def button_icon(id):
+    match=re.search(r'<button[^>]*\\bid="'+id+r'"[^>]*>(.*?)</button>', html, re.S)
+    assert match, 'Missing camera rotate button '+id
+    svg=re.search(r'<svg.*?</svg>',match.group(1), re.S)
+    assert svg, 'SVG missing from '+id
+    return svg.group(0)
+photo_rotate=button_icon('rotateCameraOverlay')
+video_rotate=button_icon('videoRotate')
+assert photo_rotate==video_rotate, 'Photo and video rotate glyphs must match'
+assert 'M21 12a9 9 0 1 1-9-9' in photo_rotate
+assert 'M21 3v5h-5' in photo_rotate
+
+print('PASS: one combined picker, symmetric photo/video shutter, modes and all V2.2 media controls and corrected icons')
