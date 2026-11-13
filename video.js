@@ -6,6 +6,7 @@ const panel=$('videoPanel'), studio=$('videoStudio'), canvas=$('videoCanvas'), c
 const media=$('videoMedia'), output=$('videoOutput');
 const qualityPanel=$('videoQualityPanel');
 if(!panel||!studio||!canvas||!ctx||!media||!output)return;
+let cameraControls=null;
 let mode='none', cameraStream=null, sourceUrl='', outputUrl='', outputBlob=null;
 let file=null, rotation=0, recorder=null, chunks=[], raf=0, exportStream=null, micStream=null;
 let recordingStart=0, recordingDate=null, importDate=null, recordingName='', recordingMime='', recordingMode='';
@@ -139,7 +140,7 @@ function drawFrame(){
   const H=Math.max(2,Math.round(sourceHeight*scale/2)*2);
   if(workCanvas.width!==W||workCanvas.height!==H){workCanvas.width=W;workCanvas.height=H;}
   const g=workCtx;
-  g.fillStyle='#000';g.fillRect(0,0,W,H);g.save();
+  g.fillStyle='#000';g.fillRect(0,0,W,H);g.save();g.filter=mode==='camera'?(cameraControls?.getFilter()||'none'):'none';
   if(turn===90){g.translate(W,0);g.rotate(Math.PI/2);g.drawImage(media,0,0,H,W);}
   else if(turn===270){g.translate(0,H);g.rotate(-Math.PI/2);g.drawImage(media,0,0,H,W);}
   else if(turn===180){g.translate(W,H);g.rotate(Math.PI);g.drawImage(media,0,0,W,H);}
@@ -166,6 +167,7 @@ function drawFrame(){
 }
 function frameLoop(){cancelAnimationFrame(raf);raf=requestAnimationFrame(drawFrame);}
 function stopCameraTracks(){
+ if(cameraControls){cameraControls.destroy();cameraControls=null;}
  if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null;}
  if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}
 }
@@ -194,7 +196,7 @@ async function openCamera(){
   const requested=Number($('videoResolution').value)||1080,rate=Number($('videoFps').value)||30;
   cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:Math.round(requested*16/9)},height:{ideal:requested},frameRate:{ideal:rate}}});
   media.srcObject=cameraStream;media.muted=true;media.playsInline=true;await media.play();
-  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;samples=0;fixedTurn=null;
+  mode='camera';if(window.HNLCameraControls){cameraControls=window.HNLCameraControls.create({stage:studio.querySelector('.video-canvas-wrap'),track:()=>cameraStream?.getVideoTracks()[0],active:()=>mode==='camera',rotation:()=>window.HNLVideoOrientation.videoTurn({mode,rawWidth:media.videoWidth,rawHeight:media.videoHeight,portrait:effectivePortrait(),side:physicalSide,inverted:physicalInverted,manual:rotation})});}videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;samples=0;fixedTurn=null;
   studio.classList.add('video-open');document.body.classList.add('hnl-video-live');applyPhysicalLayout();frameLoop();syncButtons();
   message('Camera video đã mở. Nhấn Quay video để bắt đầu. Có thể ghi âm nếu cấp quyền micro.');
  }catch(e){stopCameraTracks();message('Không mở được camera video: '+(e.message||e));}
@@ -348,6 +350,11 @@ window.addEventListener('devicemotion',physicalMotion);window.addEventListener('
 window.addEventListener('resize',applyPhysicalLayout);
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&recorder?.state==='recording')stopRecording();});
 window.addEventListener('pagehide',()=>{if(recorder?.state==='recording')recorder.stop();stopCameraTracks();});
-window.HNLVideoStudio={importVideo:(file)=>importVideo(file),openCamera:()=>openCamera(),getMode:()=>mode};
+window.HNLVideoStudio={importVideo:(file)=>importVideo(file),openCamera:()=>openCamera(),getMode:()=>mode,
+ shareCurrent:async()=>{
+  if(!outputBlob)throw Error('Chưa có video đã xuất để chia sẻ');
+  if(!window.HNLAndroidApp?.shareBlob)throw Error('Chỉ hỗ trợ trong APK Android');
+  return window.HNLAndroidApp.shareBlob(outputBlob,recordingName+'_Timemark_'+videoCode+'.'+extFor(outputBlob.type||recordingMime));
+ }};
 updateMediaPicker();syncButtons();
 })();

@@ -9,6 +9,9 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
+import android.content.ClipData;
+import android.database.Cursor;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
@@ -32,8 +35,11 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
+import androidx.core.content.FileProvider;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
@@ -66,6 +72,27 @@ public final class MainActivity extends Activity {
     private String[] pendingResources;
     private boolean cameraImmersive;
     private final Map<String, SaveSession> sessions = new ConcurrentHashMap<>();
+    private final Map<String, ShareSession> shares = new ConcurrentHashMap<>();
+    private static final class ShareSession {
+        final File file;
+        final String mime;
+        final OutputStream stream;
+        ShareSession(File file, String mime, OutputStream stream) {
+            this.file=file;this.mime=mime;this.stream=stream;
+        }
+    }
+    private int screenAngle() {
+        return getWindowManager().getDefaultDisplay().getRotation()*90;
+    }
+    private void tidyShares(){
+        File dir=new File(getCacheDir(),"share");
+        File[] files=dir.listFiles();
+        if(files==null)return;
+        long expiry=System.currentTimeMillis()-48L*3600*1000;
+        for(File file:files){
+            if(file.isFile() && file.lastModified()<expiry)file.delete();
+        }
+    }
 
     private static final class SaveSession {
         final Uri uri;
@@ -104,10 +131,16 @@ public final class MainActivity extends Activity {
         chromeHeader.setGravity(Gravity.CENTER_VERTICAL);
         chromeHeader.setPadding(dp(16), 0, dp(15), 0);
         chromeHeader.setBackgroundColor(NAVY);
-        LinearLayout.LayoutParams headerLayout = new LinearLayout.LayoutParams(-1, dp(52));
+        LinearLayout.LayoutParams headerLayout = new LinearLayout.LayoutParams(-1, dp(54));
         app.addView(chromeHeader, headerLayout);
 
-        TextView title = text("HNLMark", 19, Color.WHITE, true);
+        ImageView logo=new ImageView(this);
+        logo.setImageResource(R.drawable.hnlmark_icon);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams logoLayout=new LinearLayout.LayoutParams(dp(37),dp(37));
+        logoLayout.setMargins(0,0,dp(10),0);
+        chromeHeader.addView(logo,logoLayout);
+        TextView title = text("HNLMark", 18, Color.WHITE, true);
         chromeHeader.addView(title, new LinearLayout.LayoutParams(0, -1, 1f));
         TextView offline = text("●  OFFLINE", 11, GOLD, true);
         chromeHeader.addView(offline);
@@ -121,11 +154,12 @@ public final class MainActivity extends Activity {
         chromeTabs.setPadding(dp(6), dp(3), dp(6), dp(3));
         app.addView(chromeTabs, new LinearLayout.LayoutParams(-1, dp(61)));
         addTab("Chụp", android.R.drawable.ic_menu_camera, "capture");
-        addTab("Thư viện", android.R.drawable.ic_menu_gallery, "library");
+        addTab("Thư viện máy", android.R.drawable.ic_menu_gallery, "library");
         addTab("Cài dấu", android.R.drawable.ic_menu_edit, "stamp");
         addTab("Xuất", android.R.drawable.ic_menu_save, "export");
 
         setContentView(root);
+        tidyShares();
         initializeWeb();
     }
 
@@ -197,7 +231,7 @@ public final class MainActivity extends Activity {
                 if (trusted(Uri.parse(url))) {
                     view.evaluateJavascript(
                         "document.body.classList.add('hnl-android-apk');" +
-                        "window.HNLAndroidApp && window.HNLAndroidApp.chooseTab('capture')",
+                        "window.HNLAndroidApp && window.HNLAndroidApp.setDeviceOrientation(" + screenAngle() + ")",
                         null);
                 }
             }
@@ -215,22 +249,56 @@ public final class MainActivity extends Activity {
             }
             @Override public boolean onShowFileChooser(
                 WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
-                if (fileCallback != null) fileCallback.onReceiveValue(null);
-                fileCallback = callback;
-                Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                pick.addCategory(Intent.CATEGORY_OPENABLE);
-                pick.setType("*/*");
-                pick.putExtra(Intent.EXTRA_MIME_TYPES,
-                    new String[] {"image/*", "video/*", "application/zip", "application/octet-stream"});
-                pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,
-                    params.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE);
-                pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                try {
-                    startActivityForResult(Intent.createChooser(pick, "Chọn ảnh, video hoặc dự án"), REQ_FILES);
-                } catch (Exception e) {
+                if(fileCallback != null)fileCallback.onReceiveValue(null);
+                fileCallback=callback;
+                List<String> accepts=Arrays.asList(params.getAcceptTypes());
+                boolean isZip=false;
+                for(String type:accepts){
+                    if(type!=null&&(type.contains("zip")||type.contains("octet-stream")))isZip=true;
+                }
+                boolean multiple=params.getMode()==FileChooserParams.MODE_OPEN_MULTIPLE;
+                Intent pick;
+                if(!isZip && Build.VERSION.SDK_INT>=33){
+                    // Android Photo Picker: images/videos directly, no broad storage rights.
+                    pick=new Intent(MediaStore.ACTION_PICK_IMAGES);
+                    pick.setType("*/*");
+                    if(multiple){
+                        int max=Math.max(2,Math.min(MediaStore.getPickImagesMaxLimit(),20));
+                        pick.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX,max);
+                    }
+                }else if(isZip){
+                    pick=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    pick.addCategory(Intent.CATEGORY_OPENABLE);
+                    pick.setType("*/*");
+                    pick.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"application/zip","application/octet-stream"});
+                    pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
+                    pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }else{
+                    // Android 10-12: system gallery picker fallback.
+                    pick=new Intent(Intent.ACTION_GET_CONTENT);
+                    pick.addCategory(Intent.CATEGORY_OPENABLE);
+                    pick.setType("*/*");
+                    pick.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
+                    pick.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
+                    pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
+                try{
+                    startActivityForResult(pick,REQ_FILES);
+                }catch(Exception e){
+                    if(!isZip && Build.VERSION.SDK_INT>=33){
+                        try{
+                            Intent fallback=new Intent(Intent.ACTION_GET_CONTENT);
+                            fallback.addCategory(Intent.CATEGORY_OPENABLE);
+                            fallback.setType("*/*");
+                            fallback.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"image/*","video/*"});
+                            fallback.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
+                            startActivityForResult(fallback,REQ_FILES);
+                            return true;
+                        }catch(Exception ignored){}
+                    }
                     fileCallback.onReceiveValue(null);
-                    fileCallback = null;
-                    toast("Không mở được trình chọn file.");
+                    fileCallback=null;
+                    toast("Không mở được thư viện thiết bị.");
                 }
                 return true;
             }
@@ -322,7 +390,7 @@ public final class MainActivity extends Activity {
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
         if (web != null) web.post(() ->
-            web.evaluateJavascript("window.dispatchEvent(new Event('resize'))", null));
+            web.evaluateJavascript("window.HNLAndroidApp?.setDeviceOrientation(" + screenAngle() + ");window.dispatchEvent(new Event('resize'))", null));
     }
 
     @Override public void onBackPressed() {
@@ -355,6 +423,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         for (String token : new ArrayList<>(sessions.keySet())) abortSession(token);
+        for (String token : new ArrayList<>(shares.keySet())) abortShareFile(token);
         if (web != null) {
             web.loadUrl("about:blank");
             web.destroy();
@@ -428,6 +497,64 @@ public final class MainActivity extends Activity {
         getContentResolver().delete(s.uri, null, null);
     }
 
+
+    private String safeSharedName(String filename){
+        String name=(filename==null||filename.trim().isEmpty()?"HNLMark":filename);
+        name=name.replaceAll("[^\\p{L}\\p{N} ._()-]","_");
+        if(name.length()>120)name=name.substring(name.length()-120);
+        return name.isEmpty()?"HNLMark":name;
+    }
+
+    private String beginShareFile(String filename, String mime) {
+        if(mime==null||!(mime.startsWith("image/")||mime.startsWith("video/")||mime.equals("application/zip")))
+            return "";
+        File dir=new File(getCacheDir(),"share");
+        if(!dir.exists()&&!dir.mkdirs())return "";
+        try {
+            String token=UUID.randomUUID().toString();
+            File file=new File(dir,token+"_"+safeSharedName(filename));
+            FileOutputStream stream=new FileOutputStream(file);
+            shares.put(token,new ShareSession(file,mime,stream));
+            return token;
+        }catch(Exception ignored){return "";}
+    }
+    private boolean appendShareFile(String token,String data){
+        ShareSession session=shares.get(token);
+        if(session==null)return false;
+        try{
+            byte[] bytes=Base64.decode(data,Base64.DEFAULT);
+            synchronized(session){session.stream.write(bytes);}
+            return true;
+        }catch(Exception e){return false;}
+    }
+    private boolean finishShareFile(String token){
+        ShareSession session=shares.remove(token);
+        if(session==null)return false;
+        try{
+            synchronized(session){session.stream.flush();session.stream.close();}
+            Uri uri=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",session.file);
+            Intent share=new Intent(Intent.ACTION_SEND);
+            share.setType(session.mime);
+            share.putExtra(Intent.EXTRA_STREAM,uri);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            share.setClipData(ClipData.newUri(getContentResolver(),"HNLMark",uri));
+            runOnUiThread(()->{
+                try{startActivity(Intent.createChooser(share,"Chia sẻ từ HNLMark"));}
+                catch(Exception ex){toast("Không mở được bảng chia sẻ Android.");}
+            });
+            return true;
+        }catch(Exception ex){
+            session.file.delete();
+            return false;
+        }
+    }
+    private void abortShareFile(String token){
+        ShareSession session=shares.remove(token);
+        if(session==null)return;
+        try{session.stream.close();}catch(Exception ignored){}
+        session.file.delete();
+    }
+
     /** Exposed only to trusted appassets content; all external WebView URLs blocked. */
     public final class NativeBridge {
         @JavascriptInterface public String beginSave(String name, String mime) {
@@ -442,6 +569,10 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void abortSave(String token) {
             abortSession(token);
         }
+        @JavascriptInterface public String beginShare(String name,String mime){return beginShareFile(name,mime);}
+        @JavascriptInterface public boolean appendShare(String token,String chunk){return appendShareFile(token,chunk);}
+        @JavascriptInterface public boolean finishShare(String token){return finishShareFile(token);}
+        @JavascriptInterface public void abortShare(String token){abortShareFile(token);}
         @JavascriptInterface public void cameraState(boolean active) {
             runOnUiThread(() -> {
                 cameraImmersive = active;

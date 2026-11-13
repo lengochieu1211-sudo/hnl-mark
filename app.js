@@ -18,7 +18,7 @@ if(saved.serialMode==='custom')saved.serialMode='prefix';
 const config=Object.assign({},defaultConfig,saved); config.moveTarget='stamp';
 let editTool='move',editSelection=null,editDragging=false;const previewSnapshot=document.createElement('canvas');
 let photoSequence=0,photos=[],selected=-1,logoImg=null,logoUrl=null,logoFile=null,isRendering=0,toastTimer=null,busy=false;
-let cameraActive=false,cameraStream=null,cameraRAF=0,cameraFacing='environment',cameraRequest=0,cameraCapturing=false,cameraShotPending=false,cameraShotUniqueId=null,cameraPreviewCode='',cameraLastDraw=0,cameraOrientationKey='';
+let cameraActive=false,cameraStream=null,cameraControls=null,cameraRAF=0,cameraFacing='environment',cameraRequest=0,cameraCapturing=false,cameraShotPending=false,cameraShotUniqueId=null,cameraPreviewCode='',cameraLastDraw=0,cameraOrientationKey='';
 // Physical posture can differ from the browser viewport when Android auto-rotate is locked.
 let cameraSensorPortrait=null,cameraSensorSide=0,cameraSensorAt=0,cameraSensorCandidate='',cameraSensorSamples=0,cameraManualRotation=0;
 let cameraSensorCandidateAt=0,cameraSensorSource='',cameraMotionAt=0,cameraOrientationSide=0,cameraOrientationAt=0;
@@ -520,6 +520,7 @@ function cameraUi(){
   updateImageEditor();
 }
 function stopCamera(showPrevious=true,preserveReviewLayout=false){
+  if(cameraControls){cameraControls.destroy();cameraControls=null;}
   if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
   ++cameraRequest;
   cameraActive=false;
@@ -628,7 +629,7 @@ function cameraGeometry(video){
     sensor:physicalSensor,manual:cameraManualRotation!==0};
 }
 function paintCameraFrame(g,video,frame,W,H){
-  g.save();
+  g.save();g.filter=cameraControls?.getFilter()||'none';
   if(frame.rotation===90){
     g.translate(W,0);g.rotate(Math.PI/2);g.drawImage(video,0,0,H,W);
   }else if(frame.rotation===270){
@@ -721,6 +722,7 @@ async function startCamera(){
     if(request!==cameraRequest){stopCamera();return;}
     cameraSystemFallback(false);
     cameraActive=true;cameraCapturing=false;cameraLastDraw=0;
+    if(window.HNLCameraControls){cameraControls=window.HNLCameraControls.create({stage,track:()=>cameraStream?.getVideoTracks()[0],active:()=>cameraActive,rotation:()=>cameraGeometry($('cameraVideo')).rotation});}
     cameraManualRotation=0;cameraSensorPortrait=null;cameraSensorSide=0;cameraSensorAt=0;cameraSensorCandidate='';cameraSensorSamples=0;cameraSensorCandidateAt=0;cameraSensorSource='';cameraMotionAt=0;cameraOrientationSide=0;cameraOrientationAt=0;
     cameraPreviewCode=createPhotoCode();burstCount=0;
     clearOrientationUi();
@@ -961,5 +963,10 @@ window.HNLVideoBridge={
 },
  photoCameraActive:()=>cameraActive
 };
+window.HNLPhotoBridge={shareCurrent:async()=>{
+  if(!window.HNLAndroidApp?.shareBlob)throw Error('Tính năng chỉ có trên bản Android');
+  const p=previewIndex();if(!p)throw Error('Chưa chọn ảnh để chia sẻ');
+  const blob=await renderBlob(p);return window.HNLAndroidApp.shareBlob(blob,outputName(p,blob));
+}};
 bind();
 })();

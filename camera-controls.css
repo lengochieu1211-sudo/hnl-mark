@@ -1,0 +1,13 @@
+/* Android-first camera exposure/focus controls; photo/video shared. */
+.hnl-has-camera-adjust{position:relative!important}
+.hnl-camera-adjust{position:absolute;inset:0;z-index:12;pointer-events:none;overflow:hidden}
+.hnl-focus-ring{position:absolute;width:68px;height:68px;border:2px solid #ffe072;border-radius:12px;transform:translate(-50%,-50%);box-shadow:0 0 0 1px #202e3b99,0 0 12px #0005;transition:left .12s,top .12s;pointer-events:none}
+.hnl-focus-ring span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font:600 16px sans-serif;color:#ffe072}
+.hnl-camera-exposure{pointer-events:auto;position:absolute;right:max(7px,env(safe-area-inset-right));top:50%;transform:translateY(-50%);background:#0d1c2de0;border:1px solid #ffffff40;border-radius:22px;padding:9px 5px;color:#ffe072;display:flex;flex-direction:column;align-items:center;gap:8px;min-height:125px}
+.hnl-camera-exposure label{font-size:14px;display:flex;flex-direction:column;gap:3px;align-items:center}
+.hnl-camera-exposure label b{font-size:10px;font-variant-numeric:tabular-nums}
+.hnl-camera-exposure input{writing-mode:vertical-lr;direction:rtl;appearance:slider-vertical;width:21px;height:96px;accent-color:#ffd65c;touch-action:none}
+.hnl-camera-quick{pointer-events:auto;position:absolute;left:50%;bottom:11px;transform:translateX(-50%);display:flex;gap:6px;align-items:center}
+.hnl-camera-quick button{border:1px solid #ffffff70;background:#10263ddc;color:white;border-radius:18px;min-width:45px;height:33px;padding:4px 8px;font-weight:700;font-size:13px}
+.hnl-camera-quick button.on{color:#ffd65c;border-color:#ffd65c}
+.hnl-camera-adjust [hidden]{display:none!important}

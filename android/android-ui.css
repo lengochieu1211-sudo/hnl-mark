@@ -1,48 +1,252 @@
-/* Native APK style: used ONLY inside bundled Android WebView. */
-:root{color-scheme:light}
-html,body{background:#eef2f8!important;overscroll-behavior:none}
-body.hnl-android-apk{padding:0!important;margin:0!important;font-family:system-ui,"Segoe UI",sans-serif!important}
-body.hnl-android-apk .topbar,
-body.hnl-android-apk .intro,
-body.hnl-android-apk .mobile-shortcuts,
-body.hnl-android-apk footer,
-body.hnl-android-apk #installBtn{display:none!important}
-body.hnl-android-apk .shell{max-width:none!important;margin:0!important;padding:8px!important}
+/* HNLMark Android v2.4 — app-only design system, independent of the Web theme.
+   Portrait AND landscape: the camera dock is anchored to the BOTTOM.
+   The icons turn in place; shutter positions never move to a right sidebar. */
+:root{--apk-navy:#102c4b;--apk-deep:#081b31;--apk-blue:#2866c0;--apk-gold:#ecc049;--apk-canvas:#f1f4f8;--apk-card:#fff;--apk-text:#233b56;--apk-muted:#74879d}
+body.hnl-android-apk{margin:0!important;padding:0!important;background:var(--apk-canvas)!important;color:var(--apk-text)!important;font-family:system-ui,-apple-system,"Segoe UI",sans-serif!important;overscroll-behavior:none}
+body.hnl-android-apk .topbar,body.hnl-android-apk .intro,body.hnl-android-apk .mobile-shortcuts,body.hnl-android-apk footer,body.hnl-android-apk #installBtn{display:none!important}
+body.hnl-android-apk .shell{box-sizing:border-box!important;padding:10px 10px 18px!important;margin:0!important;max-width:none!important}
 body.hnl-android-apk .workspace{display:flex!important;flex-direction:column!important;gap:10px!important;max-width:none!important}
-body.hnl-android-apk .editor,
-body.hnl-android-apk .viewer{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important}
-body.hnl-android-apk .panel{box-shadow:none!important;border:1px solid #dce5ee!important;border-radius:15px!important;margin:0 0 9px!important;padding:13px!important}
-body.hnl-android-apk .panel.import-panel{background:#fff!important}
-body.hnl-android-apk .panel .section-title{margin-bottom:9px!important}
+body.hnl-android-apk .editor,body.hnl-android-apk .viewer{display:block!important;min-width:0!important;width:100%!important;max-width:none!important}
+body.hnl-android-apk .panel{background:var(--apk-card)!important;border:1px solid #e0e6ed!important;border-radius:16px!important;box-shadow:0 3px 12px #122b4610!important;margin:0 0 10px!important;padding:13px!important}
+body.hnl-android-apk .panel .section-title{margin:0 0 10px!important;gap:9px!important}
+body.hnl-android-apk .section-title h2{font-size:15px!important;font-weight:800!important;color:var(--apk-navy)}
+body.hnl-android-apk .panel .field{margin-bottom:11px!important}
+body.hnl-android-apk .panel .field label{font-size:12px!important;font-weight:750!important;color:#36516b}
+body.hnl-android-apk .panel input:not([type="range"]),body.hnl-android-apk .panel select,body.hnl-android-apk .panel textarea{font-size:max(16px,1em)!important;border:1px solid #d3deea!important;border-radius:10px!important;min-height:42px}
+body.hnl-android-apk .panel input[type="range"]{accent-color:var(--apk-blue)}
+body.hnl-android-apk .panel button{touch-action:manipulation}
+body.hnl-android-apk .btn.primary,body.hnl-android-apk .media-capture{background:var(--apk-blue)!important;border-color:#2761b4!important;color:#fff!important}
 body.hnl-android-apk .media-top-actions{gap:9px!important}
-body.hnl-android-apk .media-top-actions>*{min-height:56px!important;touch-action:manipulation}
-body.hnl-android-apk .viewer{border-radius:15px!important;overflow:hidden!important}
-body.hnl-android-apk .viewer .panel,
-body.hnl-android-apk .viewer-top{border-radius:14px!important}
-body.hnl-android-apk button,
-body.hnl-android-apk select,
-body.hnl-android-apk input[type="checkbox"]{touch-action:manipulation}
-body.hnl-android-apk input[type="text"],
-body.hnl-android-apk input[type="date"],
-body.hnl-android-apk input[type="datetime-local"],
-body.hnl-android-apk input[type="number"],
-body.hnl-android-apk textarea,
-body.hnl-android-apk select{font-size:max(16px,1em)!important}
+body.hnl-android-apk .media-top-actions>*{min-height:55px!important;border-radius:12px!important}
+body.hnl-android-apk .media-top-actions strong{font-size:12px!important}
 body.hnl-android-apk .preset-grid{gap:8px!important}
-body.hnl-android-apk #videoPanel{background:#fff;padding:10px!important;border-radius:12px}
-body.hnl-android-apk .video-quality-panel{gap:7px}
+body.hnl-android-apk .preset{border-radius:12px!important}
+body.hnl-android-apk .viewer{background:var(--apk-card);border-radius:16px!important;border:1px solid #e0e6ed!important;overflow:hidden!important}
+body.hnl-android-apk .viewer-top{padding:11px!important}
+body.hnl-android-apk .viewer .canvas-stage{background:#071523}
+body.hnl-android-apk #videoPanel{border-radius:12px!important}
+body.hnl-android-apk .apk-share-action{display:inline-flex;align-items:center;justify-content:center;gap:5px;background:#fff!important;color:var(--apk-blue)!important;border:1px solid #adc6e5!important;border-radius:10px!important;padding:9px 12px!important;font-size:12px!important;font-weight:800;min-height:42px!important}
+body.hnl-android-apk .apk-share-action svg{width:17px;height:17px}
+body.hnl-android-apk .video-result-actions{display:flex;flex-wrap:wrap;gap:7px}
+body.hnl-android-apk .video-result-actions .apk-share-action{flex:1}
+body.hnl-android-apk .export-buttons{gap:8px!important;flex-wrap:wrap!important}
+body.hnl-android-apk .export-buttons .apk-share-action{flex:1 1 135px!important}
+body.hnl-android-apk .library-note,body.hnl-android-apk .field-help{font-size:11px!important;line-height:1.55!important;color:var(--apk-muted)!important}
 body.hnl-android-apk .library-sheet{max-height:95dvh!important}
-body.hnl-android-apk .field-help,
-body.hnl-android-apk .library-note{line-height:1.5}
-body.hnl-android-apk .camera-area.hnl-capture-screen,
-body.hnl-android-apk #videoStudio.video-open{z-index:240!important}
-@media(min-width:650px) and (orientation:landscape){
- body.hnl-android-apk .shell{padding:6px 10px!important}
- body.hnl-android-apk .workspace{gap:8px!important}
- body.hnl-android-apk .panel{padding:10px!important}
+body.hnl-android-apk .video-quality-panel{gap:7px!important}
+body.hnl-android-apk .apk-gallery-caption{font-size:11px;color:#59718b;line-height:1.4}
+
+/* Full-screen camera: preview gets all space ABOVE a stable bottom dock. */
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen,
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock{
+ position:fixed!important;inset:0!important;z-index:260!important;
+ box-sizing:border-box!important;display:flex!important;flex-direction:column!important;
+ align-items:stretch!important;justify-content:stretch!important;
+ width:100dvw!important;height:100dvh!important;min-width:0!important;
+ max-width:none!important;max-height:none!important;
+ transform:none!important;transform-origin:center!important;
+ gap:4px!important;padding:5px max(5px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(5px,env(safe-area-inset-left))!important;
+ overflow:hidden!important;background:var(--apk-deep)!important;
 }
-@media(prefers-reduced-motion:reduce){
- body.hnl-android-apk *,body.hnl-android-apk *:before,body.hnl-android-apk *:after{
-  animation-duration:.01ms!important;transition-duration:.01ms!important
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .canvas-stage,
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .canvas-stage{
+ order:1!important;flex:1 1 0!important;display:flex!important;
+ justify-content:center!important;align-items:center!important;
+ min-width:0!important;width:100%!important;max-width:none!important;
+ min-height:0!important;height:auto!important;max-height:none!important;
+ overflow:hidden!important;background:#050f1e!important;border-radius:9px!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .canvas-stage canvas{max-height:100%!important;max-width:100%!important;object-fit:contain!important}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-toolbar.camera-ios,
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-toolbar.camera-ios{
+ order:2!important;position:relative!important;inset:auto!important;transform:none!important;
+ box-sizing:border-box!important;display:flex!important;flex-direction:column!important;
+ flex:0 0 148px!important;width:100%!important;height:148px!important;min-width:0!important;max-width:none!important;
+ min-height:148px!important;max-height:148px!important;
+ gap:2px!important;align-items:center!important;justify-content:space-between!important;
+ padding:3px 10px 5px!important;border-radius:13px!important;
+ background:#142b46!important;overflow:hidden!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-status{
+ width:100%!important;height:17px!important;min-height:17px!important;
+ flex:0 0 17px!important;display:flex!important;justify-content:center!important;
+ gap:5px!important;font-size:10px!important;white-space:nowrap!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-utilities{
+ height:26px!important;min-height:26px!important;flex:0 0 26px!important;
+ gap:12px!important;width:100%!important;justify-content:center!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-utilities .camera-icon{
+ width:27px!important;height:27px!important;min-width:27px!important;min-height:27px!important;
+ max-width:27px!important;flex:0 0 27px!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-shutter-row,
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-shutter-row{
+ display:grid!important;grid-template-columns:minmax(0,1fr) 62px minmax(0,1fr)!important;
+ grid-template-rows:62px!important;height:62px!important;min-height:62px!important;
+ max-height:62px!important;flex:0 0 62px!important;align-content:center!important;
+ justify-content:stretch!important;justify-items:center!important;gap:0!important;
+ padding:0!important;margin:0!important;width:100%!important;overflow:visible!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #cameraLibrary{
+ grid-column:1!important;grid-row:1!important;width:35px!important;height:35px!important;
+ min-width:35px!important;min-height:35px!important;max-width:35px!important;
+ flex:0 0 35px!important;justify-self:center!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #flipCamera{
+ grid-column:3!important;grid-row:1!important;width:35px!important;height:35px!important;
+ min-width:35px!important;min-height:35px!important;max-width:35px!important;
+ flex:0 0 35px!important;justify-self:center!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #shutterButton{
+ grid-column:2!important;grid-row:1!important;justify-self:center!important;
+ width:60px!important;height:60px!important;min-width:60px!important;min-height:60px!important;
+ margin:0!important;border-radius:50%!important;flex:0 0 60px!important;
+ display:grid!important;place-items:center!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #shutterButton span{
+ width:44px!important;height:44px!important;border-radius:50%!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes,
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes{
+ display:flex!important;flex-direction:row!important;justify-content:center!important;align-items:center!important;
+ gap:12px!important;width:100%!important;min-height:20px!important;height:20px!important;
+ flex:0 0 20px!important;white-space:nowrap!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > *{
+ flex:0 0 62px!important;width:62px!important;min-width:62px!important;max-width:62px!important;
+ font-size:11px!important;font-weight:800!important;line-height:1!important;
+ min-height:20px!important;height:20px!important;letter-spacing:.04em!important;
+ display:inline-flex!important;justify-content:center!important;align-items:center!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-burst{
+ flex:0 0 16px!important;min-height:16px!important;height:16px!important;display:flex!important;justify-content:center!important;font-size:10px!important;margin:0!important;padding:0!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-review,
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review{
+ order:2!important;display:flex!important;flex-direction:column!important;
+ position:relative!important;inset:auto!important;transform:none!important;
+ flex:0 0 98px!important;width:100%!important;height:98px!important;min-height:98px!important;
+ max-width:none!important;max-height:98px!important;padding:9px!important;gap:5px!important;
+ border-radius:13px!important;background:#142b46!important
+}
+body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-review[hidden]{display:none!important}
+
+/* Video recorder: identical anchored bottom dock, no rotated rail on right. */
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open.video-landscape,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open.video-locked-left,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open.video-locked-right{
+ position:fixed!important;inset:0!important;top:0!important;left:0!important;
+ transform:none!important;transform-origin:center!important;
+ box-sizing:border-box!important;z-index:260!important;
+ width:100dvw!important;height:100dvh!important;min-width:0!important;
+ max-width:none!important;min-height:0!important;max-height:none!important;
+ padding:5px max(5px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(5px,env(safe-area-inset-left))!important;
+ display:flex!important;flex-direction:column!important;align-items:stretch!important;
+ justify-content:stretch!important;gap:4px!important;overflow:hidden!important;
+ background:var(--apk-deep)!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-canvas-wrap{
+ order:1!important;flex:1 1 0!important;width:100%!important;height:auto!important;
+ max-height:none!important;min-height:0!important;min-width:0!important;
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ border-radius:9px!important;overflow:hidden!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-canvas-wrap canvas{
+ max-height:100%!important;max-width:100%!important;object-fit:contain!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls{
+ order:2!important;position:relative!important;transform:none!important;
+ flex:0 0 143px!important;width:100%!important;max-width:none!important;
+ min-width:0!important;height:143px!important;max-height:143px!important;min-height:143px!important;
+ box-sizing:border-box!important;display:flex!important;flex-direction:column!important;
+ align-items:center!important;justify-content:space-between!important;gap:3px!important;
+ padding:4px 10px!important;border-radius:13px!important;background:#142b46!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls .video-ios-utilities{
+ flex:0 0 26px!important;min-height:26px!important;width:100%!important;
+ display:flex!important;flex-direction:row!important;justify-content:center!important;gap:12px!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls .video-ios-shutter-row,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-ios-shutter-row{
+ display:grid!important;grid-template-columns:minmax(0,1fr) 62px minmax(0,1fr)!important;
+ grid-template-rows:62px!important;flex:0 0 62px!important;height:62px!important;
+ max-height:62px!important;min-height:62px!important;width:100%!important;
+ align-content:center!important;align-items:center!important;justify-items:center!important;gap:0!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls #videoFileShortcut{
+ grid-column:1!important;grid-row:1!important;justify-self:center!important;width:35px!important;height:35px!important;min-width:35px!important;min-height:35px!important;max-width:35px!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls #videoFlip{
+ grid-column:3!important;grid-row:1!important;justify-self:center!important;width:35px!important;height:35px!important;min-width:35px!important;min-height:35px!important;max-width:35px!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls #videoRecord,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls #videoStop{
+ grid-column:2!important;grid-row:1!important;justify-self:center!important;
+ width:60px!important;height:60px!important;min-width:60px!important;min-height:60px!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls .video-ios-modes,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-ios-modes{
+ display:flex!important;flex-direction:row!important;justify-content:center!important;
+ gap:12px!important;width:100%!important;flex:0 0 20px!important;min-height:20px!important;height:20px!important
+}
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-modes>*{
+ flex:0 0 62px!important;width:62px!important;min-width:62px!important;
+ max-width:62px!important;height:20px!important;min-height:20px!important;
+ font-size:11px!important;line-height:1!important;display:inline-flex!important;align-items:center!important;justify-content:center!important
+}
+
+/* Only rotate SYMBOLS in place. Never rotate the whole dock or move the shutter. */
+body.hnl-android-apk .camera-toolbar .camera-icon svg,
+body.hnl-android-apk .video-ios-controls .video-icon svg,
+body.hnl-android-apk .video-ios-controls .video-settings-button svg{
+ transform:rotate(0);transform-origin:50% 50%;transition:transform .2s ease
+}
+body.hnl-android-apk.hnl-angle-90 .camera-toolbar .camera-icon svg,
+body.hnl-android-apk.hnl-angle-90 .video-ios-controls .video-icon svg,
+body.hnl-android-apk.hnl-angle-90 .video-ios-controls .video-settings-button svg{transform:rotate(-90deg)!important}
+body.hnl-android-apk.hnl-angle-270 .camera-toolbar .camera-icon svg,
+body.hnl-android-apk.hnl-angle-270 .video-ios-controls .video-icon svg,
+body.hnl-android-apk.hnl-angle-270 .video-ios-controls .video-settings-button svg{transform:rotate(90deg)!important}
+body.hnl-android-apk.hnl-angle-180 .camera-toolbar .camera-icon svg,
+body.hnl-android-apk.hnl-angle-180 .video-ios-controls .video-icon svg,
+body.hnl-android-apk.hnl-angle-180 .video-ios-controls .video-settings-button svg{transform:rotate(180deg)!important}
+
+/* Short landscape: shrink vertical use, keep EXACT bottom-button positions. */
+@media(orientation:landscape),(max-height:440px){
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-toolbar.camera-ios,
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-toolbar.camera-ios{
+  flex:0 0 108px!important;height:108px!important;min-height:108px!important;max-height:108px!important;
+  flex-direction:column!important;padding:2px 7px!important;gap:0!important
+ }
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-status,
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-burst{display:none!important}
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-utilities{
+  height:22px!important;min-height:22px!important;flex:0 0 22px!important
+ }
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-shutter-row,
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-shutter-row{
+  grid-template-columns:minmax(0,1fr) 58px minmax(0,1fr)!important;
+  grid-template-rows:58px!important;flex:0 0 58px!important;height:58px!important;max-height:58px!important;min-height:58px!important
+ }
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #shutterButton{
+  grid-column:2!important;grid-row:1!important;width:56px!important;height:56px!important;min-width:56px!important;min-height:56px!important
+ }
+ body.hnl-android-apk.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #shutterButton span{width:40px!important;height:40px!important}
+ body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls,
+ body.hnl-android-apk.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls{
+  flex:0 0 110px!important;height:110px!important;min-height:110px!important;max-height:110px!important
+ }
+ body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls .video-ios-shutter-row{
+  grid-template-columns:minmax(0,1fr) 58px minmax(0,1fr)!important;
+  grid-template-rows:58px!important;height:58px!important;max-height:58px!important;min-height:58px!important;flex:0 0 58px!important
+ }
+ body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls #videoRecord,
+ body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-ios-controls #videoStop{
+  width:56px!important;height:56px!important;min-width:56px!important;min-height:56px!important
  }
 }
+body.hnl-android-apk .camera-area [hidden],body.hnl-android-apk .video-studio [hidden]{display:none!important}
+@media(prefers-reduced-motion:reduce){body.hnl-android-apk *{animation-duration:.01ms!important;transition-duration:.01ms!important}}

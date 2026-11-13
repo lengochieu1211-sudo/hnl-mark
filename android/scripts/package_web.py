@@ -10,6 +10,7 @@ WWW.mkdir(parents=True, exist_ok=True)
 resources = [
     "index.html", "style.css", "app.js", "video.js", "orientation.js",
     "crop-ratios.js", "sw.js", "manifest.webmanifest",
+    "camera-controls.js", "camera-controls.css",
     "hnl-logo-192.png", "hnl-logo-512.png",
 ]
 for name in resources:
@@ -26,12 +27,12 @@ assert "</head>" in index and "</body>" in index
 assert "orientation.js" in index and "video.js" in index
 index = index.replace(
     "</head>",
-    '<link rel="stylesheet" href="./android-ui.css"></head>',
+    '<link rel="stylesheet" href="./android-ui.css"><link rel="stylesheet" href="./camera-controls.css"></head>',
     1,
 )
 index = index.replace(
     "</body>",
-    '<script src="./android-app.js" defer></script></body>',
+    '<script src="./camera-controls.js" defer></script><script src="./android-app.js" defer></script></body>',
     1,
 )
 (WWW / "index.html").write_text(index, encoding="utf-8")

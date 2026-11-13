@@ -9,8 +9,8 @@ android {
         applicationId 'vn.hnl.xaydung.hnlmark'
         minSdk 29
         targetSdk 35
-        versionCode 2300
-        versionName '2.3.0-dev'
+        versionCode 2400
+        versionName '2.4.0-dev'
     }
     buildTypes {
         debug { debuggable true }
@@ -27,4 +27,5 @@ android {
 
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.core:core:1.15.0'
 }

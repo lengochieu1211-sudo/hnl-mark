@@ -45,6 +45,9 @@ jobs:
           python3 android/scripts/package_web.py
           python3 android/scripts/audit_android.py
           node --check android/android-app.js
+          node --check camera-controls.js
+          node --check app.js
+          node --check video.js
       - name: Compile debug APK
         working-directory: android
         run: gradle :app:assembleDebug --no-daemon --stacktrace
