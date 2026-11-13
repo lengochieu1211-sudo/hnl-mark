@@ -1,3 +1,11 @@
+# HNLMark v2.2.1 DEV — Camera: icon xoay và đồng bộ chữ ẢNH / VIDEO
+
+- Sửa vector xoay 90° trong camera Ảnh và Video: thay nét SVG cũ bằng cùng biểu tượng xoay có đầu mũi tên rõ ràng.
+- Khắc phục CSS cũ `#photoToVideo { font-size:18px!important }` lấn át cỡ chữ chung; ép hai nhãn ẢNH và VIDEO dùng cùng kiểu font, cùng cỡ 12px dọc / 10px ngang và cùng chiều rộng căn giữa.
+- Giữ màu vàng hiện hành cho chế độ được chọn, các nút khác màu xám nhạt.
+- Chỉ thay icon/giao diện; không sửa logic camera, xoay thực tế, watermark hay dữ liệu ảnh/video.
+- CI gồm kiểm tra biểu tượng SVG giống nhau và kích thước nhãn bằng nhau; cần kiểm thử Android thực tế trước Runtime Golden.
+
 # HNLMark v2.2.0 — Mẫu dấu/Font, cắt ảnh đúng tỷ lệ, chất lượng ảnh/video & sửa xoay video (DEV)
 
 - Source GitHub dev, không sửa main/production.
