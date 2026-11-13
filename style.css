@@ -748,3 +748,10 @@ body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls 
  .media-combined-actions .media-select,.media-combined-actions .media-capture{min-height:50px}
  .media-combined-actions strong{font-size:11px}
 }
+
+
+/* Visibility from JS must take precedence over icon display flex. */
+.video-studio .video-ios-controls .video-icon[hidden],
+.video-studio .video-ios-controls button[hidden],
+.video-studio .video-ios-controls .video-mode-tip[hidden],
+.video-studio .video-ios-controls #videoElapsed[hidden]{display:none!important}
