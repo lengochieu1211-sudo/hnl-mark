@@ -109,7 +109,7 @@ addUnifiedAction(document.querySelector('.video-result-actions'),'video','apkVid
 
 // Keep original save/share buttons in DOM because their callbacks own the
 // actual rendering, share MIME and backup logic. Hide only their visual UI.
-const apkPreviewModes={photo:'large',video:'large'};
+const apkPreviewModes={photo:'auto',video:'auto'};
 function updatePreview(){
  const angle=window.HNLAndroidApp?.getDeviceAngle?.()??0;
  for(const [mode,stageId,canvasId,selector] of [
@@ -129,7 +129,7 @@ function updatePreview(){
   const geometry=window.HNLPreviewGeometry?.calculate({
    stageWidth:rect.width,stageHeight:rect.height,
    canvasWidth:canvas.width,canvasHeight:canvas.height,angle,
-   view:apkPreviewModes[mode]
+   view:apkPreviewModes[mode]==='auto'&&angle%180!==0?'large':'fit'
   });
   if(!geometry)continue;
   canvas.style.setProperty('--apk-preview-width',geometry.width+'px');
@@ -164,17 +164,17 @@ for(const [mode,rootId] of [['photo','cameraArea'],['video','videoStudio']]){
  if(!bar)continue;
  const button=document.createElement('button');button.type='button';
  button.className='apk-preview-toggle is-on';
- button.title='Đổi khung ngắm lớn / xem toàn bộ khung hình';
- button.setAttribute('aria-label','Đang dùng khung ngắm lớn. Chạm để xem toàn bộ ảnh');
+ button.title='Tự động: dọc trọn ảnh, ngang khung lớn. Chạm để xem trọn ảnh';
+ button.setAttribute('aria-label','Tự động: dọc trọn ảnh, ngang khung lớn. Chạm để luôn xem toàn bộ ảnh');
  button.setAttribute('aria-pressed','true');
  button.innerHTML='<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><path d="M3 8l5-5m8 0 5 5M3 16l5 5m8 0 5-5"/></svg>';
  button.addEventListener('click',()=>{
-  const view=apkPreviewModes[mode]==='large'?'fit':'large';
+  const view=apkPreviewModes[mode]==='auto'?'fit':'auto';
   apkPreviewModes[mode]=view;
-  const large=view==='large';
+  const large=view==='auto';
   button.classList.toggle('is-on',large);
   button.setAttribute('aria-pressed',String(large));
-  button.setAttribute('aria-label',large?'Đang dùng khung ngắm lớn. Chạm để xem toàn bộ ảnh':'Đang xem toàn bộ ảnh. Chạm để phóng khung ngắm');
+  button.setAttribute('aria-label',large?'Tự động: dọc trọn ảnh, ngang khung lớn. Chạm để luôn xem toàn bộ ảnh':'Đang xem toàn bộ ảnh. Chạm để tự động phóng khung ngắm ngang');
   schedulePreview();
  });
  bar.appendChild(button);
