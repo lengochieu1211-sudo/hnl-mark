@@ -945,3 +945,67 @@ body.hnl-video-live #videoStudio.video-landscape.video-settings-open .video-qual
  #videoStudio.video-open.video-settings-open .video-quality-panel{grid-template-columns:1fr 1fr}
  #videoStudio.video-open.video-settings-open .video-quality-panel select{font-size:11px}
 }
+
+
+/* v2.2.1 — mode labels and rotation icons: defeat legacy #photoToVideo 18px.
+   Keep the existing yellow active mode and neutral inactive mode. */
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes,
+.video-studio .video-ios-controls .video-ios-modes{
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ gap:12px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > span,
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > button,
+.video-studio .video-ios-controls .video-ios-modes > span,
+.video-studio .video-ios-controls .video-ios-modes > button{
+ box-sizing:border-box!important;display:inline-flex!important;
+ align-items:center!important;justify-content:center!important;
+ flex:0 0 64px!important;width:64px!important;min-width:64px!important;max-width:64px!important;
+ height:22px!important;min-height:22px!important;max-height:22px!important;
+ margin:0!important;padding:0!important;border-radius:0!important;
+ font-family:Inter,"Segoe UI",Arial,sans-serif!important;
+ font-size:12px!important;font-weight:800!important;line-height:1!important;
+ letter-spacing:.04em!important;text-align:center!important;text-transform:none!important;
+ white-space:nowrap!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes #photoToVideo,
+.video-studio .video-ios-controls .video-ios-modes #videoPhotoMode{
+ /* Both inactive buttons must match active labels, not legacy button sizes. */
+ font-size:12px!important;width:64px!important;min-width:64px!important;max-width:64px!important;
+ flex:0 0 64px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > .is-selected,
+.video-studio .video-ios-controls .video-ios-modes > .is-selected{
+ color:#ffd253!important;border-bottom:2px solid #ffd253!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > :not(.is-selected),
+.video-studio .video-ios-controls .video-ios-modes > :not(.is-selected){
+ color:#c4cede!important;border-bottom:2px solid transparent!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #rotateCameraOverlay,
+.video-studio .video-ios-controls #videoRotate{
+ display:inline-flex!important;align-items:center!important;justify-content:center!important;
+ padding:0!important;transform:none!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #rotateCameraOverlay svg,
+.video-studio .video-ios-controls #videoRotate svg{
+ display:block!important;flex:0 0 18px!important;width:18px!important;height:18px!important;
+ margin:0!important;transform:none!important;stroke-linecap:round;stroke-linejoin:round;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #rotateCameraOverlay{
+ /* Old .camera-rotate mobile rule gave the 90-degree icon 100% flex-basis. */
+ flex:0 0 29px!important;width:29px!important;min-width:29px!important;
+ height:29px!important;min-height:29px!important;max-width:29px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes > span,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes > button,
+body.hnl-video-live #videoStudio.video-landscape .video-ios-controls .video-ios-modes > span,
+body.hnl-video-live #videoStudio.video-landscape .video-ios-controls .video-ios-modes > button{
+ flex:0 0 45px!important;width:45px!important;min-width:45px!important;max-width:45px!important;
+ font-size:10px!important;letter-spacing:0!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes #photoToVideo,
+body.hnl-video-live #videoStudio.video-landscape .video-ios-controls .video-ios-modes #videoPhotoMode{
+ flex:0 0 45px!important;width:45px!important;min-width:45px!important;max-width:45px!important;
+ font-size:10px!important;
+}
