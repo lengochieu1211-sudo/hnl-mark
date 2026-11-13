@@ -910,6 +910,9 @@ async function routeMediaFiles(input){
   }
   if(!images.length&&!videos.length&&files.length)showToast('Tệp không phải ảnh hoặc video được hỗ trợ.');
  }
+ // Native Android Photo Picker returns File objects through the same audited media route.
+ // Avoid simulated input clicks from the native tab (no trusted WebView user activation).
+ window.HNLMediaImport={acceptFiles:(files)=>routeMediaFiles(files)};
  $('photoInput').addEventListener('change',e=>{const files=Array.from(e.target.files||[]);e.target.value='';routeMediaFiles(files).catch(showError);});
  const dz=$('dropzone');dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragging');});dz.addEventListener('dragleave',()=>dz.classList.remove('dragging'));dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragging');routeMediaFiles(e.dataTransfer.files).catch(showError);});
 const inputs=['timeMode','batchDate','dateFormat','timeFormat','brandText','projectText','addressText','noteText','symbolType','logoMode','footerBrand','footerCaption','serialMode','serialText','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','outputSize','outputFormat','quality','showDate','showTime','showBackground','showShadow','showFooter','showSerial'];inputs.forEach(id=>{const el=$(id);el.addEventListener(['range','text','color','textarea'].includes(el.type)||el.tagName==='TEXTAREA'?'input':'change',()=>{changeConfig(id,el.type==='checkbox'?el.checked:el.value);if(id==='logoMode'&&config.logoMode!=='floating'&&config.moveTarget==='logo'){config.moveTarget='stamp';updateTarget();}});});
