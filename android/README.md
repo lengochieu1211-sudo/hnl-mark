@@ -1,3 +1,11 @@
+# HNLMark TEST v2.5.8 — 12 mẫu dấu thời gian độc lập
+
+- Branch DEV, kế thừa v2.5.7, không đổi main/Production.
+- 12 mẫu mới trong nhóm mở rộng: Nhật ký thi công, Hồ sơ nghiệm thu, Ca làm việc, Dấu địa điểm, Ảnh khảo sát, Kỹ thuật xanh, Dải chân ảnh, Ảnh kỷ niệm, Đồng hồ LED, Du lịch, Góc tối giản, Thông tin ảnh.
+- Mẫu mới render trực tiếp trong core app.js: ảnh/video xuất, thư viện ảnh đã lưu, font, cỡ chữ, ngày giờ và vị trí giữ chung một đường code. Không thêm nhãn Timemark Verified, không tuyên bố xác thực ảnh. Dữ liệu địa điểm chỉ lấy từ trường người dùng nhập, không giả GPS.
+- Nhóm mẫu mở rộng có thể thu gọn trên màn hình nhỏ. Dữ liệu preset và ảnh cũ không chuyển đổi tự động, giữ nguyên kiểu dấu đã chọn.
+- Bản APK debug thử mới có applicationId riêng `vn.hnl.xaydung.hnlmark.trial258`, nhãn HNLMark TEST 8. Không gỡ TEST cũ khi chưa sao lưu thư viện ZIP. Không Runtime Golden khi chưa có kiểm thử thiết bị.
+
 # HNLMark TEST v2.5.7 — Launcher, Video, Zoom/Focus, Compact Form
 
 - DEV only, TEST 7 riêng `vn.hnl.xaydung.hnlmark.trial257`; không thay TEST 6, production, app data.

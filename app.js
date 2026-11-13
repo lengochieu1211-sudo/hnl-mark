@@ -169,7 +169,7 @@ function stampFont(size,weight=400){const faces={condensed:'"Arial Narrow","Robo
 function fontStack(){return stampFont(16).split('px ').slice(1).join('px ');}
 function fillForm(){const ids=['timeMode','batchDate','dateFormat','timeFormat','brandText','projectText','addressText','noteText','symbolType','logoMode','footerBrand','footerCaption','serialMode','serialText','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','outputSize','outputFormat','quality','cropRatio'];ids.forEach(id=>{const el=$(id);if(el)el.value=config[id];});['showDate','showTime','showBackground','showShadow','showFooter','showSerial'].forEach(id=>$(id).checked=!!config[id]);updateOutputs();updatePreset();updatePositionGrid();updateTarget();updateSelectionUI();}
 function updateOutputs(){$('fontSizeValue').textContent=Number(config.fontSize).toFixed(1)+'%';$('bgValue').textContent=config.bgOpacity+'%';$('logoScaleValue').textContent=config.logoScale+'%';$('qualityValue').textContent=config.quality+'%';document.querySelectorAll('.image-quality-presets button').forEach(b=>b.classList.toggle('selected',+b.dataset.quality===+config.quality));$('serialPreview').textContent=photoSerial(previewIndex());$('accentLabel').textContent=config.accentColor.toUpperCase();$('textLabel').textContent=config.textColor.toUpperCase();['timeScale','dateScale','addressScale','footerScale','serialScale'].forEach(id=>{$(id+'Value').textContent=config[id]+'%';});['dateColor','addressColor','footerColor','serialColor'].forEach(id=>{$(id+'Label').textContent=config[id].toUpperCase();});}
-function updatePreset(){document.querySelectorAll('.preset').forEach(el=>el.classList.toggle('active',el.dataset.preset===config.preset));}
+function updatePreset(){document.querySelectorAll('.preset').forEach(el=>el.classList.toggle('active',el.dataset.preset===config.preset));const extra=$('presetExtra');if(extra&&INDEPENDENT_PRESETS.has(config.preset))extra.open=true;}
 function updateTarget(){document.querySelectorAll('#moveTarget button').forEach(el=>el.classList.toggle('active',el.dataset.target===config.moveTarget));updatePositionGrid();}
 function updatePositionGrid(){const prefix=config.moveTarget==='logo'?'logo':config.moveTarget==='footer'?'footer':config.moveTarget==='serial'?'serial':'pos',x=config[prefix+'X'],y=config[prefix+'Y'];document.querySelectorAll('#positionGrid button').forEach(el=>el.classList.toggle('active',Math.abs(+el.dataset.x-x)<.01&&Math.abs(+el.dataset.y-y)<.01));}
 function changeConfig(name,value){config[name]=value;store();stashPhotoSettings();updateOutputs();updateSelectionUI();renderPreview();}
@@ -380,9 +380,155 @@ function drawModernStamp(g,W,H,p){
  if(style!=='clock'&&config.showFooter)drawReferenceFooter(g,W,H);
  if(style!=='clock'&&config.showSerial)drawVerticalSerial(g,W,H,p);
 }
+
+// Standalone HNLMark stamp family. Never draws Timemark footer, shield or a
+// "Verified" claim. Each preset reads the SAME date/time and photo metadata
+// as the existing stamps so library edits, preview and video exports agree.
+const INDEPENDENT_PRESETS=new Set(['site-log','inspection','shift','geo','survey','blueprint','bottom-strip','memory','led','journey','corner','metadata']);
+function drawIndependentStamp(g,W,H,p){
+ const d=stampData(p),style=config.preset;
+ const unit=Math.max(8,Math.min(W,H)*Number(config.fontSize)/100);
+ const accent=config.accentColor,bright=config.textColor;
+ const pad=Math.max(unit*.55,5),margin=Math.max(3,W*.014);
+ const wide=style==='bottom-strip'?W*.96:style==='inspection'?W*.71:style==='geo'?W*.75:style==='corner'?W*.48:W*.67;
+ const width=clamp(wide,Math.min(W*.28,unit*9),W-margin*2);
+ const height=style==='bottom-strip'?unit*4.2:style==='geo'?unit*5:style==='shift'?unit*5.4:style==='led'?unit*5.0:style==='corner'?unit*5.7:style==='memory'?unit*7.4:unit*7.0;
+ const left=clamp(Number(config.posX)*W-width*.5,margin,Math.max(margin,W-width-margin));
+ const top=clamp(Number(config.posY)*H-height*.5,Math.max(2,H*.01),Math.max(2,H-height-H*.01));
+ const time=d.timeString||'',date=d.dateString||'',label=d.project||d.brand||'';
+ const location=d.location||'',note=d.note||'';
+ const middle=[time,date].filter(Boolean).join(' · ');
+ const safe=(x,max)=>ellipsis(g,x,Math.max(2,max));
+ const color=(v)=>{g.fillStyle=v;};
+ const font=(sz,weight=700,mono=false,serif=false)=>{
+  g.font=mono?`${weight} ${Math.max(7,Math.round(sz))}px Consolas,"Courier New",monospace`:serif?`${weight} ${Math.max(7,Math.round(sz))}px Georgia,"Times New Roman",serif`:stampFont(sz,weight);
+ };
+ const text=(str,x,y,sz,weight,fill,max,mono=false,serif=false)=>{
+  if(!str)return;g.fillStyle=fill;font(sz,weight,mono,serif);g.fillText(safe(str,max),x,y);
+ };
+ const rounded=(x,y,w,h,r,fill,stroke)=>{
+  roundRect(g,x,y,w,h,r);if(fill){color(fill);g.fill();}if(stroke){g.strokeStyle=stroke;g.lineWidth=Math.max(1,unit*.065);g.stroke();}
+ };
+ const shadow=()=>{if(config.showShadow){g.shadowColor='rgba(0,0,0,.58)';g.shadowBlur=unit*.35;g.shadowOffsetY=unit*.12;}};
+ const clearShadow=()=>{g.shadowColor='transparent';g.shadowBlur=0;g.shadowOffsetY=0;};
+ const widthIn=width-pad*2;
+ g.save();g.textBaseline='top';g.textAlign='left';shadow();
+ if(style==='site-log'){
+  rounded(left,top,width,height,unit*.35,'rgba(12,32,50,.84)');clearShadow();
+  color(accent);g.fillRect(left,top,unit*.24,height);
+  text('NHẬT KÝ THI CÔNG',left+pad,top+unit*.48,unit*.77,800,accent,widthIn);
+  text(time,left+pad,top+unit*1.55,unit*2.12,900,bright,widthIn*.62);
+  text(date,left+pad,top+unit*4.04,unit*1.03,750,bright,widthIn);
+  text(d.project||location||d.note,left+pad,top+unit*5.43,unit*.75,500,bright,widthIn);
+ }else if(style==='inspection'){
+  rounded(left,top,width,height,unit*.24,'rgba(246,255,249,.95)','#91c8ac');clearShadow();
+  color('#26866c');g.fillRect(left,top,unit*.21,height);
+  text('HỒ SƠ ẢNH • NGHIỆM THU',left+pad,top+unit*.44,unit*.76,800,'#277a60',widthIn);
+  text(date,left+pad,top+unit*1.70,unit*1.38,850,'#1d3546',widthIn);
+  text(time,left+pad,top+unit*3.52,unit*1.64,900,'#1d3546',widthIn);
+  text(d.project||location||note,left+pad,top+unit*5.58,unit*.68,550,'#355668',widthIn);
+ }else if(style==='shift'){
+  rounded(left,top,width,height,unit*.26,'rgba(246,232,192,.94)');clearShadow();
+  color('#b77829');g.fillRect(left,top,unit*.23,height);
+  text('CA LÀM VIỆC',left+pad,top+unit*.38,unit*.80,800,'#86562a',widthIn);
+  text(time,left+pad,top+unit*1.55,unit*2.23,850,'#442b18',widthIn*.72);
+  text(date,left+pad,top+unit*4.20,unit*.85,650,'#68503a',widthIn);
+ }else if(style==='geo'){
+  rounded(left,top,width,height,unit*1.05,'rgba(4,55,69,.85)');clearShadow();
+  color('#63e2db');g.beginPath();g.arc(left+unit*1.28,top+unit*1.15,unit*.40,0,Math.PI*2);g.fill();
+  text('ĐỊA ĐIỂM ẢNH',left+unit*2.04,top+unit*.72,unit*.76,800,'#8fe6e0',width-unit*2.65);
+  text(location||d.project,left+pad,top+unit*2.0,unit*1.00,750,'#ffffff',widthIn);
+  text(middle,left+pad,top+unit*3.54,unit*.92,600,'#d2f5f2',widthIn);
+ }else if(style==='survey'){
+  if(config.showBackground)rounded(left,top,width,height,unit*.16,'rgba(233,248,248,.90)');clearShadow();
+  g.strokeStyle=accent;g.lineWidth=Math.max(2,unit*.11);
+  const r=unit*.65;g.beginPath();g.moveTo(left,top+r);g.lineTo(left,top);g.lineTo(left+r,top);
+  g.moveTo(left+width-r,top+height);g.lineTo(left+width,top+height);g.lineTo(left+width,top+height-r);g.stroke();
+  text('KHẢO SÁT HIỆN TRƯỜNG',left+pad,top+unit*.55,unit*.86,800,config.showBackground?'#264f5b':bright,widthIn);
+  text(date,left+pad,top+unit*1.88,unit*1.34,800,config.showBackground?'#1b3e52':bright,widthIn);
+  text(time,left+pad,top+unit*3.63,unit*1.38,850,config.showBackground?'#1b3e52':bright,widthIn);
+  text(d.project||location,left+pad,top+unit*5.53,unit*.73,500,config.showBackground?'#3d6770':bright,widthIn);
+ }else if(style==='blueprint'){
+  rounded(left,top,width,height,unit*.16,'rgba(11,57,110,.88)','#67b3e5');clearShadow();
+  g.strokeStyle='rgba(161,219,244,.45)';g.lineWidth=Math.max(1,unit*.03);g.strokeRect(left+unit*.25,top+unit*.25,width-unit*.5,height-unit*.5);
+  text('ẢNH KỸ THUẬT / HIỆN TRƯỜNG',left+pad,top+unit*.59,unit*.76,800,'#8cdbff',widthIn);
+  text(date,left+pad,top+unit*2.06,unit*1.36,800,'#ffffff',widthIn,true);
+  text(time,left+pad,top+unit*3.74,unit*1.45,850,'#ffffff',widthIn,true);
+  text(d.project||location,left+pad,top+unit*5.73,unit*.70,500,'#d5eeff',widthIn,true);
+ }else if(style==='bottom-strip'){
+  rounded(left,top,width,height,unit*.18,'rgba(14,23,35,.88)');clearShadow();
+  color(accent);g.fillRect(left,top,Math.max(3,unit*.18),height);
+  const split=width*.56;
+  text(date,left+pad,top+unit*.69,unit*1.10,700,'#f4f8ff',split-pad*1.5);
+  text(time,left+pad,top+unit*2.24,unit*1.24,850,'#ffffff',split-pad*1.5);
+  text(location||d.project||d.brand,left+split,top+unit*1.44,unit*.74,600,'#dfeefb',width-split-pad);
+ }else if(style==='memory'){
+  rounded(left,top,width,height,unit*.20,'rgba(252,247,233,.92)','#e4d5b7');clearShadow();
+  color('#c38c60');g.fillRect(left+pad,top+unit*.78,widthIn,unit*.08);
+  text('NGÀY ĐÁNG NHỚ',left+pad,top+unit*1.15,unit*.67,650,'#a9785d',widthIn,true);
+  text(date,left+pad,top+unit*2.20,unit*1.50,750,'#704833',widthIn,false,true);
+  text(time,left+pad,top+unit*4.47,unit*1.33,600,'#805b42',widthIn,false,true);
+  text(note||location,left+pad,top+unit*6.25,unit*.63,500,'#a67e67',widthIn);
+ }else if(style==='led'){
+  rounded(left,top,width,height,unit*.40,'rgba(8,17,21,.92)','#426d50');clearShadow();
+  text(time,left+pad,top+unit*.70,unit*2.40,800,'#a6fbb1',widthIn,true);
+  text(date,left+pad,top+unit*3.67,unit*.74,500,'#79b68a',widthIn,true);
+ }else if(style==='journey'){
+  rounded(left,top,width,height,unit*1.2,'rgba(218,241,232,.92)');clearShadow();
+  text('NHẬT KÝ HÀNH TRÌNH',left+pad,top+unit*.73,unit*.77,750,'#286b61',widthIn);
+  text(date,left+pad,top+unit*2.06,unit*1.35,800,'#1b4a48',widthIn);
+  text(time,left+pad,top+unit*3.90,unit*1.27,750,'#20605e',widthIn);
+  text(location||note,left+pad,top+unit*5.80,unit*.70,550,'#36766a',widthIn);
+ }else if(style==='corner'){
+  clearShadow();g.strokeStyle=accent;g.lineWidth=Math.max(2,unit*.15);g.beginPath();
+  g.moveTo(left,top+height*.85);g.lineTo(left,top);g.lineTo(left+width*.28,top);g.stroke();
+  if(config.showBackground)rounded(left+unit*.14,top+unit*.25,width-unit*.14,height-unit*.56,unit*.16,'rgba(11,25,42,.55)');
+  text(time,left+pad,top+unit*1.03,unit*1.86,850,bright,widthIn);
+  text(date,left+pad,top+unit*3.43,unit*.88,700,config.dateColor,widthIn);
+  text(location||note,left+pad,top+unit*4.70,unit*.60,500,config.addressColor,widthIn);
+ }else if(style==='metadata'){
+  rounded(left,top,width,height,unit*.14,'rgba(14,25,34,.87)','#7093a8');clearShadow();
+  color('#80bedc');g.fillRect(left,top,width,unit*.12);
+  text('ẢNH SỐ  //  THÔNG TIN',left+pad,top+unit*.52,unit*.72,650,'#87b9d3',widthIn,true);
+  text('DATE  '+date,left+pad,top+unit*2.04,unit*.94,650,'#f0f6fc',widthIn,true);
+  text('TIME  '+time,left+pad,top+unit*3.65,unit*.94,650,'#f0f6fc',widthIn,true);
+  text(d.project||location,left+pad,top+unit*5.70,unit*.68,450,'#b4d0e1',widthIn,true);
+ }
+ g.restore();
+ // Unlike the legacy Timemark templates, the optional metadata is unverified
+ // user content and contains NO checkmark, Timemark label or brand assertion.
+ if(config.showFooter && style!=='bottom-strip')drawIndependentFooter(g,W,H);
+ if(config.showSerial)drawIndependentSerial(g,W,H,p);
+}
+function drawIndependentFooter(g,W,H){
+ const unit=Math.max(8,Math.min(W,H)*Number(config.fontSize)/100),margin=Math.max(5,W*.02);
+ const textSize=unit*.85*Number(config.footerScale)/100;
+ const captionSize=unit*.61*Number(config.footerScale)/100;
+ const brand=textSafe(config.footerBrand)==='Timemark'?'HNL Mark':textSafe(config.footerBrand)||'HNL Mark';
+ const caption=textSafe(config.footerCaption);
+ const w=Math.min(W*.38,Math.max(unit*5,W*.23)),h=textSize+captionSize*1.48+unit*.34;
+ const x=clamp(config.footerX*W-w/2,margin,W-w-margin),y=clamp(config.footerY*H-h/2,margin,H-h-margin);
+ g.save();g.textAlign='right';g.textBaseline='top';
+ if(config.showShadow){g.shadowColor='#000c';g.shadowBlur=unit*.16;}
+ g.fillStyle=config.footerColor;g.font=stampFont(textSize,750);g.fillText(ellipsis(g,brand,w),x+w,y);
+ g.fillStyle=config.textColor;g.font=stampFont(captionSize,450);g.fillText(ellipsis(g,caption,w),x+w,y+textSize*1.22);
+ g.restore();
+}
+function drawIndependentSerial(g,W,H,p){
+ const unit=Math.max(8,Math.min(W,H)*Number(config.fontSize)/100),fontSize=Math.max(8,unit*.55*Number(config.serialScale)/100);
+ g.save();g.textAlign='center';g.textBaseline='middle';g.font=stampFont(fontSize,500);
+ const mark='ID '+photoSerial(p),label=ellipsis(g,mark,H*.63),len=g.measureText(label).width;
+ const x=clamp(config.serialX*W,Math.max(6,fontSize*.7),W-Math.max(6,fontSize*.7));
+ const y=clamp(config.serialY*H,len*.5+fontSize,Math.max(len*.5+fontSize,H-len*.5-fontSize));
+ g.translate(x,y);g.rotate(-Math.PI/2);
+ if(config.showShadow){g.shadowColor='#000b';g.shadowBlur=unit*.15;}
+ g.fillStyle=config.serialColor;g.fillText(label,0,0);g.restore();
+}
+
 function drawOverlay(g,W,H,p){
  if(config.preset==='none')return;
  if(config.preset==='timemark'){drawReferenceStamp(g,W,H,p);drawReferenceFooter(g,W,H);drawVerticalSerial(g,W,H,p);}
+ else if(INDEPENDENT_PRESETS.has(config.preset))drawIndependentStamp(g,W,H,p);
  else if(['clean','tech','cinema','compact','clock'].includes(config.preset))drawModernStamp(g,W,H,p);
  else drawStamp(g,W,H,p);
  drawFloatingLogo(g,W,H);
@@ -923,7 +1069,7 @@ async function routeMediaFiles(input){
  const dz=$('dropzone');dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragging');});dz.addEventListener('dragleave',()=>dz.classList.remove('dragging'));dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragging');routeMediaFiles(e.dataTransfer.files).catch(showError);});
 const inputs=['timeMode','batchDate','dateFormat','timeFormat','brandText','projectText','addressText','noteText','symbolType','logoMode','footerBrand','footerCaption','serialMode','serialText','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','outputSize','outputFormat','quality','showDate','showTime','showBackground','showShadow','showFooter','showSerial'];inputs.forEach(id=>{const el=$(id);el.addEventListener(['range','text','color','textarea'].includes(el.type)||el.tagName==='TEXTAREA'?'input':'change',()=>{changeConfig(id,el.type==='checkbox'?el.checked:el.value);if(id==='logoMode'&&config.logoMode!=='floating'&&config.moveTarget==='logo'){config.moveTarget='stamp';updateTarget();}});});
 $('overrideCheck').addEventListener('change',e=>{const p=previewIndex();if(!p)return;p.override=e.target.checked;if(!p.customDate)p.customDate=toLocalInput(photoDate(p));updateSelectionUI();scheduleSavePhoto(p);renderPreview();});$('individualDate').addEventListener('input',e=>{const p=previewIndex();if(!p)return;p.customDate=e.target.value;updateSelectionUI();scheduleSavePhoto(p);renderPreview();});
-document.querySelectorAll('.preset').forEach(el=>el.addEventListener('click',()=>{config.preset=el.dataset.preset;updatePreset();store();stashPhotoSettings();renderPreview();}));document.querySelectorAll('#moveTarget button').forEach(el=>el.addEventListener('click',()=>{config.moveTarget=el.dataset.target;if(config.moveTarget==='logo'&&config.logoMode!=='floating'){$('logoMode').value='floating';config.logoMode='floating';}updateTarget();store();stashPhotoSettings();renderPreview();}));document.querySelectorAll('#positionGrid button').forEach(el=>el.addEventListener('click',()=>{const prefix=config.moveTarget==='logo'?'logo':config.moveTarget==='footer'?'footer':config.moveTarget==='serial'?'serial':'pos';config[prefix+'X']=+el.dataset.x;config[prefix+'Y']=+el.dataset.y;updatePositionGrid();store();stashPhotoSettings();renderPreview();}));
+document.querySelectorAll('.preset').forEach(el=>el.addEventListener('click',()=>{const previous=config.preset;config.preset=el.dataset.preset;if(INDEPENDENT_PRESETS.has(config.preset)&&config.footerBrand==='Timemark'){config.footerBrand='HNL Mark';$('footerBrand').value=config.footerBrand;}else if(config.preset==='timemark'&&INDEPENDENT_PRESETS.has(previous)&&config.footerBrand==='HNL Mark'){config.footerBrand='Timemark';$('footerBrand').value=config.footerBrand;}updatePreset();store();stashPhotoSettings();renderPreview();}));document.querySelectorAll('#moveTarget button').forEach(el=>el.addEventListener('click',()=>{config.moveTarget=el.dataset.target;if(config.moveTarget==='logo'&&config.logoMode!=='floating'){$('logoMode').value='floating';config.logoMode='floating';}updateTarget();store();stashPhotoSettings();renderPreview();}));document.querySelectorAll('#positionGrid button').forEach(el=>el.addEventListener('click',()=>{const prefix=config.moveTarget==='logo'?'logo':config.moveTarget==='footer'?'footer':config.moveTarget==='serial'?'serial':'pos';config[prefix+'X']=+el.dataset.x;config[prefix+'Y']=+el.dataset.y;updatePositionGrid();store();stashPhotoSettings();renderPreview();}));
 // Image editing tools operate on the original image beneath the HNLMark stamp.
 $('cropTool').addEventListener('click',()=>setEditTool(editTool==='crop'?'move':'crop'));
 $('cropRatio').addEventListener('change',e=>{
