@@ -1,3 +1,17 @@
+# HNLMark TEST v2.5.5 — logo APK không khung tối và rút gọn ghi chú
+
+## Kết luận từ ảnh người dùng
+- Icon trước đây: logo nguồn 512px bị thu còn 196px trong foreground 432px và ghép lên nền navy #102C4B, tạo viền tối rất rộng. Đây là nguyên nhân trong code, không phải lỗi từ logo nguồn.
+- Sửa: giữ ảnh gốc `hnl-logo-512.png` nguyên trạng, sử dụng ảnh đầy đủ làm bitmap nền adaptive icon. Foreground là lớp trong suốt; không tự tô thêm navy, không tạo khung, không cắt sửa nét HNL/camera vàng. Hệ thống Android chịu trách nhiệm mặt nạ icon tròn/vuông.
+- Hai câu mô tả thư viện dài và câu “Ảnh sẽ xuất hiện tại đây…” không cần đứng thường trực trên APK; ẩn bằng CSS Android-only, không xóa tính năng sao lưu/khôi phục ZIP. Ngừng chèn thông báo “Chọn trực tiếp từ Thư viện máy…”.
+- Chỉ APK; Web/PWA/logo gốc trong repository không thay đổi.
+- Bản TEST riêng `vn.hnl.xaydung.hnlmark.trial255`, tên HNLMark TEST 5, tránh ghi đè/tháo app có dữ liệu vì khóa Debug không cố định.
+
+## Cần kiểm tra runtime
+- Launcher MIUI: icon trên màn hình chính, danh sách app, shortcut, dark/light mode; kiểm tra không còn khung xanh đậm ngoài.
+- Hai ghi chú dài đã biến mất; upload ảnh/video, thư viện, sao lưu ZIP, cài dấu vẫn chạy.
+- Không gọi Runtime Golden khi chưa có test thực tế; tuyệt đối không tháo gỡ app chứa dữ liệu.
+
 # HNLMark TEST v2.5.4 — sửa không chọn được ảnh và video trên APK
 
 ## Kết quả audit

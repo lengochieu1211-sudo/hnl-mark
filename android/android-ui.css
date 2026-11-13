@@ -381,3 +381,12 @@ body.hnl-android-apk.hnl-android-video-editing:not(.hnl-video-live) #videoStudio
  box-shadow:0 5px 15px #0c264b25!important;
  border-radius:12px!important
 }
+
+/* APK only: instructional paragraphs took too much vertical screen space.
+   Keep notifications, errors, upload status and ZIP actions untouched. */
+body.hnl-android-apk #apkImportHint,
+body.hnl-android-apk .editor .library-note,
+body.hnl-android-apk .editor #photoHint,
+body.hnl-android-apk .editor > .panel > .section-title p{
+ display:none!important;
+}

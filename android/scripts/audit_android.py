@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"portrait\"" in manifest
-assert "versionCode 2504" in gradle and "versionName '2.5.4-test'" in gradle
+assert "versionCode 2505" in gradle and "versionName '2.5.5-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -88,7 +88,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.4-test'" in bridge
+assert "version:'2.5.5-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -129,7 +129,14 @@ assert (root/"android/app/src/main/res/drawable/hnlmark_icon.png").exists()
 ux=r("android/android-ux-v251.js")
 uxcss=r("android/android-ux-v251.css")
 camera_core=r("android/android-camera-v25.js")
-assert "subject.thumbnail((196,196)" in launcher
+assert 'background = img.resize((432,432), Image.Resampling.LANCZOS)' in launcher
+assert 'foreground = Image.new("RGBA", (432,432), (0,0,0,0))' in launcher
+assert 'background.getpixel((0,0))[:3] != (16,44,75)' in launcher
+assert 'android:drawable="@drawable/hnlmark_icon"' in r("android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
+assert "#FFFFFF" in r("android/app/src/main/res/values/colors.xml")
+assert "apkImportHint" not in bridge
+assert "body.hnl-android-apk .editor .library-note" in r("android/android-ui.css")
+assert "body.hnl-android-apk .editor #photoHint" in r("android/android-ui.css")
 assert "getDeviceAngle" in bridge and "hnlmark:physical-orientation" in bridge
 assert "nativeAngle=window.HNLAndroidApp?.getDeviceAngle?.()" in photo
 assert "function androidPhysicalPose()" in video
@@ -147,10 +154,10 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial254'" in gradle
-assert "HNLMark TEST 4" in gradle
+assert "applicationIdSuffix '.trial255'" in gradle
+assert "HNLMark TEST 5" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.4" in ux
+assert "TEST v2.5.5" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 

@@ -1,68 +1,38 @@
 #!/usr/bin/env python3
-"""Produce Android adaptive launcher resources from the unchanged HNLMark logo.
+"""Prepare the ORIGINAL HNLMark logo as a full-bleed Android adaptive icon.
 
-Only transparent outside-white canvas pixels are discarded. HNL lettering,
-camera icon, gold wave, and their colors are never redrawn or recolored.
+The previous generator shrank HNL to 196/432 px over a dark navy rectangle:
+this created the unwanted thick dark frame. This version never adds
+background, borders, recoloring, decorative shapes, or a new logo.
+The source PNG in the repository is immutable.
 """
 from pathlib import Path
-from collections import deque
 from PIL import Image
 
 def generate(root: Path, app: Path):
-    source=root/'hnl-logo-512.png'
+    source = root / "hnl-logo-512.png"
     if not source.is_file():
         raise FileNotFoundError(source)
-    img=Image.open(source).convert('RGBA')
-    width,height=img.size
-    pix=img.load()
-    seen=bytearray(width*height)
-    queue=deque()
-    def is_white(x,y):
-        red,green,blue,_=pix[x,y]
-        return red>=249 and green>=249 and blue>=249
-    def seed(x,y):
-        idx=y*width+x
-        if not seen[idx] and is_white(x,y):
-            seen[idx]=1
-            queue.append((x,y))
-    for x in range(width):
-        seed(x,0)
-        seed(x,height-1)
-    for y in range(height):
-        seed(0,y)
-        seed(width-1,y)
-    while queue:
-        x,y=queue.popleft()
-        for xx,yy in ((x-1,y),(x+1,y),(x,y-1),(x,y+1)):
-            if 0<=xx<width and 0<=yy<height:
-                seed(xx,yy)
-    for y in range(height):
-        for x in range(width):
-            if seen[y*width+x]:
-                pix[x,y]=(0,0,0,0)
-    box=img.getchannel('A').getbbox()
-    if not box:
-        raise ValueError('Logo appears fully transparent')
-    # The adaptive icon can be circular or squircle; allow 20%-23% inset
-    # without using the source image's white rectangular background.
-    subject=img.crop(box)
-    subject.thumbnail((196,196),Image.Resampling.LANCZOS)
-    foreground=Image.new('RGBA',(432,432),(0,0,0,0))
-    foreground.alpha_composite(subject,((432-subject.width)//2,(432-subject.height)//2))
-    # 432px adaptive foreground: every visible pixel stays strictly inside
-    # Android's circular 288px safe zone (radius 144px).
-    alpha=foreground.getchannel('A')
-    visible_box=alpha.getbbox()
-    if visible_box and max(abs(visible_box[0]-216),abs(visible_box[2]-216),abs(visible_box[1]-216),abs(visible_box[3]-216))>99:
-        raise ValueError('Launcher artwork exceeds safe square of adaptive icon')
-    drawable=app/'res'/'drawable'
-    drawable.mkdir(parents=True,exist_ok=True)
-    foreground.save(drawable/'hnlmark_foreground.png')
-    background=Image.new('RGBA',(432,432),(16,44,75,255))
-    background.alpha_composite(foreground)
-    background.resize((192,192),Image.Resampling.LANCZOS).save(drawable/'hnlmark_icon.png')
-    print('PASS: entire original HNL artwork inside launcher safe-zone; no clipping under round/squircle masks')
+    with Image.open(source) as original:
+        img = original.convert("RGBA")
+    if img.width != img.height:
+        raise ValueError("Expected square original HNLMark artwork")
+    drawable = app / "res" / "drawable"
+    drawable.mkdir(parents=True, exist_ok=True)
+    # Android's launcher itself applies the circle/squircle shape.
+    # Full-bleed original, rather than a miniature inside a navy plate.
+    background = img.resize((432,432), Image.Resampling.LANCZOS)
+    background.save(drawable / "hnlmark_icon.png")
+    # Required transparent foreground for adaptive-icon layers.
+    # All existing art lives in the background, unchanged in proportion.
+    foreground = Image.new("RGBA", (432,432), (0,0,0,0))
+    foreground.save(drawable / "hnlmark_foreground.png")
+    # A full canvas must be populated; no invented external padding.
+    assert background.getbbox() == (0,0,432,432)
+    assert background.getpixel((0,0))[:3] != (16,44,75), "Old navy border remains"
+    assert foreground.getchannel("A").getbbox() is None
+    print("PASS: original HNLMark logo fills Android icon; no added navy border")
 
-if __name__=='__main__':
-    root=Path(__file__).resolve().parents[2]
-    generate(root,root/'android/app/src/main')
+if __name__ == "__main__":
+    root = Path(__file__).resolve().parents[2]
+    generate(root,root / "android/app/src/main")

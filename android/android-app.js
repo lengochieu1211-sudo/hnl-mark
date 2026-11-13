@@ -76,12 +76,7 @@ function addShareAction(parent,id,label,fn){
 function installActions(){
  addShareAction(el('.export-buttons'),'apkSharePhoto','Chia sẻ ảnh',()=>window.HNLPhotoBridge?.shareCurrent());
  addShareAction(el('.video-result-actions'),'apkShareVideo','Chia sẻ video',()=>window.HNLVideoStudio?.shareCurrent());
- const input=el('.media-top-actions');
- if(input&&!document.getElementById('apkImportHint')){
-  const hint=document.createElement('div');hint.id='apkImportHint';hint.className='apk-gallery-caption';
-  hint.textContent='Chọn trực tiếp từ Thư viện máy · không cần sao chép file vào ứng dụng';
-  input.after(hint);
- }
+ // No verbose import note on APK. Native gallery button is self-explanatory.
 }
 installActions();
 // When importing a video, do not pin an unrelated photo as the preview.
@@ -149,5 +144,5 @@ const cameraState=()=>{
 new MutationObserver(cameraState).observe(document.body,{attributes:true,attributeFilter:['class']});
 cameraState();
 setDeviceOrientation(matchMedia('(orientation:landscape)').matches?90:0);
-window.HNLAndroidApp={chooseTab,openGallery:gallery,receivePickedMedia,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.4-test'};
+window.HNLAndroidApp={chooseTab,openGallery:gallery,receivePickedMedia,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.5-test'};
 })();
