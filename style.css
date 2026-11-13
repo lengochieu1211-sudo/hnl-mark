@@ -470,3 +470,34 @@ body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-
 body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions button{
  min-height:36px!important;padding:5px 2px!important;font-size:10px!important;
 }
+
+
+/* v2.1.1 — ONE capture/import bar. Photo and Video share the first panel. */
+.media-mode-switch{display:flex;align-items:center;gap:3px;padding:4px;background:#e8eef7;border:1px solid #d9e3f0;border-radius:12px;margin:10px 0 8px}
+.media-mode-switch .media-mode{flex:1 1 50%;min-width:0;border:0;border-radius:9px;background:transparent;color:#52708f;font-weight:850;font-size:13px;min-height:39px;cursor:pointer}
+.media-mode-switch .media-mode.active{background:#fff;color:#1b5cbe;box-shadow:0 2px 8px #1a324a1a}
+.media-mode-switch .media-mode:focus-visible,.media-top-actions>:focus-visible{outline:2px solid #246ef5;outline-offset:2px}
+.media-top-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:9px}
+.media-top-actions [hidden],#photoLibraryArea[hidden],#videoPanel[hidden],#photoCount[hidden]{display:none!important}
+.media-top-actions .media-select,
+.media-top-actions .media-capture{
+ box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+ min-width:0;min-height:52px;max-width:none;margin:0;padding:9px 7px;
+ border-radius:11px;gap:8px;flex:initial;text-align:center;cursor:pointer;
+}
+.media-top-actions .media-select{background:#f8fbff;color:#245587;border:1px solid #aec7e4}
+.media-top-actions .media-select strong,.media-top-actions .media-capture strong{font-size:12px;line-height:1.25;font-weight:850;white-space:normal}
+.media-top-actions .media-select .media-action-icon{font-size:23px;line-height:1;flex-shrink:0;color:#3c6b9e}
+.media-top-actions .media-capture{background:#216fe6;border:1px solid #2268d6;color:#fff;box-shadow:0 3px 8px #236be429}
+.media-top-actions .media-capture>span{font-size:23px;line-height:1}
+.media-top-actions .media-select input{display:none}
+.media-top-actions .media-select.dragging{border-color:#246ef5;background:#eaf2ff}
+#videoPanel.video-inline{border-top:1px solid #dfe7f1;margin:10px 0 0;padding-top:8px;min-width:0}
+#videoPanel .video-inline-title{font-size:13px;margin:0 0 4px;color:#244664}
+#photoLibraryArea{min-width:0}
+@media(max-width:420px){
+ .media-mode-switch .media-mode{font-size:12px;min-height:38px}
+ .media-top-actions .media-select,.media-top-actions .media-capture{min-height:48px;padding:6px 5px;gap:5px}
+ .media-top-actions .media-select strong,.media-top-actions .media-capture strong{font-size:11px}
+ .media-top-actions .media-select .media-action-icon,.media-top-actions .media-capture>span{font-size:20px}
+}
