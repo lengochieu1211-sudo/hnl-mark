@@ -40,6 +40,15 @@ function reveal(selector){
  return true;
 }
 window.HNLAndroidSections={reveal,fold};
+// Visible test-build marker: users can distinguish this parallel installation
+// from the previous HNLMark even when Android's icon cache is stale.
+const firstTitle=document.querySelector('.editor > .panel > .section-title');
+if(firstTitle){
+ const tag=document.createElement('small');
+ tag.className='apk-test-version';tag.textContent='TEST v2.5.2';
+ firstTitle.appendChild(tag);
+}
+
 
 const sheet=document.createElement('div');
 sheet.className='apk-action-sheet';sheet.hidden=true;
