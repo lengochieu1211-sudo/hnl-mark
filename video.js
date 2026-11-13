@@ -4,6 +4,7 @@
 const $=id=>document.getElementById(id);
 const panel=$('videoPanel'), studio=$('videoStudio'), canvas=$('videoCanvas'), ctx=canvas?.getContext('2d',{alpha:false});
 const media=$('videoMedia'), output=$('videoOutput');
+const qualityPanel=$('videoQualityPanel');
 if(!panel||!studio||!canvas||!ctx||!media||!output)return;
 let mode='none', cameraStream=null, sourceUrl='', outputUrl='', outputBlob=null;
 let file=null, rotation=0, recorder=null, chunks=[], raf=0, exportStream=null, micStream=null;
@@ -40,11 +41,26 @@ const makeVideoCode=()=>{
  const buf=new Uint8Array(15);if(crypto?.getRandomValues)crypto.getRandomValues(buf);else buf.forEach((_,i)=>buf[i]=Math.random()*256);
  return [...buf].map(x=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[x%36]).join('');
 };
+function closeVideoSettings(){
+ if(qualityPanel?.parentElement===studio)panel.insertBefore(qualityPanel,studio);
+ studio.classList.remove('video-settings-open');
+ $('videoSettingsToggle').setAttribute('aria-expanded','false');
+}
+function toggleVideoSettings(){
+ if(mode!=='camera'||!studio.classList.contains('video-open'))return;
+ const show=!studio.classList.contains('video-settings-open');
+ if(show){
+  qualityPanel.hidden=false;studio.appendChild(qualityPanel);
+  studio.classList.add('video-settings-open');
+ }else closeVideoSettings();
+ $('videoSettingsToggle').setAttribute('aria-expanded',String(show));
+}
 function syncButtons(){
  const active=mode==='camera'||mode==='file';
  const rec=!!recorder&&recorder.state==='recording';
  studio.hidden=mode==='none';
  $('videoRecord').hidden=!active||rec;$('videoStop').hidden=!rec;
+ $('videoSettingsToggle').hidden=mode!=='camera';
  $('videoFlip').hidden=mode!=='camera';$('videoPlayPause').hidden=mode!=='file'||rec;
  $('videoSave').disabled=!outputBlob;
  const buttonLabel=mode==='file'?'Xuất video có dấu':'Quay video';
@@ -160,6 +176,7 @@ function clearOutput(){
 }
 async function closeStudio(){
  if(recorder&&recorder.state==='recording'){message('Dừng quay trước khi đóng camera.');return;}
+ closeVideoSettings();
  media.pause();media.srcObject=null;media.removeAttribute('src');media.load();
  stopCameraTracks();resetFileUrl();clearOutput();
  mode='none';physicalPortrait=null;physicalInverted=false;initialPortraitBetaSign=null;rotation=0;lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;fixedTurn=null;
@@ -263,6 +280,7 @@ function stopRecording(){
  }
 }
 async function finishRecording(){
+ closeVideoSettings();
  const result=new Blob(chunks,{type:recorder?.mimeType||recordingMime});chunks=[];
  if(exportStream)exportStream.getVideoTracks().forEach(t=>t.stop());exportStream=null;stopMicOnly();recorder=null;
  fixedTurn=null;$('videoStop').disabled=false;studio.classList.remove('is-recording');
@@ -286,6 +304,7 @@ function switchToPhoto(){
  const wasLive=mode==='camera';
  chooseMedia('photo').then(ok=>{if(ok&&wasLive)$('openCamera')?.click();}).catch(err=>message(err.message));
 }
+$('videoSettingsToggle').addEventListener('click',toggleVideoSettings);
 $('videoFileShortcut').addEventListener('click',()=>{if(recorder?.state==='recording'){message('Dừng quay trước khi chọn file.');return;}$('photoInput').click();});
 $('photoToVideo').addEventListener('click',()=>{openCamera().catch(err=>message(err.message));});
 $('videoRecord').addEventListener('click',()=>startRecording().catch(err=>message(err.message)));
