@@ -104,8 +104,8 @@ assert 'cameraOrientationListener.disable()' in java
 assert 'android:icon="@mipmap/ic_launcher"' in manifest
 assert '@mipmap/ic_launcher' in manifest
 assert 'android:screenOrientation="portrait"' in manifest
-assert "Image.open(source).convert('RGBA')" in launcher
-assert "foreground.save(drawable/'hnlmark_foreground.png')" in launcher
+assert 'with Image.open(source) as original:' in launcher
+assert 'foreground.save(drawable / "hnlmark_foreground.png")' in launcher
 assert (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()
 assert 'hnlmark_icon_bg' in r("android/app/src/main/res/values/colors.xml")
 for token in ('apk-camera-topbar','apk-grid-toggle','syncCameraToolbar',
