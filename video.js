@@ -43,7 +43,8 @@ const makeVideoCode=()=>{
  return [...buf].map(x=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[x%36]).join('');
 };
 function closeVideoSettings(){
- if(qualityPanel?.parentElement===studio)panel.insertBefore(qualityPanel,studio);
+ if(qualityPanel?.parentElement===studio||qualityPanel?.parentElement===document.body)panel.insertBefore(qualityPanel,studio);
+ document.body.classList.remove('apk-video-quality-open');
  studio.classList.remove('video-settings-open');
  $('videoSettingsToggle').setAttribute('aria-expanded','false');
 }
@@ -51,7 +52,8 @@ function toggleVideoSettings(){
  if(mode!=='camera'||!studio.classList.contains('video-open'))return;
  const show=!studio.classList.contains('video-settings-open');
  if(show){
-  qualityPanel.hidden=false;studio.appendChild(qualityPanel);
+  qualityPanel.hidden=false;(document.body.classList.contains('hnl-android-apk')?document.body:studio).appendChild(qualityPanel);
+  if(document.body.classList.contains('hnl-android-apk'))document.body.classList.add('apk-video-quality-open');
   studio.classList.add('video-settings-open');
  }else closeVideoSettings();
  $('videoSettingsToggle').setAttribute('aria-expanded',String(show));
@@ -147,11 +149,17 @@ function drawFrame(){
   const H=Math.max(2,Math.round(sourceHeight*scale/2)*2);
   if(workCanvas.width!==W||workCanvas.height!==H){workCanvas.width=W;workCanvas.height=H;}
   const g=workCtx;
+  const digitalZoom=mode==='camera'?Math.max(1,cameraControls?.getDigitalZoom?.()||1):1;
+  function drawSource(dw,dh){
+   if(digitalZoom<=1)return g.drawImage(media,0,0,dw,dh);
+   const sw=w/digitalZoom,sh=h/digitalZoom;
+   return g.drawImage(media,(w-sw)/2,(h-sh)/2,sw,sh,0,0,dw,dh);
+  }
   g.fillStyle='#000';g.fillRect(0,0,W,H);g.save();g.filter=mode==='camera'?(cameraControls?.getFilter()||'none'):'none';
-  if(turn===90){g.translate(W,0);g.rotate(Math.PI/2);g.drawImage(media,0,0,H,W);}
-  else if(turn===270){g.translate(0,H);g.rotate(-Math.PI/2);g.drawImage(media,0,0,H,W);}
-  else if(turn===180){g.translate(W,H);g.rotate(Math.PI);g.drawImage(media,0,0,W,H);}
-  else g.drawImage(media,0,0,W,H);
+  if(turn===90){g.translate(W,0);g.rotate(Math.PI/2);drawSource(H,W);}
+  else if(turn===270){g.translate(0,H);g.rotate(-Math.PI/2);drawSource(H,W);}
+  else if(turn===180){g.translate(W,H);g.rotate(Math.PI);drawSource(W,H);}
+  else drawSource(W,H);
   g.restore();
   const date=mode==='file'?new Date(importDate.getTime()+(media.currentTime||0)*1000):new Date();
   try{window.HNLVideoBridge?.drawStamp(g,W,H,date,videoCode,Number($('videoStampSize').value)/100);}
@@ -203,7 +211,7 @@ async function openCamera(){
   const requested=Number($('videoResolution').value)||1080,rate=Number($('videoFps').value)||30;
   cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:Math.round(requested*16/9)},height:{ideal:requested},frameRate:{ideal:rate}}});
   media.srcObject=cameraStream;media.muted=true;media.playsInline=true;await media.play();
-  mode='camera';if(window.HNLCameraControls){cameraControls=window.HNLCameraControls.create({stage:studio.querySelector('.video-canvas-wrap'),track:()=>cameraStream?.getVideoTracks()[0],active:()=>mode==='camera',rotation:()=>window.HNLVideoOrientation.videoTurn({mode,rawWidth:media.videoWidth,rawHeight:media.videoHeight,portrait:effectivePortrait(),side:physicalSide,inverted:physicalInverted,manual:rotation})});}videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;samples=0;fixedTurn=null;
+  mode='camera';if(window.HNLCameraControls){cameraControls=window.HNLCameraControls.create({stage:studio.querySelector('.video-canvas-wrap'),dock:studio.querySelector('.video-ios-controls'),track:()=>cameraStream?.getVideoTracks()[0],active:()=>mode==='camera',rotation:()=>window.HNLVideoOrientation.videoTurn({mode,rawWidth:media.videoWidth,rawHeight:media.videoHeight,portrait:effectivePortrait(),side:physicalSide,inverted:physicalInverted,manual:rotation})});}videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';lastMotionAt=0;lastOrientationAt=0;lastOrientationSide=0;samples=0;fixedTurn=null;
   studio.classList.add('video-open');document.body.classList.add('hnl-video-live');applyPhysicalLayout();frameLoop();syncButtons();
   message('Camera video đã mở. Nhấn Quay video để bắt đầu. Có thể ghi âm nếu cấp quyền micro.');
  }catch(e){stopCameraTracks();message('Không mở được camera video: '+(e.message||e));}
@@ -339,7 +347,7 @@ $('videoFlip').addEventListener('click',async()=>{
    const face=current==='user'?'environment':'user';
    const req=Number($('videoResolution').value)||1080,rate=Number($('videoFps').value)||30;
    cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:face},width:{ideal:Math.round(req*16/9)},height:{ideal:req},frameRate:{ideal:rate}},audio:false});
-   media.srcObject=cameraStream;await media.play();frameLoop();
+   media.srcObject=cameraStream;await media.play();cameraControls?.refreshCapabilities?.();frameLoop();
   }catch(e){message('Không đổi được camera: '+e.message);}
  }
 });

@@ -19,12 +19,13 @@ for(const spec of specs){
  grid.title='Lưới căn khung';
  grid.innerHTML='<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>';
  grid.addEventListener('click',()=>{
-  const enabled=spec.canvas.classList.toggle('apk-grid-enabled');
+  const enabled=spec.type==='photo'&&spec.canvas.classList.toggle('apk-grid-enabled');
   grid.classList.toggle('is-on',enabled);
   grid.setAttribute('aria-pressed',String(enabled));
  });
  const utilitySlot=document.createElement('div');utilitySlot.className='apk-top-utility-slot';
  top.append(utilitySlot,grid);
+ if(spec.type==='video'){grid.hidden=true;grid.setAttribute('aria-hidden','true');spec.canvas.classList.remove('apk-grid-enabled');}
  spec.root.insertBefore(top,spec.root.firstChild);
  spec.top=top;spec.slot=utilitySlot;spec.grid=grid;
 }

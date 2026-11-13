@@ -635,14 +635,20 @@ function cameraGeometry(video){
     sensor:physicalSensor,nativeAngle:nativePose?nativeAngle:null,manual:cameraManualRotation!==0};
 }
 function paintCameraFrame(g,video,frame,W,H){
+  const digitalZoom=Math.max(1,cameraControls?.getDigitalZoom?.()||1);
+  function drawSource(dw,dh){
+    if(digitalZoom<=1)return g.drawImage(video,0,0,dw,dh);
+    const sw=video.videoWidth/digitalZoom,sh=video.videoHeight/digitalZoom;
+    return g.drawImage(video,(video.videoWidth-sw)/2,(video.videoHeight-sh)/2,sw,sh,0,0,dw,dh);
+  }
   g.save();g.filter=cameraControls?.getFilter()||'none';
   if(frame.rotation===90){
-    g.translate(W,0);g.rotate(Math.PI/2);g.drawImage(video,0,0,H,W);
+    g.translate(W,0);g.rotate(Math.PI/2);drawSource(H,W);
   }else if(frame.rotation===270){
-    g.translate(0,H);g.rotate(-Math.PI/2);g.drawImage(video,0,0,H,W);
+    g.translate(0,H);g.rotate(-Math.PI/2);drawSource(H,W);
   }else if(frame.rotation===180){
-    g.translate(W,H);g.rotate(Math.PI);g.drawImage(video,0,0,W,H);
-  }else g.drawImage(video,0,0,W,H);
+    g.translate(W,H);g.rotate(Math.PI);drawSource(W,H);
+  }else drawSource(W,H);
   g.restore();
 }
 function cameraOrientationUi(frame){
@@ -728,7 +734,7 @@ async function startCamera(){
     if(request!==cameraRequest){stopCamera();return;}
     cameraSystemFallback(false);
     cameraActive=true;cameraCapturing=false;cameraLastDraw=0;
-    if(window.HNLCameraControls){cameraControls=window.HNLCameraControls.create({stage,track:()=>cameraStream?.getVideoTracks()[0],active:()=>cameraActive,rotation:()=>cameraGeometry($('cameraVideo')).rotation});}
+    if(window.HNLCameraControls){cameraControls=window.HNLCameraControls.create({stage,dock:$('cameraControls'),track:()=>cameraStream?.getVideoTracks()[0],active:()=>cameraActive,rotation:()=>cameraGeometry($('cameraVideo')).rotation});}
     cameraManualRotation=0;cameraSensorPortrait=null;cameraSensorSide=0;cameraSensorAt=0;cameraSensorCandidate='';cameraSensorSamples=0;cameraSensorCandidateAt=0;cameraSensorSource='';cameraMotionAt=0;cameraOrientationSide=0;cameraOrientationAt=0;
     cameraPreviewCode=createPhotoCode();burstCount=0;
     clearOrientationUi();

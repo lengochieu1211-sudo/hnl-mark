@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"portrait\"" in manifest
-assert "versionCode 2506" in gradle and "versionName '2.5.6-test'" in gradle
+assert "versionCode 2507" in gradle and "versionName '2.5.7-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -88,7 +88,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.6-test'" in bridge
+assert "version:'2.5.7-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -129,9 +129,9 @@ assert (root/"android/app/src/main/res/drawable/hnlmark_icon.png").exists()
 ux=r("android/android-ux-v251.js")
 uxcss=r("android/android-ux-v251.css")
 camera_core=r("android/android-camera-v25.js")
-assert 'background = img.resize((432,432), Image.Resampling.LANCZOS)' in launcher
-assert 'foreground = Image.new("RGBA", (432,432), (0,0,0,0))' in launcher
-assert 'background.getpixel((0,0))[:3] != (16,44,75)' in launcher
+assert 'ARTWORK = 232' in launcher
+assert 'foreground = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))' in launcher
+assert 'foreground.alpha_composite(fitted' in launcher
 assert 'android:drawable="@drawable/hnlmark_icon"' in r("android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
 assert "#FFFFFF" in r("android/app/src/main/res/values/colors.xml")
 assert "apkImportHint" not in bridge
@@ -154,10 +154,10 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial256'" in gradle
-assert "HNLMark TEST 6" in gradle
+assert "applicationIdSuffix '.trial257'" in gradle
+assert "HNLMark TEST 7" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.6" in ux
+assert "TEST v2.5.7" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 
@@ -207,3 +207,24 @@ assert '"Duyệt tệp trong máy"' in java
 
 print("PASS: offline assets, Photo Picker, FileProvider direct share, safe bridge,")
 print("      focus/EV/zoom/torch capability gates and bottom-fixed rotating icons")
+
+# TEST 2.5.7: adaptive mask, camera control dock, zoom crop, compact video UI.
+polish_css=r("android/android-polish-v257.css")
+polish_js=r("android/android-polish-v257.js")
+core_controls=r("camera-controls.js")
+assert 'ARTWORK = 232' in launcher
+assert 'foreground.alpha_composite(fitted' in launcher
+assert 'dock:$(' in photo and "dock:studio.querySelector('.video-ios-controls')" in video
+assert 'getDigitalZoom' in core_controls and 'hnl-camera-dock-adjust' in core_controls
+assert 'digitalZoom' in photo and 'digitalZoom' in video
+assert "document.body.classList.add(\'apk-video-quality-open\')" in video
+assert 'grid.hidden=true' in camera_core
+assert 'apk-video-quality-open' in polish_css and 'overflow-y:auto!important' in polish_css
+assert 'font-size:13px!important' in polish_css
+assert "summary.textContent=label" in polish_js
+assert 'android-polish-v257.js' in web and 'android-polish-v257.css' in web
+assert (root/"android/app/src/main/assets/www/android-polish-v257.js").is_file()
+assert (root/"android/app/src/main/assets/www/android-polish-v257.css").is_file()
+
+assert "!select.closest('#videoQualityPanel')" in select_js
+assert '#videoQualityPanel select.apk-select-source{display:none' in polish_css

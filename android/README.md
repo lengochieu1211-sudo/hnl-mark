@@ -1,3 +1,15 @@
+# HNLMark TEST v2.5.7 — Launcher, Video, Zoom/Focus, Compact Form
+
+- DEV only, TEST 7 riêng `vn.hnl.xaydung.hnlmark.trial257`; không thay TEST 6, production, app data.
+- Tạo lại adaptive icon từ artwork HNL gốc tại vùng trung tâm an toàn; không làm cắt logo bởi mask mặc định Android. Không chỉnh asset gốc.
+- Video ẩn lưới trên preview; không lưu lưới vào video. Các đường khác cần thử file thực tế để xác minh.
+- Bảng video dùng modal có nền tối/scroll và nút Đóng, không nằm trong camera xoay.
+- Zoom camera được điều khiển từ dock dưới cho cả Ảnh/Video. Ưu tiên zoom phần cứng WebView; nếu không có thì crop số 1–3x đồng nhất preview và file xuất, không thay tệp media gốc.
+- Chạm preview để yêu cầu lấy nét; thêm nút lấy nét giữa khung. Nếu thiết bị không hỗ trợ focus points, chỉ hiển thị khung chọn điểm và camera tiếp tục AF mặc định; không cam kết khả năng lấy nét tay.
+- Đưa cỡ chữ nhập/dropdown Android xuống 13px, option 12.5px và nhãn 12px.
+- Rút ngắn chỉ số thư viện thành N ảnh trên APK, không xóa IndexedDB/ZIP.
+- TEST và Android CI chỉ là static/build PASS, cần kiểm tra thiết bị thật, xoay 2 chiều, video âm thanh, ảnh chụp, offline, gallery và zoom. Không Runtime Golden.
+
 # HNLMark TEST v2.5.6 — chọn ảnh/video qua Thư viện hoặc Files
 
 - Nhánh DEV, tiếp tục từ exact HEAD d7dcecbb234e1692fb2230fb28984a246164e4a7; không thay main/Production.

@@ -5,7 +5,7 @@
 (function(root){
  'use strict';
  const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
- function create({stage,track,active,rotation}){
+ function create({stage,track,active,rotation,dock}){
   if(!stage)throw Error('Missing camera stage');
   const box=document.createElement('div');
   box.className='hnl-camera-adjust';
@@ -19,6 +19,18 @@
   const zoomBtn=box.querySelector('.hnl-zoom'),torchBtn=box.querySelector('.hnl-torch');
   stage.classList.add('hnl-has-camera-adjust');stage.appendChild(box);
   let caps={},brightness=0,hwExposure=false,zoom=1,torch=false,lastTap={x:.5,y:.5},destroyed=false;
+  let hwZoom=false, zoomMax=3;
+  const dockBar=dock?document.createElement('div'):null;
+  if(dockBar){
+   dockBar.className='hnl-camera-dock-adjust';
+   dockBar.innerHTML='<button type="button" class="hnl-focus-center" aria-label="Chạm để lấy nét giữa khung">◎ <span>Lấy nét</span></button>'+
+    '<button type="button" class="hnl-zoom-minus" aria-label="Giảm zoom">−</button>'+
+    '<input type="range" class="hnl-zoom-slider" min="1" max="3" step="0.1" value="1" aria-label="Zoom camera" />'+
+    '<output class="hnl-zoom-readout">1.0×</output>'+
+    '<button type="button" class="hnl-zoom-plus" aria-label="Tăng zoom">+</button>';
+   dock.appendChild(dockBar);
+   quick.hidden=true;
+  }
   let shownAt=0, hideJob=0;const pointers=new Map();let pinchLength=0,pinchZoom=1;
   const getTrack=()=>typeof track==='function'?track():track;
   const isActive=()=>!destroyed&&(!active||active());
@@ -67,11 +79,23 @@
     }catch(_){}
    }
   }
+  function syncZoom(){
+   zoomBtn.textContent=zoom.toFixed(1)+'×';
+   if(!dockBar)return;
+   const input=dockBar.querySelector('.hnl-zoom-slider');
+   input.max=String(zoomMax);input.value=String(zoom);
+   dockBar.querySelector('.hnl-zoom-readout').textContent=zoom.toFixed(1)+'×';
+   dockBar.dataset.zoomMode=hwZoom?'camera':'digital';
+   dockBar.querySelector('.hnl-zoom-readout').title=hwZoom?'Zoom camera':'Zoom số (crop ảnh/video)';
+  }
   async function setZoom(next){
-   const t=getTrack();if(!caps.zoom||!t?.applyConstraints)return;
-   zoom=clamp(next,caps.zoom.min,caps.zoom.max);
-   try{await t.applyConstraints({advanced:[{zoom}]});zoomBtn.textContent=zoom.toFixed(1)+'×';}
-   catch(_){zoomBtn.hidden=true;}
+   if(!isActive())return;
+   const target=clamp(Number(next)||1,1,zoomMax),t=getTrack();
+   if(hwZoom&&t?.applyConstraints){
+    try{await t.applyConstraints({advanced:[{zoom:target}]});}
+    catch(_){hwZoom=false;zoomMax=3;}
+   }
+   zoom=target;syncZoom();
   }
   async function toggleTorch(){
    const t=getTrack();if(!caps.torch||!t?.applyConstraints)return;
@@ -106,7 +130,13 @@
   box.addEventListener('pointerdown',stopEvent);
   box.addEventListener('pointerup',stopEvent);
   slider.addEventListener('input',e=>void setExposure(e.target.value));
-  zoomBtn.addEventListener('click',()=>void setZoom(zoom>=2?1:Math.min(2,caps.zoom?.max||1)));
+  zoomBtn.addEventListener('click',()=>void setZoom(zoom>=2?1:Math.min(2,zoomMax)));
+  if(dockBar){
+   dockBar.querySelector('.hnl-zoom-slider').addEventListener('input',e=>void setZoom(e.target.value));
+   dockBar.querySelector('.hnl-zoom-minus').addEventListener('click',()=>void setZoom(zoom-.5));
+   dockBar.querySelector('.hnl-zoom-plus').addEventListener('click',()=>void setZoom(zoom+.5));
+   dockBar.querySelector('.hnl-focus-center').addEventListener('click',()=>void requestFocus(.5,.5));
+  }
   torchBtn.addEventListener('click',()=>void toggleTorch());
   stage.addEventListener('pointerdown',onDown);
   stage.addEventListener('pointermove',onMove);
@@ -114,19 +144,24 @@
   stage.addEventListener('pointercancel',onUp);
   const device=getTrack();
   try{caps=device?.getCapabilities?.()||{};}catch(_){}
-  if(caps.zoom?.min!=null){
-   zoom=caps.zoom.min<=1&&caps.zoom.max>=1?1:caps.zoom.min;
-   zoomBtn.hidden=false;zoomBtn.textContent=zoom.toFixed(1)+'×';
-  }
+  if(caps.zoom?.max>=1.1&&getTrack()?.applyConstraints){
+   hwZoom=true;zoomMax=Math.min(3,caps.zoom.max);zoom=1;
+  }else{hwZoom=false;zoomMax=3;zoom=1;}
+  zoomBtn.hidden=Boolean(dockBar);
+  syncZoom();
   if(caps.torch===true)torchBtn.hidden=false;
-  quick.hidden=zoomBtn.hidden&&torchBtn.hidden;
+  quick.hidden=Boolean(dockBar)||(zoomBtn.hidden&&torchBtn.hidden);
   return {
    // No misleading "manual focus" unless hardware constraints succeeded;
    // visual focus ring is still useful for framing.
    getFilter:()=>hwExposure?'none':'brightness('+clamp(1+brightness*.16,.65,1.38)+')',
-   setExposure,requestFocus,
+   setExposure,requestFocus,setZoom,
+   getDigitalZoom:()=>hwZoom?1:zoom,
    refreshCapabilities(){
     try{caps=getTrack()?.getCapabilities?.()||{};}catch(_){caps={};}
+    hwZoom=Boolean(caps.zoom?.max>=1.1&&getTrack()?.applyConstraints);
+    zoomMax=hwZoom?Math.min(3,caps.zoom.max):3;
+    zoom=1;syncZoom();
    },
    destroy(){
     destroyed=true;clearTimeout(hideJob);
@@ -134,7 +169,7 @@
     stage.removeEventListener('pointermove',onMove);
     stage.removeEventListener('pointerup',onUp);
     stage.removeEventListener('pointercancel',onUp);
-    box.remove();
+    box.remove();dockBar?.remove();
     stage.classList.remove('hnl-has-camera-adjust');
    }
   };

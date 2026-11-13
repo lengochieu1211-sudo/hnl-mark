@@ -30,7 +30,7 @@ function choose(select,option){
  close();
 }
 function openSelect(select,button,refresh){
- if(select.disabled||document.body.classList.contains('hnl-camera-live')||document.body.classList.contains('hnl-video-live'))return;
+ if(select.disabled||((document.body.classList.contains('hnl-camera-live')||document.body.classList.contains('hnl-video-live'))&&!select.closest('#videoQualityPanel')))return;
  current={select,button,refresh};
  sheet.querySelector('.apk-select-head strong').textContent=titleFor(select);
  const options=sheet.querySelector('.apk-select-list');options.replaceChildren();
