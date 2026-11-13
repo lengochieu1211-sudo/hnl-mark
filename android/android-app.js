@@ -5,7 +5,10 @@ document.body.classList.add('hnl-android-apk');
 const native=window.HNLAndroidBridge;
 const el=q=>document.querySelector(q);
 const goto=q=>{const t=el(q);if(t)t.scrollIntoView({behavior:'smooth',block:'start'});};
-function gallery(){el('#photoInput')?.click();}
+function gallery(){
+ if(native?.openDeviceGallery)native.openDeviceGallery();
+ else el('#photoInput')?.click();
+}
 const tabs={
  capture:()=>el('#openCamera')?.click(),
  library:gallery,
@@ -91,6 +94,53 @@ if(videoPanel){
  new MutationObserver(syncPreviewMode).observe(videoPanel,{attributes:true,attributeFilter:['hidden']});
 }
 syncPreviewMode();
+// Native picker results are served from a private, single-origin content URI
+// token handler. Use the SAME unified import route as the web file input.
+let mediaImportInProgress=false;
+async function receivePickedMedia(items){
+ if(mediaImportInProgress)throw new Error('Đang nhập ảnh/video khác');
+ if(!Array.isArray(items)||!items.length)return;
+ if(!window.HNLMediaImport?.acceptFiles){
+  alert('Bộ xử lý thư viện chưa sẵn sàng. Hãy đóng mở lại HNLMark.');
+  return;
+ }
+ mediaImportInProgress=true;
+ try{
+  const files=[];
+  for(const item of items.slice(0,30)){
+   if(!item?.url||!/^https:\/\/appassets\.androidplatform\.net\/picked\/[a-f0-9-]+$/.test(item.url))
+    throw new Error('Đường dẫn tệp không hợp lệ.');
+   const name=String(item.name||'HNLMark-media').slice(0,160);
+   const mime=String(item.type||'application/octet-stream');
+   const response=await fetch(item.url,{credentials:'same-origin',cache:'no-store'});
+   if(!response.ok)throw new Error('Không đọc được '+name+' từ thư viện máy ('+response.status+').');
+   const blob=await response.blob();
+   if(!blob.size)throw new Error('Tệp '+name+' rỗng hoặc không thể đọc.');
+   files.push(new File([blob],name,{type:mime,lastModified:Date.now()}));
+  }
+  // Stop live preview before opening an imported image/video.
+  if(document.body.classList.contains('hnl-camera-live'))
+   el('#closeCamera')?.click();
+  if(document.body.classList.contains('hnl-video-live'))
+   el('#videoClose')?.click();
+  await window.HNLMediaImport.acceptFiles(files);
+ }catch(e){
+  alert('Không chọn được ảnh/video: '+(e.message||e));
+ }finally{
+  mediaImportInProgress=false;
+ }
+}
+// In the camera dock, the gallery icon must use the Android picker rather than
+// showing only HNLMark's already-saved internal photo library.
+for(const id of ['cameraLibrary','videoFileShortcut']){
+ const button=el('#'+id);
+ button?.addEventListener('click',event=>{
+  if(!native?.openDeviceGallery)return;
+  event.preventDefault();event.stopImmediatePropagation();
+  gallery();
+ },true);
+}
+
 const cameraState=()=>{
  if(!native)return;
  try{native.cameraState(document.body.classList.contains('hnl-camera-live')||document.body.classList.contains('hnl-video-live'));}
@@ -99,5 +149,5 @@ const cameraState=()=>{
 new MutationObserver(cameraState).observe(document.body,{attributes:true,attributeFilter:['class']});
 cameraState();
 setDeviceOrientation(matchMedia('(orientation:landscape)').matches?90:0);
-window.HNLAndroidApp={chooseTab,openGallery:gallery,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.3-test'};
+window.HNLAndroidApp={chooseTab,openGallery:gallery,receivePickedMedia,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.4-test'};
 })();
