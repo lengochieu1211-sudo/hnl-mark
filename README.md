@@ -1,3 +1,13 @@
+# HNLMark v2.1.3 DEV — camera tối giản, sửa xoay ngược video
+
+- **Source chuẩn** GitHub dev; không chỉnh main, không thay Vercel Production.
+- Giữ một nút Chọn ảnh/video, một nút Mở camera. Camera dọc có thanh điều khiển 168px; ngang có cụm icon 108px ở cạnh phải; nút chụp/quay được cân tâm theo 3 cột.
+- Thiết kế camera phương án A: màu tối, ít biểu tượng, nút chụp trắng/ghi hình đỏ, ảnh-video chuyển ngay trong camera; Full/Xoay/Đóng giảm kích thước; chụp liên tiếp vẫn hoạt động.
+- **Sửa lỗi video xoay 180°**: tách `orientation.js`, tính góc xoay từ chiều khung nguồn, tư thế máy và hướng trái/phải. Sửa chiều ngang khi điện thoại bị khóa xoay (đổi quy tắc 90°/270°); xem trước và xuất video dùng cùng phép tính, khóa góc quay tại thời điểm bắt đầu ghi. Giữ khả năng xoay tay 90° khi thiết bị báo sai.
+- Video nhập từ thiết bị giữ đúng góc nguồn trừ khi người dùng chọn xoay. Khôi phục biểu tượng phát/tạm dừng SVG và không hiện icon vô dụng.
+- Thêm regression `tests/test_video_orientation.cjs`; chạy cùng static checks. **Chưa được thử camera và ghi file trên Android thực tế**, chưa Runtime Golden.
+- Video có dấu không chứng minh nguồn gốc hoặc thời điểm ghi thực sự.
+
 # HNLMark v2.1.2 — Một nút chọn ảnh/video, camera cân tâm theo cách sử dụng iPhone
 
 - Source chỉ cập nhật nhánh `dev`; không thay `main`, production, projectId.
