@@ -10,6 +10,30 @@ let file=null, rotation=0, recorder=null, chunks=[], raf=0, exportStream=null, m
 let recordingStart=0, recordingDate=null, importDate=null, recordingName='', recordingMime='', recordingMode='';
 let videoCode='', isBusy=false, audioContext=null, audioSource=null, audioDestination=null, fallbackNoAudio=false;
 let physicalPortrait=null, physicalSide=1, candidate='', samples=0, fixedTurn=null;
+let selectedMedia='photo',outputSaved=true;
+function updateMediaPicker(){
+ const video=selectedMedia==='video';
+ $('mediaModePhoto').classList.toggle('active',!video);
+ $('mediaModeVideo').classList.toggle('active',video);
+ $('mediaModePhoto').setAttribute('aria-pressed',String(!video));
+ $('mediaModeVideo').setAttribute('aria-pressed',String(video));
+ $('dropzone').hidden=video;
+ $('videoPicker').hidden=!video;
+ $('openCamera').hidden=video;
+ $('openVideoCamera').hidden=!video;
+ $('photoLibraryArea').hidden=video;
+ $('videoPanel').hidden=!video;
+ $('photoCount').hidden=video;
+}
+async function chooseMedia(next){
+ if(next===selectedMedia){updateMediaPicker();return true;}
+ if(recorder?.state==='recording'){message('Hãy dừng quay hoặc xuất video trước khi chuyển chế độ.');return false;}
+ if(next==='photo'&&outputBlob&&!outputSaved&&!window.confirm('Video vừa tạo chưa được lưu xuống máy. Vẫn chuyển sang Ảnh và bỏ bản xuất này?'))return false;
+ if(next==='video'&&window.HNLVideoBridge?.photoCameraActive())$('closeCamera')?.click();
+ if(next==='photo')await closeStudio();
+ selectedMedia=next;updateMediaPicker();
+ return true;
+}
 const message=text=>{$('videoStatus').textContent=text;};
 const supportsCapture=()=>!!window.MediaRecorder&&typeof canvas.captureStream==='function';
 const mimeType=()=>{
@@ -24,6 +48,7 @@ const makeVideoCode=()=>{
 function syncButtons(){
  const active=mode==='camera'||mode==='file';
  const rec=!!recorder&&recorder.state==='recording';
+ studio.hidden=mode==='none';
  $('videoRecord').hidden=!active||rec;$('videoStop').hidden=!rec;
  $('videoFlip').hidden=mode!=='camera';$('videoPlayPause').hidden=mode!=='file'||rec;
  $('videoSave').disabled=!outputBlob;
@@ -100,7 +125,7 @@ function stopCameraTracks(){
 }
 function resetFileUrl(){if(sourceUrl)URL.revokeObjectURL(sourceUrl);sourceUrl='';}
 function clearOutput(){
- outputBlob=null;output.pause();output.removeAttribute('src');output.load();if(outputUrl)URL.revokeObjectURL(outputUrl);outputUrl='';
+ outputSaved=true;outputBlob=null;output.pause();output.removeAttribute('src');output.load();if(outputUrl)URL.revokeObjectURL(outputUrl);outputUrl='';
  $('videoResult').hidden=true;syncButtons();
 }
 async function closeStudio(){
@@ -114,6 +139,7 @@ async function closeStudio(){
 }
 async function openCamera(){
  if(isBusy||recorder?.state==='recording')return;
+ if(!await chooseMedia('video'))return;
  if(window.HNLVideoBridge?.photoCameraActive()){$('closeCamera')?.click();}
  await closeStudio();
  if(!navigator.mediaDevices?.getUserMedia){message('Trình duyệt không hỗ trợ camera trực tiếp.');return;}
@@ -127,6 +153,8 @@ async function openCamera(){
 }
 async function importVideo(selected){
  if(!selected||recorder?.state==='recording')return;
+ if(!await chooseMedia('video'))return;
+ if(outputBlob&&!outputSaved&&!window.confirm('Video đang tạo chưa được lưu. Chọn video khác và bỏ bản xuất này?'))return;
  if(!selected.type.startsWith('video/')&&!/\.(mp4|webm|mov|m4v|ogv)$/i.test(selected.name)){message('Hãy chọn tệp video MP4, WebM hoặc MOV mà trình duyệt hỗ trợ.');return;}
  await closeStudio();file=selected;importDate=new Date(selected.lastModified||Date.now());
  sourceUrl=URL.createObjectURL(selected);media.src=sourceUrl;media.muted=false;media.playsInline=true;
@@ -207,7 +235,7 @@ async function finishRecording(){
  media.pause();if(recordingMode==='camera'){media.srcObject=null;stopCameraTracks();mode='none';document.body.classList.remove('hnl-video-live');}
  else mode='file';
  if(result.size){
-  outputBlob=result;outputUrl=URL.createObjectURL(result);output.src=outputUrl;
+  outputSaved=false;outputBlob=result;outputUrl=URL.createObjectURL(result);output.src=outputUrl;
   $('videoResult').hidden=false;
   $('videoSavedFormat').textContent=extFor(result.type||recordingMime).toUpperCase()+' · '+(result.size/1048576).toFixed(1)+' MB';
   message('Đã tạo video có dấu. Chọn Lưu video để tải về máy'+(fallbackNoAudio?' (không có âm thanh).':'.'));
@@ -217,13 +245,14 @@ async function finishRecording(){
 function saveResult(){
  if(!outputBlob||!outputUrl)return;
  const ext=extFor(outputBlob.type||recordingMime);
- const a=document.createElement('a');a.href=outputUrl;a.download=recordingName+'_Timemark_'+videoCode+'.'+ext;document.body.appendChild(a);a.click();a.remove();
+ const a=document.createElement('a');a.href=outputUrl;a.download=recordingName+'_Timemark_'+videoCode+'.'+ext;document.body.appendChild(a);a.click();a.remove();outputSaved=true;
  message('Đã gửi yêu cầu tải video. Kiểm tra thư mục Tải xuống.');
 }
 function switchToPhoto(){
- if(recorder?.state==='recording'){message('Dừng quay trước khi chuyển sang Ảnh.');return;}
- closeStudio().then(()=>$('openCamera')?.click());
+ chooseMedia('photo').catch(err=>message(err.message));
 }
+$('mediaModePhoto').addEventListener('click',()=>chooseMedia('photo').catch(err=>message(err.message)));
+$('mediaModeVideo').addEventListener('click',()=>chooseMedia('video').catch(err=>message(err.message)));
 $('videoFileInput').addEventListener('change',e=>{const selected=e.target.files?.[0];e.target.value='';importVideo(selected).catch(err=>message(err.message));});
 $('openVideoCamera').addEventListener('click',()=>{openCamera().catch(err=>message(err.message));});
 $('photoToVideo').addEventListener('click',()=>{openCamera().catch(err=>message(err.message));});
@@ -259,5 +288,5 @@ window.addEventListener('devicemotion',physicalMotion);window.addEventListener('
 window.addEventListener('resize',applyPhysicalLayout);
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&recorder?.state==='recording')stopRecording();});
 window.addEventListener('pagehide',()=>{if(recorder?.state==='recording')recorder.stop();stopCameraTracks();});
-syncButtons();
+updateMediaPicker();syncButtons();
 })();
