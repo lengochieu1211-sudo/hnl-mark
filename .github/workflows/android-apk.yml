@@ -1,0 +1,62 @@
+name: HNLMark Android APK (DEV)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'android/**'
+      - 'app.js'
+      - 'video.js'
+      - 'index.html'
+      - 'style.css'
+      - 'orientation.js'
+      - 'crop-ratios.js'
+      - 'sw.js'
+      - 'manifest.webmanifest'
+      - 'hnl-logo-*.png'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-debug-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install SDK 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Bundle offline HTML and native Android UI
+        run: |
+          python3 android/scripts/package_web.py
+          python3 android/scripts/audit_android.py
+          node --check android/android-app.js
+      - name: Compile debug APK
+        working-directory: android
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - name: SHA-256 checksum
+        run: |
+          cd android/app/build/outputs/apk/debug
+          sha256sum app-debug.apk > SHA256.txt
+          cat SHA256.txt
+      - name: Publish installable Android DEV APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HNLMark-Android-DEV-APK
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/SHA256.txt
+          if-no-files-found: error
+          retention-days: 30

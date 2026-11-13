@@ -476,7 +476,15 @@ async function renderBlob(p){
  }finally{Object.assign(config,restore);}
 }
 function outputName(p,blob){const stem=p.file.name.replace(/\.[^.]+$/,'').replace(/[\\/:*?"<>|]/g,'_').slice(0,65)||'photo';const settings=p.stampConfig||config,d=photoDate(p,settings);const extension=blob?.type==='image/png'?'png':blob?.type==='image/jpeg'?'jpg':settings.outputFormat==='png'?'png':'jpg';return stem+'_HNLMark_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())+'_TM-'+p.serialCode+'.'+extension;}
-function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),40000);}
+function download(blob,name){
+ if(window.HNLAndroidApp?.saveBlob){
+  window.HNLAndroidApp.saveBlob(blob,name).catch(showError);
+  return;
+ }
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download=name;document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),40000);
+}
 function crc32(data){let c=-1;for(const b of data){c^=b;for(let j=0;j<8;j++)c=(c>>>1)^((c&1)?0xedb88320:0);}return(c^(-1))>>>0;}
 function zipStored(entries){const encode=new TextEncoder(),parts=[],central=[];let offset=0;const now=new Date(),dosTime=(now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1),dosDate=((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
 for(const entry of entries){const name=encode.encode(entry.name),data=new Uint8Array(entry.bytes),crc=crc32(data),n=data.byteLength;if(offset+n>0xffffffff)throw new Error('ZIP quá 4GB. Hãy chia ảnh thành nhiều đợt.');const local=new Uint8Array(30+name.length),dv=new DataView(local.buffer);dv.setUint32(0,0x04034b50,true);dv.setUint16(4,20,true);dv.setUint16(6,0x0800,true);dv.setUint16(8,0,true);dv.setUint16(10,dosTime,true);dv.setUint16(12,dosDate,true);dv.setUint32(14,crc,true);dv.setUint32(18,n,true);dv.setUint32(22,n,true);dv.setUint16(26,name.length,true);local.set(name,30);parts.push(local,data);

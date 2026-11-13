@@ -1,0 +1,48 @@
+/* Native APK style: used ONLY inside bundled Android WebView. */
+:root{color-scheme:light}
+html,body{background:#eef2f8!important;overscroll-behavior:none}
+body.hnl-android-apk{padding:0!important;margin:0!important;font-family:system-ui,"Segoe UI",sans-serif!important}
+body.hnl-android-apk .topbar,
+body.hnl-android-apk .intro,
+body.hnl-android-apk .mobile-shortcuts,
+body.hnl-android-apk footer,
+body.hnl-android-apk #installBtn{display:none!important}
+body.hnl-android-apk .shell{max-width:none!important;margin:0!important;padding:8px!important}
+body.hnl-android-apk .workspace{display:flex!important;flex-direction:column!important;gap:10px!important;max-width:none!important}
+body.hnl-android-apk .editor,
+body.hnl-android-apk .viewer{display:block!important;width:100%!important;max-width:100%!important;min-width:0!important}
+body.hnl-android-apk .panel{box-shadow:none!important;border:1px solid #dce5ee!important;border-radius:15px!important;margin:0 0 9px!important;padding:13px!important}
+body.hnl-android-apk .panel.import-panel{background:#fff!important}
+body.hnl-android-apk .panel .section-title{margin-bottom:9px!important}
+body.hnl-android-apk .media-top-actions{gap:9px!important}
+body.hnl-android-apk .media-top-actions>*{min-height:56px!important;touch-action:manipulation}
+body.hnl-android-apk .viewer{border-radius:15px!important;overflow:hidden!important}
+body.hnl-android-apk .viewer .panel,
+body.hnl-android-apk .viewer-top{border-radius:14px!important}
+body.hnl-android-apk button,
+body.hnl-android-apk select,
+body.hnl-android-apk input[type="checkbox"]{touch-action:manipulation}
+body.hnl-android-apk input[type="text"],
+body.hnl-android-apk input[type="date"],
+body.hnl-android-apk input[type="datetime-local"],
+body.hnl-android-apk input[type="number"],
+body.hnl-android-apk textarea,
+body.hnl-android-apk select{font-size:max(16px,1em)!important}
+body.hnl-android-apk .preset-grid{gap:8px!important}
+body.hnl-android-apk #videoPanel{background:#fff;padding:10px!important;border-radius:12px}
+body.hnl-android-apk .video-quality-panel{gap:7px}
+body.hnl-android-apk .library-sheet{max-height:95dvh!important}
+body.hnl-android-apk .field-help,
+body.hnl-android-apk .library-note{line-height:1.5}
+body.hnl-android-apk .camera-area.hnl-capture-screen,
+body.hnl-android-apk #videoStudio.video-open{z-index:240!important}
+@media(min-width:650px) and (orientation:landscape){
+ body.hnl-android-apk .shell{padding:6px 10px!important}
+ body.hnl-android-apk .workspace{gap:8px!important}
+ body.hnl-android-apk .panel{padding:10px!important}
+}
+@media(prefers-reduced-motion:reduce){
+ body.hnl-android-apk *,body.hnl-android-apk *:before,body.hnl-android-apk *:after{
+  animation-duration:.01ms!important;transition-duration:.01ms!important
+ }
+}

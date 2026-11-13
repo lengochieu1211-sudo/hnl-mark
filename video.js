@@ -297,7 +297,16 @@ async function finishRecording(){
 function saveResult(){
  if(!outputBlob||!outputUrl)return;
  const ext=extFor(outputBlob.type||recordingMime);
- const a=document.createElement('a');a.href=outputUrl;a.download=recordingName+'_Timemark_'+videoCode+'.'+ext;document.body.appendChild(a);a.click();a.remove();outputSaved=true;
+ const name=recordingName+'_Timemark_'+videoCode+'.'+ext;
+ if(window.HNLAndroidApp?.saveBlob){
+  message('Đang lưu video vào Tải xuống/HNLMark…');
+  window.HNLAndroidApp.saveBlob(outputBlob,name)
+   .then(()=>{outputSaved=true;message('Đã lưu video trong Tải xuống/HNLMark.');})
+   .catch(e=>message('Không lưu được video: '+(e.message||e)));
+  return;
+ }
+ const a=document.createElement('a');a.href=outputUrl;a.download=name;
+ document.body.appendChild(a);a.click();a.remove();outputSaved=true;
  message('Đã gửi yêu cầu tải video. Kiểm tra thư mục Tải xuống.');
 }
 function switchToPhoto(){

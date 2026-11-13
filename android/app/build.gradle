@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'vn.hnl.xaydung.hnlmark'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'vn.hnl.xaydung.hnlmark'
+        minSdk 29
+        targetSdk 35
+        versionCode 2300
+        versionName '2.3.0-dev'
+    }
+    buildTypes {
+        debug { debuggable true }
+        release {
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+}
