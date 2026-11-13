@@ -501,3 +501,6 @@ body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-
  .media-top-actions .media-select strong,.media-top-actions .media-capture strong{font-size:11px}
  .media-top-actions .media-select .media-action-icon,.media-top-actions .media-capture>span{font-size:20px}
 }
+
+/* Respect hidden state on the inline editor and camera preview. */
+.video-studio[hidden],.video-inline[hidden]{display:none!important}
