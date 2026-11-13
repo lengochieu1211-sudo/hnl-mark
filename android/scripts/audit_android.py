@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"fullSensor\"" in manifest
-assert "versionCode 2400" in gradle and "versionName '2.4.0-dev'" in gradle
+assert "versionCode 2401" in gradle and "versionName '2.4.1-dev'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -71,5 +71,24 @@ for asset in ("app.js","video.js","orientation.js","style.css","camera-controls.
     assert (root/"android/app/src/main/assets/www"/asset).is_file(),asset
 assert "upload-artifact" in workflow and "assembleDebug" in workflow
 assert "node --check camera-controls.js" in workflow
+# Native shell regression: title/OFFLINE bar removed, never reintroduce.
+assert 'chromeHeader' not in java
+assert 'TextView offline' not in java
+assert 'setChromeVisible(!active)' in java
+assert 'app.addView(chromeTabs, new LinearLayout.LayoutParams(-1, dp(61)))' in java
+assert 'app.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f))' in java
+assert 'View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR' in java
+
+# Photo preview must remain above scrolling editing form, except live camera.
+assert 'workspace > .viewer' in ui
+assert 'order:-1!important;position:sticky!important;top:0!important' in ui
+assert '.viewer #previewCanvas' in ui and '.viewer #cameraArea #stage' in ui
+assert '.hnl-camera-live .workspace > .viewer' in ui
+assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
+assert 'hnl-android-video-editing' in ui
+assert "function syncPreviewMode()" in bridge
+assert "attributeFilter:['hidden']" in bridge
+assert "version:'2.4.1-dev'" in bridge
+
 print("PASS: offline assets, Photo Picker, FileProvider direct share, safe bridge,")
 print("      focus/EV/zoom/torch capability gates and bottom-fixed rotating icons")
