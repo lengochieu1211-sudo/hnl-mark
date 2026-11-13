@@ -76,6 +76,16 @@ function installActions(){
  }
 }
 installActions();
+// When importing a video, do not pin an unrelated photo as the preview.
+const videoPanel=el('#videoPanel');
+function syncPreviewMode(){
+ const editingVideo=Boolean(videoPanel&&!videoPanel.hidden);
+ document.body.classList.toggle('hnl-android-video-editing',editingVideo);
+}
+if(videoPanel){
+ new MutationObserver(syncPreviewMode).observe(videoPanel,{attributes:true,attributeFilter:['hidden']});
+}
+syncPreviewMode();
 const cameraState=()=>{
  if(!native)return;
  try{native.cameraState(document.body.classList.contains('hnl-camera-live')||document.body.classList.contains('hnl-video-live'));}
@@ -84,5 +94,5 @@ const cameraState=()=>{
 new MutationObserver(cameraState).observe(document.body,{attributes:true,attributeFilter:['class']});
 cameraState();
 setDeviceOrientation(matchMedia('(orientation:landscape)').matches?90:0);
-window.HNLAndroidApp={chooseTab,openGallery:gallery,saveBlob,shareBlob,setDeviceOrientation,version:'2.4.0-dev'};
+window.HNLAndroidApp={chooseTab,openGallery:gallery,saveBlob,shareBlob,setDeviceOrientation,version:'2.4.1-dev'};
 })();
