@@ -1,4 +1,4 @@
-/* HNLMark video studio v2.1.0: local capture/import, stamped video, optional audio. */
+/* HNLMark video studio v2.1.1: local capture/import, stamped video, optional audio. */
 (()=>{
 'use strict';
 const $=id=>document.getElementById(id);
