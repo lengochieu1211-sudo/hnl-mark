@@ -62,7 +62,6 @@ public final class MainActivity extends Activity {
     private static final int GOLD = Color.rgb(255, 210, 83);
 
     private FrameLayout root;
-    private LinearLayout chromeHeader;
     private LinearLayout chromeTabs;
     private WebView web;
     private View fullscreenView;
@@ -116,7 +115,9 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(NAVY);
+        // No native dark title bar: system status remains visible and blends with the page.
+        getWindow().setStatusBarColor(Color.rgb(241, 244, 248));
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
@@ -126,24 +127,7 @@ public final class MainActivity extends Activity {
         app.setBackgroundColor(Color.rgb(237, 242, 248));
         root.addView(app, new FrameLayout.LayoutParams(-1, -1));
 
-        chromeHeader = new LinearLayout(this);
-        chromeHeader.setOrientation(LinearLayout.HORIZONTAL);
-        chromeHeader.setGravity(Gravity.CENTER_VERTICAL);
-        chromeHeader.setPadding(dp(16), 0, dp(15), 0);
-        chromeHeader.setBackgroundColor(NAVY);
-        LinearLayout.LayoutParams headerLayout = new LinearLayout.LayoutParams(-1, dp(54));
-        app.addView(chromeHeader, headerLayout);
-
-        ImageView logo=new ImageView(this);
-        logo.setImageResource(R.drawable.hnlmark_icon);
-        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        LinearLayout.LayoutParams logoLayout=new LinearLayout.LayoutParams(dp(37),dp(37));
-        logoLayout.setMargins(0,0,dp(10),0);
-        chromeHeader.addView(logo,logoLayout);
-        TextView title = text("HNLMark", 18, Color.WHITE, true);
-        chromeHeader.addView(title, new LinearLayout.LayoutParams(0, -1, 1f));
-        TextView offline = text("●  OFFLINE", 11, GOLD, true);
-        chromeHeader.addView(offline);
+        // Android bottom tabs are outside the scrolling WebView and stay fixed.
 
         web = new WebView(this);
         app.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -370,7 +354,6 @@ public final class MainActivity extends Activity {
     }
 
     private void setChromeVisible(boolean visible) {
-        chromeHeader.setVisibility(visible ? View.VISIBLE : View.GONE);
         chromeTabs.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
