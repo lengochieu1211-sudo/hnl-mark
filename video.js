@@ -9,7 +9,7 @@ let mode='none', cameraStream=null, sourceUrl='', outputUrl='', outputBlob=null;
 let file=null, rotation=0, recorder=null, chunks=[], raf=0, exportStream=null, micStream=null;
 let recordingStart=0, recordingDate=null, importDate=null, recordingName='', recordingMime='', recordingMode='';
 let videoCode='', isBusy=false, audioContext=null, audioSource=null, audioDestination=null, fallbackNoAudio=false;
-let physicalPortrait=null, physicalSide=1, physicalInverted=false, candidate='', samples=0, fixedTurn=null;
+let physicalPortrait=null, physicalSide=1, physicalInverted=false, initialPortraitBetaSign=null, candidate='', samples=0, fixedTurn=null;
 const workCanvas=document.createElement('canvas'),workCtx=workCanvas.getContext('2d',{alpha:false});
 let selectedMedia='photo',outputSaved=true;
 function updateMediaPicker(){
@@ -83,7 +83,7 @@ function physicalMotion(e){
 function physicalOrientation(e){
  if(mode!=='camera'||!Number.isFinite(e.gamma)||!Number.isFinite(e.beta))return;
  const g=Math.abs(e.gamma),b=Math.abs(e.beta);
- if(b>45&&b>g*1.35)physicalInverted=e.beta<0;
+ if(b>45&&b>g*1.35){const sign=Math.sign(e.beta);if(initialPortraitBetaSign===null)initialPortraitBetaSign=sign;physicalInverted=sign!==initialPortraitBetaSign;}
  if(g>35&&g>b*1.2)setPhysical(e.gamma>=0?'right':'left');
  else if(b>35&&b>g*1.2)setPhysical('portrait');
 }
@@ -151,7 +151,7 @@ async function closeStudio(){
  if(recorder&&recorder.state==='recording'){message('Dừng quay trước khi đóng camera.');return;}
  media.pause();media.srcObject=null;media.removeAttribute('src');media.load();
  stopCameraTracks();resetFileUrl();clearOutput();
- mode='none';physicalPortrait=null;physicalInverted=false;rotation=0;fixedTurn=null;
+ mode='none';physicalPortrait=null;physicalInverted=false;initialPortraitBetaSign=null;rotation=0;fixedTurn=null;
  studio.classList.remove('video-open','video-landscape','video-locked-left','video-locked-right');
  document.body.classList.remove('hnl-video-live');cancelAnimationFrame(raf);raf=0;
  message('Chọn video hoặc mở camera để bắt đầu.');syncButtons();
@@ -165,7 +165,7 @@ async function openCamera(){
  try{
   cameraStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
   media.srcObject=cameraStream;media.muted=true;media.playsInline=true;await media.play();
-  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;candidate='';samples=0;fixedTurn=null;
+  mode='camera';videoCode=makeVideoCode();rotation=0;physicalPortrait=null;physicalSide=1;physicalInverted=false;initialPortraitBetaSign=null;candidate='';samples=0;fixedTurn=null;
   studio.classList.add('video-open');document.body.classList.add('hnl-video-live');applyPhysicalLayout();frameLoop();syncButtons();
   message('Camera video đã mở. Nhấn Quay video để bắt đầu. Có thể ghi âm nếu cấp quyền micro.');
  }catch(e){stopCameraTracks();message('Không mở được camera video: '+(e.message||e));}
