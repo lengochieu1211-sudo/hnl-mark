@@ -1,3 +1,13 @@
+# HNLMark Android v2.5.1 DEV — Audit sửa lỗi giao diện và xuất file
+
+- **Adaptive icon:** logo HNL gốc được giữ nguyên, chỉ thu nhỏ vào vùng an toàn tròn của Android (432px foreground, artwork tối đa 196px). Không cắt chữ HNL, máy ảnh vàng hoặc đường lượn của logo. Tự kiểm tra alpha bbox khi build.
+- **Xoay handset / chữ chèn:** Android OrientationEventListener là nguồn tham chiếu đầu vào APK; `getDeviceAngle()` được dùng trong cả camera ảnh, video và UI. Hình camera và chữ/dấu được dựng cùng hướng trong canvas xuất. Chỉ khung xem trước có thể xoay để người cầm ngang nhìn đúng, toolbar luôn cố định phía dưới. Các nhãn ẢNH/VIDEO xoay trong nút; text phụ quá dài được ẩn khi xoay tránh chen chúc.
+- **Nút video:** vòng 74px, tâm đỏ 52px hoặc nút Stop vuông 24px; tuyệt đối căn chính giữa tại cùng vị trí trong khung chụp. Chế độ chọn video từ máy dùng nút hành động dạng dài riêng thay vì vòng tròn camera.
+- **Một nút Lưu / Chia sẻ:** chỉ APK. Bấm sẽ có menu gọn: Lưu vào Tải xuống/HNLMark hoặc chia sẻ đến Zalo/Messenger/Drive qua Android FileProvider (không cần lưu Downloads). Giữ nút Xuất tất cả ZIP trong phần Xuất ảnh.
+- **Thu gọn cài đặt:** các nhóm Ảnh & Video, Mẫu dấu thời gian, Ngày và giờ, Thông tin, Kiểu dáng, Chỉnh ảnh gốc, Xuất ảnh. Mặc định chỉ mở nhóm Ảnh & Video, bấm tiêu đề/mũi tên để mở; thanh Cài dấu/Xuất tự mở đúng nhóm. Không xóa hoặc tái tạo các form có ID, không tác động dữ liệu người dùng.
+- **Không ảnh hưởng Web Production:** chỉ thay logic native-guarded ở `app.js`/`video.js` và UI trong `android/`. Exact DEV HEAD được ghi lại qua GitHub.
+- **Chưa Runtime Golden:** CI/build không chứng minh hết lỗi vật lý. Bắt buộc kiểm tra trên Android thật với portrait, landscape hai bên, đảo 180°, xem lại video, mở/đóng accordion, lưu/chia sẻ, adaptive icon launcher tròn/vuông.
+
 # HNLMark Android 2.5.0 DEV — Camera bố trí theo ảnh mẫu + UI chữ nhỏ + adaptive icon
 
 ## Android camera (không đổi web)

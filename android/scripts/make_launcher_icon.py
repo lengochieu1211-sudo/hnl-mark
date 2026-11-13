@@ -46,16 +46,22 @@ def generate(root: Path, app: Path):
     # The adaptive icon can be circular or squircle; allow 20%-23% inset
     # without using the source image's white rectangular background.
     subject=img.crop(box)
-    subject.thumbnail((338,338),Image.Resampling.LANCZOS)
+    subject.thumbnail((196,196),Image.Resampling.LANCZOS)
     foreground=Image.new('RGBA',(432,432),(0,0,0,0))
     foreground.alpha_composite(subject,((432-subject.width)//2,(432-subject.height)//2))
+    # 432px adaptive foreground: every visible pixel stays strictly inside
+    # Android's circular 288px safe zone (radius 144px).
+    alpha=foreground.getchannel('A')
+    visible_box=alpha.getbbox()
+    if visible_box and max(abs(visible_box[0]-216),abs(visible_box[2]-216),abs(visible_box[1]-216),abs(visible_box[3]-216))>99:
+        raise ValueError('Launcher artwork exceeds safe square of adaptive icon')
     drawable=app/'res'/'drawable'
     drawable.mkdir(parents=True,exist_ok=True)
     foreground.save(drawable/'hnlmark_foreground.png')
     background=Image.new('RGBA',(432,432),(16,44,75,255))
     background.alpha_composite(foreground)
     background.resize((192,192),Image.Resampling.LANCZOS).save(drawable/'hnlmark_icon.png')
-    print('PASS: adaptive icon foreground with transparent OUTER white margin; preserved HNL artwork')
+    print('PASS: entire original HNL artwork inside launcher safe-zone; no clipping under round/squircle masks')
 
 if __name__=='__main__':
     root=Path(__file__).resolve().parents[2]

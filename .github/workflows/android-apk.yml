@@ -50,6 +50,7 @@ jobs:
           node --check camera-controls.js
           node --check android/android-camera-v25.js
           node --check android/android-select-v25.js
+          node --check android/android-ux-v251.js
           node --check app.js
           node --check video.js
       - name: Compile debug APK

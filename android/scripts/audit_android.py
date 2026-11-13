@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"portrait\"" in manifest
-assert "versionCode 2500" in gradle and "versionName '2.5.0-dev'" in gradle
+assert "versionCode 2501" in gradle and "versionName '2.5.1-dev'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -88,7 +88,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.0-dev'" in bridge
+assert "version:'2.5.1-dev'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -119,10 +119,34 @@ assert 'apk-select-sheet' in select_js and 'apk-select-source' in select_js
 assert "select.dispatchEvent(new Event('change',{bubbles:true}))" in select_js
 assert 'font-size:14px!important' in select_ui
 for file in ('android-camera-v25.css','android-camera-v25.js',
-             'android-select-v25.css','android-select-v25.js'):
+             'android-select-v25.css','android-select-v25.js',
+             'android-ux-v251.css','android-ux-v251.js'):
     assert (root/"android/app/src/main/assets/www"/file).exists(),file
 assert (root/"android/app/src/main/res/drawable/hnlmark_foreground.png").exists()
 assert (root/"android/app/src/main/res/drawable/hnlmark_icon.png").exists()
+
+# v2.5.1: Android launcher, orientation, camera shutter and compact UX.
+ux=r("android/android-ux-v251.js")
+uxcss=r("android/android-ux-v251.css")
+camera_core=r("android/android-camera-v25.js")
+assert "subject.thumbnail((196,196)" in launcher
+assert "getDeviceAngle" in bridge and "hnlmark:physical-orientation" in bridge
+assert "nativeAngle=window.HNLAndroidApp?.getDeviceAngle?.()" in photo
+assert "function androidPhysicalPose()" in video
+assert "effectiveSide()" in video and "effectiveInverted()" in video
+assert "window.HNLAndroidCameraLayout?.syncPreviewOrientation?.()" in bridge
+assert "window.HNLAndroidCameraLayout" in camera_core
+assert "apk-fold-content" in ux and "apk-collapse-toggle" in ux
+assert "window.HNLAndroidSections={reveal,fold}" in ux
+assert "apkPhotoActions" in ux and "apkVideoActions" in ux
+assert "Lưu hoặc chia sẻ" in ux and "openSheet(kind,source)" in ux
+assert "window.HNLAndroidApp?.getDeviceAngle?.()" in ux
+assert "updatePreview()" in ux and "hnlmark:physical-orientation" in ux
+assert "apk-rotated-preview" in uxcss and "--apk-preview-turn" in uxcss
+assert "#videoRecord .video-record-symbol" in uxcss
+assert "#videoStop .video-stop-symbol" in uxcss
+assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
+assert "node --check android/android-ux-v251.js" in workflow
 
 print("PASS: offline assets, Photo Picker, FileProvider direct share, safe bridge,")
 print("      focus/EV/zoom/torch capability gates and bottom-fixed rotating icons")
