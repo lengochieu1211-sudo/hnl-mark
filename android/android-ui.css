@@ -369,3 +369,15 @@ body.hnl-android-apk.hnl-camera-live .viewer #cameraArea{
 body.hnl-android-apk.hnl-camera-live .viewer #cameraArea #stage{
  max-height:none!important;min-height:0!important;height:auto!important
 }
+
+
+/* Imported-video editing: keep its real canvas close to the top of video
+   adjustments, without cloning frames or interfering with live recording. */
+body.hnl-android-apk.hnl-android-video-editing:not(.hnl-video-live) #videoPanel{
+ overflow:visible!important
+}
+body.hnl-android-apk.hnl-android-video-editing:not(.hnl-video-live) #videoStudio:not(.video-open){
+ position:sticky!important;top:0!important;z-index:70!important;
+ box-shadow:0 5px 15px #0c264b25!important;
+ border-radius:12px!important
+}
