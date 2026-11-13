@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"portrait\"" in manifest
-assert "versionCode 2502" in gradle and "versionName '2.5.2-test'" in gradle
+assert "versionCode 2503" in gradle and "versionName '2.5.3-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -88,7 +88,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.2-test'" in bridge
+assert "version:'2.5.3-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -147,12 +147,27 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial'" in gradle
-assert "HNLMark TEST" in gradle
+assert "applicationIdSuffix '.trial253'" in gradle
+assert "HNLMark TEST 3" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.2" in ux
+assert "TEST v2.5.3" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
+
+# v2.5.3: top-bar preview enlargement in photo and video without export crop.
+geom=r("android/preview-geometry.js")
+preview_css=r("android/android-preview-v253.css")
+assert "window.HNLPreviewGeometry?.calculate" in ux
+assert "apkPreviewModes={photo:'large',video:'large'}" in ux
+assert "apk-geometry-preview" in ux and "apk-preview-toggle" in ux
+assert "mode:scale===fit?'fit':'cover'" in geom
+assert "ratio<=1.65?cover:fit" in geom
+assert "#cameraArea #stage #previewCanvas.apk-geometry-preview" in preview_css
+assert ".video-canvas-wrap #videoCanvas.apk-geometry-preview" in preview_css
+assert "preview-geometry.js" in web and "android-preview-v253.css" in web
+assert "node tests/test_android_preview_geometry.cjs" in workflow
+for name in ("preview-geometry.js","android-preview-v253.css"):
+    assert (root/"android/app/src/main/assets/www"/name).is_file(),name
 
 print("PASS: offline assets, Photo Picker, FileProvider direct share, safe bridge,")
 print("      focus/EV/zoom/torch capability gates and bottom-fixed rotating icons")

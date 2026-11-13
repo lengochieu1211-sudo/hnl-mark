@@ -20,7 +20,8 @@ for name in resources:
     shutil.copy2(source, WWW / name)
 
 for addon in ("android-app.js","android-ui.css","android-camera-v25.js","android-camera-v25.css","android-select-v25.js","android-select-v25.css",
-              "android-ux-v251.js","android-ux-v251.css"):
+              "android-ux-v251.js","android-ux-v251.css",
+              "preview-geometry.js","android-preview-v253.css"):
     shutil.copy2(ROOT / "android" / addon, WWW / addon)
 
 # APK-only UI add-ons are loaded after the shared web stylesheet.
@@ -32,12 +33,12 @@ assert "</head>" in index and "</body>" in index
 assert "orientation.js" in index and "video.js" in index
 index = index.replace(
     "</head>",
-    '<link rel="stylesheet" href="./android-ui.css"><link rel="stylesheet" href="./camera-controls.css"><link rel="stylesheet" href="./android-camera-v25.css"><link rel="stylesheet" href="./android-select-v25.css"><link rel="stylesheet" href="./android-ux-v251.css"></head>',
+    '<link rel="stylesheet" href="./android-ui.css"><link rel="stylesheet" href="./camera-controls.css"><link rel="stylesheet" href="./android-camera-v25.css"><link rel="stylesheet" href="./android-select-v25.css"><link rel="stylesheet" href="./android-ux-v251.css"><link rel="stylesheet" href="./android-preview-v253.css"></head>',
     1,
 )
 index = index.replace(
     "</body>",
-    '<script src="./camera-controls.js" defer></script><script src="./android-camera-v25.js" defer></script><script src="./android-select-v25.js" defer></script><script src="./android-app.js" defer></script><script src="./android-ux-v251.js" defer></script></body>',
+    '<script src="./camera-controls.js" defer></script><script src="./android-camera-v25.js" defer></script><script src="./android-select-v25.js" defer></script><script src="./android-app.js" defer></script><script src="./preview-geometry.js" defer></script><script src="./android-ux-v251.js" defer></script></body>',
     1,
 )
 (WWW / "index.html").write_text(index, encoding="utf-8")

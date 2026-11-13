@@ -51,6 +51,8 @@ jobs:
           node --check android/android-camera-v25.js
           node --check android/android-select-v25.js
           node --check android/android-ux-v251.js
+          node --check android/preview-geometry.js
+          node tests/test_android_preview_geometry.cjs
           node --check app.js
           node --check video.js
       - name: Compile debug APK

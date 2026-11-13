@@ -45,7 +45,7 @@ window.HNLAndroidSections={reveal,fold};
 const firstTitle=document.querySelector('.editor > .panel > .section-title');
 if(firstTitle){
  const tag=document.createElement('small');
- tag.className='apk-test-version';tag.textContent='TEST v2.5.2';
+ tag.className='apk-test-version';tag.textContent='TEST v2.5.3';
  firstTitle.appendChild(tag);
 }
 

@@ -1,3 +1,19 @@
+# HNLMark Android v2.5.3 TEST – Sửa preview camera theo ảnh máy thật
+
+## Đối chiếu ảnh lỗi người dùng (13/11/2026)
+- Ảnh khi cầm dọc: preview hiển thị đúng nội dung, nút chụp/đổi camera nằm dưới.
+- Ảnh khi cầm ngang: do Activity cố định bố cục dọc, preview bị thu nhỏ đáng kể và có các khoảng đen thừa phía trên/dưới. Lỗi nằm ở phép `contain` cho canvas đã xoay, không phải ở nút chụp.
+- Tái tạo bộ test hình học theo 4 kích thước màn hình, 4 tỷ lệ ảnh, 4 góc xoay.
+- APK dùng `HNLPreviewGeometry.calculate` chung cho Ảnh và Video: mặc định **khung lớn** (chỉ phủ kín khung khi tỷ lệ lệch không quá 1.65 lần), còn chế độ **toàn bộ** hiển thị trọn viền ảnh. Cả hai chỉ thay đổi hiển thị trong camera; ảnh/video xuất và chữ Timemark giữ nguyên dữ liệu.
+- Thêm biểu tượng thay đổi khung xem trước ngay trên thanh công cụ, nút chụp/quay và các nhãn vẫn cố định dưới đáy.
+- CSS mới `android-preview-v253.css` có độ ưu tiên cao hơn các bộ chọn cũ; không tự sửa thuật toán cảm biến/MediaRecorder.
+
+## Dữ liệu và cài đặt
+- Build TEST khác package `vn.hnl.xaydung.hnlmark.trial253` và nhãn `HNLMark TEST 3`, **cài song song** với bản thử trước để không phải xóa thư viện cũ do chữ ký debug APK thay đổi.
+- Bản TEST có dữ liệu riêng; không tự chuyển dữ liệu sang bản cũ. Đừng xóa bản HNLMark/HNLMark TEST đang chứa ảnh trước khi sao lưu dự án ZIP.
+- Phát hành lâu dài vẫn cần keystore ổn định riêng và kiểm thử camera thực tế trên Android; CI PASS chưa phải Runtime Golden.
+- Web Production và GitHub main giữ nguyên.
+
 # HNLMark Android v2.5.1 DEV — Audit sửa lỗi giao diện và xuất file
 
 - **Adaptive icon:** logo HNL gốc được giữ nguyên, chỉ thu nhỏ vào vùng an toàn tròn của Android (432px foreground, artwork tối đa 196px). Không cắt chữ HNL, máy ảnh vàng hoặc đường lượn của logo. Tự kiểm tra alpha bbox khi build.
