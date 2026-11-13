@@ -895,3 +895,23 @@ body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls 
 .video-studio .video-ios-controls button[hidden],
 body.hnl-camera-live .camera-area .camera-toolbar[hidden],
 body.hnl-camera-live .camera-area .camera-review[hidden]{display:none!important}
+
+
+/* v2.2 - extra stamp looks, precise aspect-crop and output quality controls */
+.crop-ratio-options{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:8px;margin:7px 0}
+.crop-ratio-options .field{margin:0!important;min-width:0}
+.crop-ratio-options #cropCenter{white-space:nowrap;min-height:40px;padding:8px 11px;border-radius:10px;font-size:12px}
+.image-quality-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:6px 0 3px}
+.image-quality-presets button{background:#f3f7fc;color:#365b78;border:1px solid #c6d8e8;border-radius:9px;min-height:35px;padding:5px 8px;font-size:11px;font-weight:700;cursor:pointer}
+.image-quality-presets button.selected{background:#e6f0ff;border-color:#2575f1;color:#1e61bf;box-shadow:0 0 0 1px #2575f133 inset}
+.video-quality-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;background:#f5f8fc;padding:10px;margin:8px 0;border:1px solid #dbe5f1;border-radius:12px}
+.video-quality-panel .field{min-width:0;margin:0!important}
+.video-quality-panel .field:last-child{grid-column:1/-1}
+.video-quality-panel label{font-size:11px;line-height:1.4}
+.video-quality-panel select{width:100%;min-width:0;min-height:35px;font-size:12px}
+.video-quality-panel input[type=range]{width:100%}
+.video-quality-panel output{font-weight:750;color:#235ba2}
+.preset-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.preset-grid .preset{min-width:0}
+@media(min-width:750px){.preset-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.video-quality-panel{grid-template-columns:repeat(3,minmax(0,1fr))}.video-quality-panel .field:last-child{grid-column:1}}
+@media(max-width:360px){.crop-ratio-options{grid-template-columns:minmax(0,1fr)}.crop-ratio-options #cropCenter{width:100%}}
