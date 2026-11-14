@@ -60,7 +60,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
     WATERMARK_TEMPLATES.find((t) => t.id === config.templateId) ?? WATERMARK_TEMPLATES[10];
 
   const { dateStr, timeStr, fullStr } = formatWatermarkDate(config.dateTimeIso, config.dateFormat);
-  const generatedPhotoCode = photoCode || `${config.photoCodePrefix}-${String(config.photoCodeSeq).padStart(4, '0')}`;
+  const generatedPhotoCode = timemarkCode || `${config.photoCodePrefix}-${String(config.photoCodeSeq).padStart(4, '0')}`;
 
   const fontFamilyStyle=watermarkFontFamily(config.fontKey);
   const useFloatingLogo=!!(config.showLogo&&(config.logoPosition||config.logoImageDataUrl));
