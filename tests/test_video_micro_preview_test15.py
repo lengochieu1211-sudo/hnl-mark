@@ -14,13 +14,13 @@ for marker in ('getUserMedia({video,audio:false})','getUserMedia({audio:true,vid
                'if(live.srcObject!==source)live.srcObject=source',
                'disabled={isRecordingStarting || isFinalizing}'):
     assert marker in cam,marker
-assert "versionCode 2522" in gradle and "applicationIdSuffix '.trial2522'" in gradle
+assert "versionCode 2523" in gradle and "applicationIdSuffix '.trial2523'" in gradle
 assert 'RECORD_AUDIO ignore' in emu and 'mic-denied-video-attempt.png' in emu
 assert 'camera-roll-review-attempt.png' in emu
 assert "isLandscapeViewport ? 'flex-col w-full' : 'flex-row'" in cam
 assert cam.count("isLandscapeViewport ? 'w-full px-1' : 'px-3.5'") == 2
 assert 'camera-roll-two-photos.png' in emu and 'camera-roll-swipe-older.png' in emu
-assert 'camera-roll-after-relaunch.png' in emu and 'am force-stop vn.hnl.xaydung.hnlmark.trial2522' in emu
+assert 'camera-roll-after-relaunch.png' in emu and 'am force-stop vn.hnl.xaydung.hnlmark.trial2523' in emu
 assert "const latestThumb = latestItem?.kind === 'photo' ? latestItem.url : null;" in cam
 assert 'latestItem?.kind === \'video\' ? <Film' in cam
 assert "cameraReady && mode==='video' && isRecording && audioUnavailable" in cam

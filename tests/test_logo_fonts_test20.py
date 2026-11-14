@@ -18,12 +18,12 @@ assert 'timemarkLogoEnabled: false' in read('studio-ui/src/data/templates.ts')
 assert 'const logo=await loadWatermarkLogo(config)' in renderer
 assert 'drawWatermarkLogo(g,W,H,config,logo)' in renderer
 assert 'drawOriginalTimemark(ctx,w,h,config,orientationDeg,photoCode,logo)' in preview
-assert 'drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, orientation, photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
+assert 'drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, activeOrientation, photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert 'drawOriginalTimemark(ctx,canvas.width,canvas.height,cfg,0,code,logo)' in read('studio-ui/src/services/importedVideoStamp.ts')
 assert 'hnlmark-watermark-settings-v1' in read('studio-ui/src/App.tsx')
 assert 'logoSrc(config)' in ui and 'logoEnabled(config)' in logo
 assert 'logoPosition?: WatermarkPositionPreset' in config
-assert "applicationIdSuffix '.trial2522'" in read('android/app/build.gradle')
-assert 'HNLMark STUDIO 22' in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2523'" in read('android/app/build.gradle')
+assert 'HNLMark STUDIO 23' in read('android/app/build.gradle')
 assert 'make_launcher_icon.py' not in ''.join(str(p) for p in r.glob('studio-ui/src/services/watermark*.ts'))
 print('PASS: TEST21 13 fonts, movable custom logo, timemark opt-in, preview + image/video stamping, settings persistence')

@@ -33,6 +33,7 @@ import {createTimemarkCode} from '../../services/timemarkRenderer';
 import {isSimpleStamp} from '../../services/simpleStampRenderer';
 import {supportedVideoMime} from '../../services/videoFormat';
 import {readDeviceGps,mediaWatermarkConfig} from '../../services/watermarkLocation';
+import {normalizeStampAngle,resolveStampOrientation} from '../../services/stampOrientation';
 
 interface CameraApkScreenProps {
   watermarkConfig: WatermarkConfig;
@@ -66,6 +67,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [burstMode, setBurstMode] = useState<boolean>(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>(watermarkConfig.defaultAspectRatio || '4:3');
   const [orientationDeg, setOrientationDeg] = useState<OrientationDeg>(0);
+  const stampOrientationRef=useRef<OrientationDeg>(0);
   const [previewCode,setPreviewCode]=useState(()=>createTimemarkCode());
 
   // Video state
@@ -114,9 +116,15 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [cameraRetryKey,setCameraRetryKey] = useState(0);
   const [audioUnavailable,setAudioUnavailable] = useState(false);
   useEffect(()=>{
-    const changed=(ev:Event)=>{const angle=(ev as CustomEvent<{angle:number}>).detail?.angle;
-      if(angle===0)setOrientationDeg(0);else if(angle===90)setOrientationDeg(90);
-      else if(angle===180)setOrientationDeg(180);else if(angle===270)setOrientationDeg(-90);
+    const changed=(ev:Event)=>{
+      const {angle,displayAngle}=(ev as CustomEvent<{angle:number;displayAngle?:number}>).detail||{};
+      if(typeof angle!=='number')return;
+      // Do not force a landscape stamp to 0°: display orientation and physical
+      // orientation can diverge on rotation-locked Android/MIUI devices.
+      const screen=typeof displayAngle==='number'?displayAngle:
+        (typeof window.screen.orientation?.angle==='number'?window.screen.orientation.angle:0);
+      const target=resolveStampOrientation(angle,screen);
+      stampOrientationRef.current=target;setOrientationDeg(target);
     };
     window.addEventListener('hnl-studio:orientation',changed);
     return ()=>window.removeEventListener('hnl-studio:orientation',changed);
@@ -273,7 +281,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const handleCycleOrientation = () => {
     const idx = ORIENTATION_CYCLE.indexOf(orientationDeg);
     const next = ORIENTATION_CYCLE[(idx + 1) % ORIENTATION_CYCLE.length];
-    setOrientationDeg(next);
+    stampOrientationRef.current=next;setOrientationDeg(next);
     const label = next === 0 ? '0° (Dọc chuẩn)' : next === 90 ? '90° (Ngang phải)' : next === -90 ? '-90° (Ngang trái)' : '180° (Đảo ngược)';
     triggerTransientToast(`Hướng dấu & khung: ${label}`);
   };
@@ -340,9 +348,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       }
       const photoCode=previewCode;
       // Apply physical rotation only if the UI viewport itself is portrait-locked.
-      const orientation:OrientationDeg=watermarkTurn;
+      const orientation:OrientationDeg=stampOrientationRef.current;
       const stampConfig={...watermarkConfig};
-      const capture=await createStampedVideoCapture(live,stampConfig,orientation,photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps);
+      const capture=await createStampedVideoCapture(live,stampConfig,()=>stampOrientationRef.current,photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps);
       stampedCaptureRef.current=capture;
       const hasAudio=!!audioStreamRef.current?.getAudioTracks().some(t=>t.readyState==='live');
       const recStream=new MediaStream([...capture.stream.getVideoTracks(),...(hasAudio?audioStreamRef.current!.getAudioTracks():[])]);
@@ -400,7 +408,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     return { width: '100%', height: '100%' };
   };
 
-  const watermarkTurn: OrientationDeg = isLandscapeViewport ? 0 : orientationDeg;
+  const watermarkTurn: OrientationDeg = normalizeStampAngle(orientationDeg);
   const iconRotationStyle: React.CSSProperties = {
     transform: isLandscapeViewport ? 'none' : `rotate(${orientationDeg}deg)`,
     transition: 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)',

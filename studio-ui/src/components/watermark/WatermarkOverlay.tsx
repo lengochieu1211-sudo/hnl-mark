@@ -101,11 +101,21 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
 
   const getPositionStyle = (): React.CSSProperties => {
     if (orientationDeg === 90 || orientationDeg === -90 || orientationDeg === 180) {
-      // Rotate about the viewport center instead of a corner; prevents watermark clipping.
-      return { left:'50%',top:'50%',maxWidth:orientationDeg===180?'74%':'65%',
+      // Anchor within the rotated *image*, not the center of the screen.
+      // Keep all independent CSS templates in the same logical corner system
+      // as Timemark/simple Canvas output. Inner contents must not rotate again.
+      const pos=config.positionPreset;
+      const u=pos==='custom'?config.customPos.xPct/100:
+        pos==='top-right'||pos==='bottom-right'?.79:pos==='bottom-center'?.5:.21;
+      const v=pos==='custom'?config.customPos.yPct/100:
+        pos==='top-left'||pos==='top-right'?.18:.82;
+      const x=orientationDeg===90?1-v:orientationDeg===-90?v:1-u;
+      const y=orientationDeg===90?u:orientationDeg===-90?1-u:1-v;
+      return { left:`${Math.round(x*100)}%`,top:`${Math.round(y*100)}%`,
+        maxWidth:orientationDeg===180?'min(78%, 80dvw)':'min(64%, 52dvh)',
         transform:`translate(-50%, -50%) rotate(${orientationDeg}deg)`,transformOrigin:'center center' };
     }
-    // 90°, -90° and 180° already returned above; the strip here is 0°.
+    // Rotation-free stamps follow the selected location directly.
     if (isStripFooter) return { bottom: 0, left: 0, right: 0 };
 
     if (config.positionPreset === 'custom') {
@@ -189,7 +199,6 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
           className="w-full px-3 py-2 flex flex-wrap items-center justify-between gap-2 backdrop-blur-sm border-t border-white/15"
           style={{
             backgroundColor: `rgba(8, 16, 30, ${Math.max(0.75, config.bgOpacity)})`,
-            transform: orientationDeg === 180 ? 'rotate(180deg)' : undefined,
           }}
         >
           <div className="flex items-center gap-2 min-w-0">

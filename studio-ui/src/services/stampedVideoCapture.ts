@@ -18,7 +18,7 @@ type StampedCapture = {
 export async function createStampedVideoCapture(
   video: HTMLVideoElement,
   config: WatermarkConfig,
-  orientation: OrientationDeg,
+  orientation: OrientationDeg | (()=>OrientationDeg),
   photoCode: string,
   lens: 'front' | 'rear',
   zoom: number,
@@ -58,9 +58,10 @@ export async function createStampedVideoCapture(
       sourceW, sourceH, 0, 0, canvas.width, canvas.height);
     ctx.restore();
     if (config.templateId !== 'none') {
+      const activeOrientation=typeof orientation==='function'?orientation():orientation;
       const timestamp = config.autoTime ? {...config,dateTimeIso: toLocalTime(new Date())} : config;
-      if(isSimpleStamp(config.templateId))drawSimpleStamp(ctx,canvas.width,canvas.height,timestamp,orientation,logo);
-      else drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, orientation, photoCode,logo);
+      if(isSimpleStamp(config.templateId))drawSimpleStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,logo);
+      else drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, activeOrientation, photoCode,logo);
     }
   };
   const stream = canvas.captureStream(fps);

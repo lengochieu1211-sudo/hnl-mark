@@ -225,7 +225,7 @@ public final class MainActivity extends Activity {
                 lastPhysicalAngle=snapped;
                 if(web!=null){
                     web.post(()->web.evaluateJavascript(
-                        "window.HNLAndroidApp?.setDeviceOrientation("+snapped+")",null));
+                        "window.HNLAndroidApp?.setDeviceOrientation("+snapped+","+screenAngle()+")",null));
                 }
             }
         };
@@ -292,7 +292,7 @@ public final class MainActivity extends Activity {
                 if (trusted(Uri.parse(url))) {
                     view.evaluateJavascript(
                         "document.body.classList.add('hnl-android-apk');" +
-                        "window.HNLAndroidApp && window.HNLAndroidApp.setDeviceOrientation(" + lastPhysicalAngle + ")",
+                        "window.HNLAndroidApp && window.HNLAndroidApp.setDeviceOrientation(" + lastPhysicalAngle + "," + screenAngle() + ")",
                         null);
                 }
             }
@@ -606,7 +606,7 @@ public final class MainActivity extends Activity {
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
         if (web != null) web.post(() ->
-            web.evaluateJavascript("window.HNLAndroidApp?.setDeviceOrientation(" + lastPhysicalAngle + ");window.dispatchEvent(new Event('resize'))", null));
+            web.evaluateJavascript("window.HNLAndroidApp?.setDeviceOrientation(" + lastPhysicalAngle + "," + screenAngle() + ");window.dispatchEvent(new Event('resize'))", null));
     }
 
     @Override public void onBackPressed() {

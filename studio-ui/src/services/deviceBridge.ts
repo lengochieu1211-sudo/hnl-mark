@@ -42,6 +42,6 @@ export function setupAndroidBridge(onPicked:MediaCallback,onTab:TabCallback,onBa
  if(!resp.ok)throw Error('Không đọc được '+item.name);const blob=await resp.blob();
  if(!blob.size)throw Error('Tệp rỗng');await selectedCallback?.([new File([blob],item.name,{type:item.type})]);
  }
- },setDeviceOrientation:(angle:number)=>window.dispatchEvent(new CustomEvent('hnl-studio:orientation',{detail:{angle}})),
+ },setDeviceOrientation:(angle:number,displayAngle?:number)=>window.dispatchEvent(new CustomEvent('hnl-studio:orientation',{detail:{angle,displayAngle}})),
  saveDestinationChanged:()=>window.dispatchEvent(new Event('hnl-studio:save-destination'))};
 }
