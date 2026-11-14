@@ -4,6 +4,7 @@ on:
     branches: [dev]
     paths:
       - 'android/**'
+      - 'tests/**'
       - 'studio-ui/**'
       - 'app.js'
       - 'video.js'

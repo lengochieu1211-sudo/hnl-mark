@@ -6,6 +6,7 @@ on:
       - '.github/workflows/android-emulator-smoke.yml'
       - 'studio-ui/**'
       - 'android/**'
+      - 'tests/**'
   workflow_dispatch:
 permissions:
   contents: read
