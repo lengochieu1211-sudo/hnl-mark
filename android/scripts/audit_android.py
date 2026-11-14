@@ -132,7 +132,7 @@ uxcss=r("android/android-ux-v251.css")
 camera_core=r("android/android-camera-v25.js")
 assert 'OUTER_PADDING = 19' in launcher
 assert "icon = _centered_art(original, CANVAS, ARTWORK_SIZE)" in launcher
-assert "ARTWORK_SIZE = 220" in launcher
+assert "ARTWORK_SIZE = 270" in launcher\nassert "BACKGROUND_RGB = (8, 20, 38)" in launcher
 assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
 assert 'android:drawable="@drawable/hnlmark_icon"' in r("android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
 assert "#FFFFFF" in r("android/app/src/main/res/values/colors.xml")
