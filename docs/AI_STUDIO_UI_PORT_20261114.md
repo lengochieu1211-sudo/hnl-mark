@@ -1,8 +1,9 @@
-HNL MARK — AI Studio visual port (2026-11-14)
-Source supplied by user: untitled.zip, React/Vite prototype. This port translates visual design and basic navigation into the existing HTML/CSS/JS WebView app; React demo is not embedded or shipped.
-Timemark/Timemark Verified: originals from app.js, index.html, style.css preserved, no template placeholders used.
-Other independent presets: original untouched.
-Changed: new hnl-studio-ui.css/js, index.html stylesheet/script links, Android offline packaging and PWA cache, CI syntax checks.
-No change: camera engine, video.js, native Android bridge, MediaStore, IndexedDB, export methods, Android appId/package, main/production.
-Risks and required device tests: portrait and both landscape rotations, native camera, picker, video exit/reopen, save/share photos and video, full gallery data, PWA offline cache, Android UI contrast and touch targets. This is UI integration, NOT Runtime Golden.
-Original ZIP uses placeholder Timemark templates and mock media, so those are intentionally excluded.
+HNL MARK — UI PORT TEST 2.5.12 (14 Nov 2026)
+
+UI from user-supplied untitled.zip: React/Vite prototype, visually translated into existing frontend. The implementation does not run React or use mock data. Camera, Video, photo source retention, 22 timestamp presets including Timemark and Timemark Verified, Android native picker, IndexedDB, MediaStore stay original.
+
+New preview and library CSS surface use navy. Responsive stamp thumbnails: 2 columns for phones. Dedicated TEST package vn.hnl.xaydung.hnlmark.trial2512 ensures side-by-side installation with TEST11 and Production. Do not uninstall old builds; export original photo library ZIP before any app migration.
+
+Review: CI syntax and source checkpoint PASS on first UI commit 8ae28fc. Browser UI smoke 4 viewports web+APK-sim 8/8 PASS; real physical Android camera, video recording/reopen, gallery, save, share, both landscape sides and offline data not runtime tested. Subsequent version-isolation build and CI must be verified independently.
+
+Source-only UI files: hnl-studio-ui.js, hnl-studio-ui.css; index.html, package_web.py and sw.js linking. No change to main/Production.

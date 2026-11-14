@@ -76,3 +76,54 @@ body.hnl-studio-ui.hnl-camera-live .hnl-studio-header,body.hnl-studio-ui.hnl-cam
 }
 @media(max-height:500px) and (orientation:landscape){body.hnl-studio-ui .hnl-studio-header{min-height:43px;padding:4px 0;margin-bottom:5px}body.hnl-studio-ui .hnl-studio-nav{min-height:45px}body.hnl-studio-ui .hnl-studio-nav button{min-height:38px;gap:1px}}
 @media(prefers-reduced-motion:reduce){body.hnl-studio-ui *,body.hnl-studio-ui *:before,body.hnl-studio-ui *:after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+
+/* AI Studio polish: neutralize old high-specificity white APK preview surface. */
+body.hnl-studio-ui.hnl-android-apk .workspace > .viewer{
+ background:var(--studio-card)!important;
+ border:1px solid var(--studio-line)!important;
+ border-radius:16px!important;
+ box-shadow:0 8px 23px #0004!important;
+ margin:0 0 8px!important;
+ padding:7px 9px 9px!important;
+}
+body.hnl-studio-ui.hnl-android-apk .workspace > .viewer .viewer-top{
+ background:var(--studio-card)!important;
+ color:var(--studio-text)!important;
+ border-bottom:1px solid var(--studio-line)!important;
+}
+body.hnl-studio-ui.hnl-android-apk .workspace > .viewer .viewer-top h2{
+ color:var(--studio-text)!important;
+}
+body.hnl-studio-ui.hnl-android-apk .workspace > .viewer .preview-toolbar,
+body.hnl-studio-ui.hnl-android-apk .workspace > .viewer .preview-toolbar #photoIndex{
+ color:var(--studio-muted)!important;
+ background:var(--studio-card)!important;
+}
+body.hnl-studio-ui.hnl-android-apk .workspace > .viewer .apk-photo-preview-tools button{
+ color:var(--studio-gold)!important;
+ background:var(--studio-raise)!important;
+ border-color:var(--studio-line)!important;
+}
+body.hnl-studio-ui.hnl-android-apk .workspace > .viewer .apk-photo-preview-resizer span{
+ background:var(--studio-gold)!important;
+}
+/* Prototype library-screen treatment: real IndexedDB library stays in its original modal. */
+body.hnl-studio-ui .library-backdrop:not([hidden]){z-index:490!important;display:flex!important;inset:0!important;align-items:stretch!important;justify-content:center!important;padding:0!important}
+body.hnl-studio-ui .library-backdrop:not([hidden]) .library-sheet{
+ width:100%!important;max-width:900px!important;height:100dvh!important;
+ max-height:100dvh!important;margin:0!important;border-radius:0!important;
+ background:var(--studio-navy)!important;overflow-y:auto!important;
+ padding-bottom:calc(30px + var(--studio-safe))!important;
+}
+body.hnl-studio-ui .library-sheet h2{color:var(--studio-text)!important;font-size:17px!important}
+body.hnl-studio-ui .library-sheet small,body.hnl-studio-ui .library-sheet p{color:var(--studio-muted)!important}
+body.hnl-studio-ui .library-cards{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(130px,1fr))!important;gap:9px!important}
+body.hnl-studio-ui .library-cards button{min-width:0!important;max-width:100%!important;border-radius:12px!important}
+/* Easier-to-read stamp thumbnails on phones, without altering preset IDs or renderers. */
+@media(max-width:599px){
+ body.hnl-studio-ui .preset-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+ body.hnl-studio-ui .preset{padding:8px!important;min-width:0!important}
+ body.hnl-studio-ui .preset-art{height:80px!important}
+ body.hnl-studio-ui .preset>strong{font-size:11px!important}
+}

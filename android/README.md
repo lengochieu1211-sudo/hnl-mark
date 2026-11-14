@@ -1,3 +1,11 @@
+# HNLMark DEV TEST v2.5.12 — AI Studio navy/gold UI (parallel TEST)
+
+- Application ID: `vn.hnl.xaydung.hnlmark.trial2512`, independent from TEST11 and Production packages.
+- Source: source ZIP at GitHub exact HEAD. Visual shell from supplied React prototype is ported into existing WebView HTML/CSS/JS.
+- The REAL Timemark, Timemark Verified and independent timestamp presets remain unchanged; the prototype's placeholder templates are not used.
+- Media processing, Android MediaStore saves, bridge, camera/video and storage are inherited without modifications other than the UI version marker.
+- Physical device tests remain required before Runtime Golden. Never uninstall an older APK before ZIP export of its local library.
+
 # HNLMark DEV TEST v2.5.11 — Original full-color icon restored
 
 - APK icon now uses source RGB unmodified, crops only 19px of external white padding. No color key, tint or artificial sky-blue/navy overlay.
