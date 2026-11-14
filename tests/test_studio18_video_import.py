@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TEST18 source contracts: video preview & stamped export without destroying originals.
+"""TEST19 source contracts: video preview & stamped export without destroying originals.
 Static only: real Android decoder / MediaRecorder still requires runtime evidence.
 """
 from pathlib import Path
@@ -38,11 +38,11 @@ assert 'stamp' in backup and '_stamped.${stampedBlob.type.startsWith' in backup
 assert 'const cleanCode=rawCode.replace(/^HNL(?:[-_: ]+)/i' in mark
 assert 'const baseline=clamp(y+firstH*.90' in mark
 assert 'if(config.showLogo&&logo' not in mark
-assert 'orientationDeg:0, captureWatermark:' in cam
-assert 'const orientation:OrientationDeg=0;' in cam
-assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={0}' in cam
-assert 'drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, 0,' in read('studio-ui/src/services/stampedVideoCapture.ts')
+assert 'orientationDeg:watermarkTurn, captureWatermark:' in cam
+assert 'const orientation:OrientationDeg=watermarkTurn;' in cam
+assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn}' in cam
+assert 'drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, orientation,' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert '<video key={active.id} src={active.url} playsInline controls' in roll
-assert "versionCode 2518" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2518'" in read('android/app/build.gradle')
-print('PASS: TEST18 imported video player / stamping / audio / unknown WebM duration / backup / rotation')
+assert "versionCode 2519" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2519'" in read('android/app/build.gradle')
+print('PASS: TEST19 imported video player / stamping / audio / unknown WebM duration / backup / rotation')

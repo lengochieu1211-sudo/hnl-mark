@@ -50,6 +50,7 @@ jobs:
           python3 tests/test_video_micro_preview_test15.py
           python3 tests/test_studio_test16_contract.py
           python3 tests/test_studio18_video_import.py
+          python3 tests/test_studio19_ui_video_guard.py
       - name: AI Studio React TypeScript + Vite build
         run: |
           npm install --prefix studio-ui --no-audit --no-fund

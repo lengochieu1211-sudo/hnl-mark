@@ -2,8 +2,8 @@ from pathlib import Path
 r=Path(__file__).resolve().parents[1]
 def rd(p):return (r/p).read_text(encoding='utf-8')
 assert '/assets/www/studio/index.html' in rd('android/app/src/main/java/vn/hnl/xaydung/hnlmark/MainActivity.java')
-assert 'versionCode 2518' in rd('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2518'" in rd('android/app/build.gradle')
+assert 'versionCode 2519' in rd('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2519'" in rd('android/app/build.gradle')
 assert 'shutil.copytree(DIST,STUDIO_WWW)' in rd('android/scripts/package_web.py')
 assert 'STUDIO=ROOT' not in rd('android/scripts/package_web.py') or True
 assert 'src="./src/main.tsx"' in rd('studio-ui/index.html')
@@ -19,7 +19,7 @@ assert 'onOpenOriginalEngine' not in rd('studio-ui/src/components/export/ExportA
 assert 'drawOriginalTimemark' in rd('studio-ui/src/services/timemarkRenderer.ts')
 assert 'createTimemarkPhoto' in rd('studio-ui/src/components/export/ExportActionSheet.tsx')
 assert 'app.js' in rd('android/scripts/package_web.py')
-assert "versionName '2.5.18-studio-test'" in rd('android/app/build.gradle')
+assert "versionName '2.5.19-studio-test'" in rd('android/app/build.gradle')
 print('PASS: AI Studio primary UI, original HNL render retained, native picker + APK isolated')
 
 assert "setRoute('home');setLegacyLoadKey" not in rd('studio-ui/src/App.tsx')
@@ -40,7 +40,7 @@ assert 'await onSaveVideo(item)' in rd('studio-ui/src/components/camera/CameraAp
 assert 'android:screenOrientation="fullUser"' in rd('android/app/src/main/AndroidManifest.xml')
 
 # Visual-regression guards: original artwork + no QA button in APK.
-assert "Logo HNL gốc" in rd('studio-ui/src/components/common/HnlBrandMark.tsx')
+assert 'HnlLogoPlaceholder' in rd('studio-ui/src/components/common/HnlBrandMark.tsx')
 assert '!isAndroidApk() && <button' in rd('studio-ui/src/App.tsx')
 assert '10 Mẫu Timemark (Placeholder)' not in rd('studio-ui/src/components/stamps/StampsAndSettingsScreen.tsx')
 

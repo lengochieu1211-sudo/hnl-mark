@@ -12,7 +12,6 @@ import { MediaItem, WatermarkConfig } from '../../types/hnl';
 import { WATERMARK_TEMPLATES } from '../../data/templates';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import { AccordionSection } from '../common/AccordionSection';
-import { AndroidAdaptiveIconPreview } from '../common/HnlBrandMark';
 
 interface HomeScreenProps {
   activeMedia: MediaItem;
@@ -38,7 +37,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onSelectTemplate,
 }) => {
   const [previewHeightPx, setPreviewHeightPx] = useState<number>(280);
-  const [openSecondary, setOpenSecondary] = useState<'none' | 'quick-stamps' | 'adaptive-icon'>('none');
+  const [openSecondary, setOpenSecondary] = useState<'none' | 'quick-stamps'>('none');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeTemplate =
@@ -266,16 +265,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </div>
         </AccordionSection>
 
-        <AccordionSection
-          title="Nhận diện Logo & Android Adaptive Icon"
-          subtitle="Logo HNL gốc và xem trước icon Android"
-          isOpen={openSecondary === 'adaptive-icon'}
-          onToggle={() =>
-            setOpenSecondary((s) => (s === 'adaptive-icon' ? 'none' : 'adaptive-icon'))
-          }
-        >
-          <AndroidAdaptiveIconPreview />
-        </AccordionSection>
       </section>
     </div>
   );

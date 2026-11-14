@@ -4,11 +4,13 @@
  * Unsupported codecs, permissions or media durations cause an explicit error.
  */
 import type {WatermarkConfig} from '../types/hnl';
-import {drawOriginalTimemark} from './timemarkRenderer';
+import {drawOriginalTimemark,prepareTimemarkFont} from './timemarkRenderer';
 
 const MAX_DURATION_SECONDS=300; // Guard against exhausting a mobile device's RAM.
 const LOAD_TIMEOUT_MS=15000;
-const FPS=25;
+const FPS=15;
+const MAX_EDGE=1280; // Never encode 4K/1080p at full resolution on older mobile WebViews.
+const STALL_TIMEOUT_MS=12000;
 function localDate(date:Date){
  const two=(v:number)=>String(v).padStart(2,'0');
  return `${date.getFullYear()}-${two(date.getMonth()+1)}-${two(date.getDate())}T${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}`;
@@ -34,7 +36,7 @@ export async function stampImportedVideo(
  let audio:AudioContext|null=null;
  let drawingStream:MediaStream|null=null;
  let recorder:MediaRecorder|null=null;
- let frame=0;let watchdog=0;
+ let frame=0;let watchdog=0;let stallInterval=0;
  let stopRequested=false;
  try{
    await new Promise<void>((resolve,reject)=>{
@@ -58,7 +60,9 @@ export async function stampImportedVideo(
      throw Error('Video quá 5 phút. Hãy cắt thành đoạn ngắn hơn để xuất an toàn trên điện thoại.');
    if(signal?.aborted)throw Error('Đã hủy xử lý video.');
    const canvas=document.createElement('canvas');
-   canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+   const scale=Math.min(1,MAX_EDGE/Math.max(video.videoWidth,video.videoHeight));
+   canvas.width=Math.max(2,Math.round(video.videoWidth*scale/2)*2);
+   canvas.height=Math.max(2,Math.round(video.videoHeight*scale/2)*2);
    if(!canvas.width||!canvas.height)throw Error('Video không có khung hình hợp lệ.');
    const ctx=canvas.getContext('2d',{alpha:false});
    if(!ctx)throw Error('Không tạo được bộ xử lý khung hình.');
@@ -71,6 +75,7 @@ export async function stampImportedVideo(
        drawOriginalTimemark(ctx,canvas.width,canvas.height,{...config,dateTimeIso:stampedTime},0,code);
      }
    };
+   await prepareTimemarkFont(config.fontKey);
    render();
    drawingStream=canvas.captureStream(FPS);
    const tracks=[...drawingStream.getVideoTracks()];
@@ -90,7 +95,7 @@ export async function stampImportedVideo(
    const output=new MediaStream(tracks);
    const pieces:Blob[]=[];
    const completed=new Promise<Blob>((resolve,reject)=>{
-     const r=new MediaRecorder(output,{mimeType:mime,videoBitsPerSecond:4_000_000});
+     const r=new MediaRecorder(output,{mimeType:mime,videoBitsPerSecond:2_000_000});
      recorder=r;
      r.ondataavailable=e=>{if(e.data?.size)pieces.push(e.data);};
      r.onerror=()=>reject(Error('Bộ mã hóa dừng bất thường. Video gốc được giữ nguyên.'));
@@ -103,10 +108,17 @@ export async function stampImportedVideo(
      };
      r.start(1000);
    });
-   const paint=()=>{
+   // Limit expensive canvas redraws and React status changes on budget phones.
+   let previousPaint=0,previousReport=0;
+   const paint=(time:number)=>{
      if(video.ended||signal?.aborted)return;
-     render();
-     if(hasDuration)onProgress?.(Math.max(0,Math.min(99,Math.round(video.currentTime/video.duration*100))));
+     if(time-previousPaint>=1000/FPS){render();previousPaint=time;}
+     if(time-previousReport>=450){
+       onProgress?.(hasDuration
+         ? Math.max(0,Math.min(99,Math.round(video.currentTime/video.duration*100)))
+         : -Math.max(1,Math.floor(video.currentTime)));
+       previousReport=time;
+     }
      frame=window.requestAnimationFrame(paint);
    };
    const playbackDone=new Promise<void>((resolve,reject)=>{
@@ -117,11 +129,23 @@ export async function stampImportedVideo(
    try{
      void playbackDone.catch(()=>{});
      await video.play();
-     paint();
+     paint(performance.now());
+     // Detect a stalled decoder/render pipeline instead of appearing frozen indefinitely.
+     let lastPosition=video.currentTime,lastAdvance=performance.now();
+     const stalled=new Promise<never>((_,reject)=>{
+       stallInterval=window.setInterval(()=>{
+         if(signal?.aborted){reject(Error('Đã hủy xuất video.'));return;}
+         const now=performance.now();
+         if(video.currentTime>lastPosition+.03){lastPosition=video.currentTime;lastAdvance=now;}
+         if(video.currentTime>MAX_DURATION_SECONDS){reject(Error('Video vượt 5 phút. Hãy cắt thành đoạn ngắn hơn.'));return;}
+         if(!video.ended&&now-lastAdvance>STALL_TIMEOUT_MS)
+           reject(Error('Giải mã video bị đứng trên thiết bị. Giảm độ phân giải hoặc thử MP4 H.264/AAC; video gốc vẫn nguyên vẹn.'));
+       },1000);
+     });
      const timedOut=new Promise<never>((_,reject)=>{
        watchdog=window.setTimeout(()=>reject(Error('Quá thời gian xuất video. Tệp gốc vẫn còn nguyên.')),hasDuration?Math.round(video.duration*1500+15000):MAX_DURATION_SECONDS*1000+15000);
      });
-     await Promise.race([playbackDone,timedOut]);
+     await Promise.race([playbackDone,timedOut,stalled]);
      if(signal?.aborted)throw Error('Đã hủy xuất video.');
      render();
      stopRequested=true;
@@ -137,6 +161,7 @@ export async function stampImportedVideo(
  }finally{
    if(frame)window.cancelAnimationFrame(frame);
    if(watchdog)window.clearTimeout(watchdog);
+   if(stallInterval)window.clearInterval(stallInterval);
    video.pause();video.removeAttribute('src');video.load();video.remove();
    if(recorder&&recorder.state!=='inactive'){try{recorder.stop();}catch{}}
    drawingStream?.getTracks().forEach(t=>t.stop());

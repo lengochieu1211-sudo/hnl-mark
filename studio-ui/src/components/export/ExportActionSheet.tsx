@@ -10,6 +10,8 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(false);
  const [advanced,setAdvanced]=useState(false);
  const picker=useRef<HTMLInputElement>(null);
+ const exportAbort=useRef<AbortController|null>(null);
+ useEffect(()=>()=>exportAbort.current?.abort(),[]);
  useEffect(()=>{(window as any).__hnlStudioExporting=busy;return()=>{(window as any).__hnlStudioExporting=false};},[busy]);
  if(!isOpen)return null;
  const close=()=>{if(!busy){setMessage('');setError(false);onClose();}};
@@ -41,8 +43,12 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
      }else{
        // Imported video: decode, play and re-encode stamped frames, never modify the source.
        setMessage('Đang phát và chèn Timemark vào video… 0%');
-       blob=await stampImportedVideo(await getBlob(it),cfg,it.photoCode,pct=>setMessage(`Đang chèn dấu video… ${pct}%`));
-       await onStampedMedia?.(it,blob,cfg);
+       const controller=new AbortController();exportAbort.current=controller;
+       try{
+         blob=await stampImportedVideo(await getBlob(it),cfg,it.photoCode,pct=>setMessage(pct>=0?`Đang chèn dấu video… ${pct}%`:`Đang chèn dấu video… ${Math.abs(pct)} giây`),controller.signal);
+         if(controller.signal.aborted)throw Error('Đã hủy xử lý video.');
+         await onStampedMedia?.(it,blob,cfg);
+       }finally{exportAbort.current=null;}
      }
    }else{
      const cfg={...watermarkConfig,...it.captureWatermark,...it.watermarkOverride};
@@ -82,7 +88,10 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
       <button disabled={busy} className="w-full min-h-[44px] flex gap-3 items-center px-4 text-sm text-[#94A3B8]" onClick={()=>picker.current?.click()}><Upload size={17}/>Khôi phục dự án ZIP</button></>}
    </div>
    <p className="pt-3 text-[11px] text-[#94A3B8]">Bản gốc luôn được giữ riêng. Xuất Timemark dùng đúng bố cục chữ giờ, ngày và mã dọc; các mẫu khác cần xác minh kết xuất riêng.</p>
-   {busy&&<p className="text-xs text-[#E2B74B] flex items-center gap-2 mt-2"><Loader2 size={16} className="animate-spin"/>Đang xử lý, không đóng ứng dụng</p>}
+   {busy&&<div className="flex items-center justify-between gap-3 mt-2">
+      <p className="text-xs text-[#E2B74B] flex items-center gap-2"><Loader2 size={16} className="animate-spin"/>Đang xử lý video…</p>
+      {exportAbort.current&&<button type="button" className="min-h-10 px-3 rounded-lg bg-red-900/40 text-red-200 text-xs" onClick={()=>{exportAbort.current?.abort();setMessage('Đang hủy xử lý, video gốc được giữ nguyên…');}}>Hủy xử lý</button>}
+    </div>}
   </div>
  </div>;
 };

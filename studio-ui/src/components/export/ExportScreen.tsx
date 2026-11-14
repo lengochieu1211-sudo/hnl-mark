@@ -2,7 +2,6 @@ import React from 'react';
 import { FileArchive, Share2 } from 'lucide-react';
 import { MediaItem, WatermarkConfig } from '../../types/hnl';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
-import { AndroidAdaptiveIconPreview } from '../common/HnlBrandMark';
 
 interface ExportScreenProps {
   activeMedia: MediaItem;
@@ -58,7 +57,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
         <span>Lưu / Chia sẻ</span>
       </button>
 
-      {/* Handoff & Adaptive Icon Summary */}
+      {/* Backup and data protection; internal icon QA is kept out of the application. */}
       <div className="rounded-2xl bg-[#0D1626] border border-white/[0.08] p-4 space-y-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-[#F8FAFC]">
           <FileArchive className="w-4 h-4 text-[#E2B74B]" />
@@ -68,9 +67,6 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
           Nhấn nút <strong className="text-[#F8FAFC]">Lưu / Chia sẻ</strong> ở trên rồi chọn{' '}
           <strong className="text-[#E2B74B]">Sao lưu dự án ZIP</strong> để giữ lại ảnh/video gốc và dữ liệu chỉnh sửa. Ảnh Timemark được đóng dấu trực tiếp trong giao diện AI Studio, luôn giữ lại ảnh gốc.
         </p>
-        <div className="pt-2 border-t border-white/[0.07]">
-          <AndroidAdaptiveIconPreview />
-        </div>
       </div>
     </div>
   );

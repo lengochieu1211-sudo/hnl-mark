@@ -29,6 +29,7 @@ import { DEMO_IMAGES, DEFAULT_IMAGE_EDITS } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
+import {createTimemarkCode} from '../../services/timemarkRenderer';
 
 interface CameraApkScreenProps {
   watermarkConfig: WatermarkConfig;
@@ -60,6 +61,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [burstMode, setBurstMode] = useState<boolean>(false);
   const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>(watermarkConfig.defaultAspectRatio || '4:3');
   const [orientationDeg, setOrientationDeg] = useState<OrientationDeg>(0);
+  const [previewCode,setPreviewCode]=useState(()=>createTimemarkCode());
 
   // Video state
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -299,10 +301,11 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
           createdAt:at.toISOString(),resolutionLabel:`${canvas.width} × ${canvas.height}`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,
-          coordinates:watermarkConfig.coordinates,photoCode:`HNL-${Date.now()}-${i}`,
+          coordinates:watermarkConfig.coordinates,photoCode:i===0?previewCode:createTimemarkCode(),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:0, captureWatermark:{...watermarkConfig},edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:watermarkTurn, captureWatermark:{...watermarkConfig},edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);
+        setPreviewCode(createTimemarkCode());
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
       }
       // Quiet success: only the camera shutter flash and updated thumbnail signal a saved photo.
@@ -328,9 +331,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       if(streamRef.current!==stream||!stream.active){
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;
       }
-      const photoCode='HNL-V'+Date.now();
-      // Time stamp follows the actual exported frame (0°), not phone sensor rotation.
-      const orientation:OrientationDeg=0;
+      const photoCode=previewCode;
+      // Apply physical rotation only if the UI viewport itself is portrait-locked.
+      const orientation:OrientationDeg=watermarkTurn;
       const stampConfig={...watermarkConfig};
       const capture=await createStampedVideoCapture(live,stampConfig,orientation,photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps);
       stampedCaptureRef.current=capture;
@@ -363,7 +366,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
           photoCode,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
           orientationDeg:orientation,captureWatermark:stampConfig,isStamped:stampConfig.templateId==='timemark',edits:{...DEFAULT_IMAGE_EDITS}};
-        try{await onSaveVideo(item);setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
+        try{await onSaveVideo(item);setPreviewCode(createTimemarkCode());setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
         catch(e){triggerTransientToast('Không lưu được video gốc: '+String(e));}
         finally{setIsFinalizing(false);}
 
@@ -394,6 +397,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     return { width: '100%', height: '100%' };
   };
 
+  const watermarkTurn: OrientationDeg = isLandscapeViewport ? 0 : orientationDeg;
   const iconRotationStyle: React.CSSProperties = {
     transform: isLandscapeViewport ? 'none' : `rotate(${orientationDeg}deg)`,
     transition: 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)',
@@ -698,7 +702,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           )}
 
           {/* Watermark sits cleanly ON preview without control occlusion */}
-          <WatermarkOverlay config={watermarkConfig} orientationDeg={0} />
+          <WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn} photoCode={previewCode} />
 
           {/* Recording live timer */}
           {isRecording && (

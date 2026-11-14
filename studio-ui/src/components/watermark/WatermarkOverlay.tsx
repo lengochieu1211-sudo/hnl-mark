@@ -8,6 +8,7 @@ import { OriginalTimemarkOverlay } from './OriginalTimemarkOverlay';
 interface WatermarkOverlayProps {
   config: WatermarkConfig;
   orientationDeg?: OrientationDeg;
+  photoCode?: string;
   compact?: boolean;
   draggable?: boolean;
   onDragPositionChange?: (pos: { xPct: number; yPct: number }) => void;
@@ -44,12 +45,13 @@ export function formatWatermarkDate(iso: string, format: WatermarkConfig['dateFo
 export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   config,
   orientationDeg = 0,
+  photoCode,
   compact = false,
   draggable = false,
   onDragPositionChange,
   containerRef,
 }) => {
-  if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} />;
+  if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} photoCode={photoCode} />;
   if(config.templateId === 'none') return null;
 
   const template =

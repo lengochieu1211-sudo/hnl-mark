@@ -1,6 +1,6 @@
 import React,{useEffect,useRef} from 'react';
 import type {OrientationDeg,WatermarkConfig} from '../../types/hnl';
-import {drawOriginalTimemark} from '../../services/timemarkRenderer';
+import {drawOriginalTimemark,prepareTimemarkFont} from '../../services/timemarkRenderer';
 
 export const OriginalTimemarkOverlay:React.FC<{config:WatermarkConfig;orientationDeg?:OrientationDeg;photoCode?:string}>=({config,orientationDeg=0,photoCode})=>{
  const canvasRef=useRef<HTMLCanvasElement>(null);
@@ -16,7 +16,7 @@ export const OriginalTimemarkOverlay:React.FC<{config:WatermarkConfig;orientatio
    ctx.setTransform(dpr,0,0,dpr,0,0);
    drawOriginalTimemark(ctx,w,h,config,orientationDeg,photoCode);
   };
-  render();const ro=typeof ResizeObserver!=='undefined'?new ResizeObserver(render):null;
+  render();void prepareTimemarkFont(config.fontKey).then(render);const ro=typeof ResizeObserver!=='undefined'?new ResizeObserver(render):null;
   ro?.observe(parent);return()=>{ro?.disconnect();};
  },[config,orientationDeg,photoCode]);
  return <canvas ref={canvasRef} data-hnl-original-timemark="true" aria-label="Mẫu dấu Timemark gốc" className="absolute inset-0 z-10 w-full h-full pointer-events-none"/>;

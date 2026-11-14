@@ -27,7 +27,7 @@ import { ViewportTesterModal } from './components/qa/ViewportTesterModal';
 import {storeMedia,loadMedia,removeMedia} from './services/mediaStorage';
 import {restoreProjectZip} from './services/projectBackup';
 import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
-import { createTimemarkPhoto } from './services/timemarkRenderer';
+import { createTimemarkPhoto,createTimemarkCode } from './services/timemarkRenderer';
 
 function formatLocalIsoNow(): string {
   const now = new Date();
@@ -106,7 +106,7 @@ export default function App() {
       title:file.name.replace(/\.[^/.]+$/,'')||'Tệp mới chọn',kind:detectedType.startsWith('video/')?'video':'photo',
       origin:'newly-picked',url:URL.createObjectURL(mediaFile),rawBlob:mediaFile,createdAt:now.toISOString(),
       resolutionLabel:detectedType.startsWith('video/')?'Video thiết bị':'Ảnh thiết bị',
-      sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:'',photoCode:`HNL-${Date.now()}-${i}`,
+      sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:'',photoCode:createTimemarkCode(),
       customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
       // Persist EACH original before adding to UI; native picker processes sequentially.
       await storeMedia(item);all.push(item);
