@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"portrait\"" in manifest
-assert "versionCode 2512" in gradle and "versionName '2.5.12-ui-test'" in gradle
+assert "versionCode 2513" in gradle and "versionName '2.5.13-icon-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -88,7 +88,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.12-ui-test'" in bridge
+assert "version:'2.5.13-icon-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -130,7 +130,8 @@ ux=r("android/android-ux-v251.js")
 uxcss=r("android/android-ux-v251.css")
 camera_core=r("android/android-camera-v25.js")
 assert 'OUTER_PADDING = 19' in launcher
-assert "icon = original.resize((CANVAS, CANVAS), Image.Resampling.LANCZOS)" in launcher
+assert "icon = _centered_art(original, CANVAS, ARTWORK_SIZE)" in launcher
+assert "ARTWORK_SIZE = 220" in launcher
 assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
 assert 'android:drawable="@drawable/hnlmark_icon"' in r("android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
 assert "#FFFFFF" in r("android/app/src/main/res/values/colors.xml")
@@ -154,10 +155,10 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial2512'" in gradle
-assert "HNLMark TEST 12" in gradle
+assert "applicationIdSuffix '.trial2513'" in gradle
+assert "HNLMark TEST 13" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.12" in ux
+assert "TEST v2.5.13" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 

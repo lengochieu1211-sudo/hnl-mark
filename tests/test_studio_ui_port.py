@@ -18,6 +18,6 @@ assert 'data-hnl-studio-video="on"' in css
 assert 'Timemark Verified' in core and 'Timemark' in core
 assert 'tm-01' not in js and 'Placeholder' not in js
 assert 'body.hnl-studio-ui.hnl-android-apk .workspace > .viewer' in css
-assert "versionName '2.5.12-ui-test'" in gradle
-assert "applicationIdSuffix '.trial2512'" in gradle
-print("PASS: Studio UI real-engine connections, video visibility, Timemark preservation, TEST12 isolation")
+assert "versionName '2.5.13-icon-test'" in gradle
+assert "applicationIdSuffix '.trial2513'" in gradle
+print("PASS: Studio UI real-engine connections, video visibility, Timemark preservation, TEST13 isolation")

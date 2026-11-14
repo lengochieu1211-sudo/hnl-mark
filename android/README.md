@@ -1,3 +1,12 @@
+# HNLMark TEST 13 v2.5.13 — MIUI adaptive launcher safe area (isolated debug APK)
+
+- TEST 12 AI Studio UI, Video, Timemark, library and MediaStore from existing DEV kept unchanged.
+- TEST 11/12 original logo filled the whole 432px adaptive canvas. Android/MIUI displays roughly the center 288px and clipped HNL letters and the gold flourishes.
+- TEST 13 centers a **220px source-color logo** inside a transparent 432px adaptive foreground. Source RGB gold, navy, silver and white is preserved using geometric crop and resize only (no chroma-key).
+- Pixel tests render MIUI squircle and circular masks and assert no blue/gold pixels clipped. Legacy mipmap sources have matched neutral backing and safe insets.
+- TEST 13 appId `vn.hnl.xaydung.hnlmark.trial2513`; TEST 12 and prior apps remain untouched with their own offline data. No Production deployment.
+- Real Xiaomi/MIUI runtime launcher appearance remains pending; CI/build PASS cannot be called Runtime Golden.
+
 # HNLMark DEV TEST v2.5.12 — AI Studio navy/gold UI (parallel TEST)
 
 - Application ID: `vn.hnl.xaydung.hnlmark.trial2512`, independent from TEST11 and Production packages.
