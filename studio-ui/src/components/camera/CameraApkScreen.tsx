@@ -62,6 +62,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
 
   // Video state
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isRecordingStarting, setIsRecordingStarting] = useState(false);
+  const startPendingRef = useRef(false);
+  const recordStartedAtRef = useRef(0);
   const [isFinalizing, setIsFinalizing] = useState<boolean>(false);
   const [recordSeconds, setRecordSeconds] = useState<number>(0);
   const [showVideoQualityPopup, setShowVideoQualityPopup] = useState<boolean>(false);
@@ -130,12 +133,12 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       setAndroidCameraActive(false);
     };
     // Resolution change requires reopening camera; never modify a stream in use for recording.
-  },[lens,videoSettings.resolution,cameraRetryKey]);
+  },[lens,videoSettings.resolution,videoSettings.fps,cameraRetryKey]);
 
 
   // A hardware Back/close during recording or commit must not silently lose video.
-  useEffect(()=>{(window as any).__hnlStudioRecording=isRecording||isFinalizing;
-    return ()=>{(window as any).__hnlStudioRecording=false};},[isRecording,isFinalizing]);
+  useEffect(()=>{(window as any).__hnlStudioRecording=isRecording||isRecordingStarting||isFinalizing;
+    return ()=>{(window as any).__hnlStudioRecording=false};},[isRecording,isRecordingStarting,isFinalizing]);
   // Stop and preserve what was recorded when the app becomes hidden/locked.
   useEffect(()=>{const hide=()=>{if(document.hidden&&recorderRef.current?.state==='recording')recorderRef.current.stop();};
     document.addEventListener('visibilitychange',hide);
@@ -253,10 +256,13 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       // Quiet success: only the camera shutter flash and updated thumbnail signal a saved photo.
       return;
     }
+    if(isFinalizing||isRecordingStarting||startPendingRef.current)return;
     if(!isRecording){
+      startPendingRef.current=true;setIsRecordingStarting(true);
+      try{
       const stream=streamRef.current;if(!stream)throw Error('Camera chưa sẵn sàng');
       if(typeof MediaRecorder==='undefined'){triggerTransientToast('Thiết bị không hỗ trợ ghi video WebM.');return;}
-      const type=['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+      const type=['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm','video/mp4'].find(t=>MediaRecorder.isTypeSupported(t));
       if(!type){triggerTransientToast('Không tìm thấy codec video được hỗ trợ.');return;}
       let recordStream=stream;
       // Microphone can be unavailable in MIUI WebView. VIDEO still records silently.
@@ -269,19 +275,24 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         setAudioUnavailable(true);
         triggerTransientToast('Micro không khả dụng: video sẽ quay không tiếng.');
       }
-      const rec=new MediaRecorder(recordStream,{mimeType:type,videoBitsPerSecond:videoSettings.quality==='Tối đa'?8000000:videoSettings.quality==='Cao'?5000000:2500000});
+      if(streamRef.current!==stream||!stream.active){audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;}
+      const chosenType=audioStreamRef.current?type:(['video/webm;codecs=vp8','video/webm','video/mp4'].find(t=>MediaRecorder.isTypeSupported(t))||type);
+      const rec=new MediaRecorder(recordStream,{mimeType:chosenType,videoBitsPerSecond:videoSettings.quality==='Tối đa'?8000000:videoSettings.quality==='Cao'?5000000:2500000});
       recorderRef.current=rec;chunksRef.current=[];
       rec.ondataavailable=e=>{if(e.data?.size)chunksRef.current.push(e.data);};
       rec.onerror=()=>triggerTransientToast('Lỗi ghi video; vui lòng kiểm tra lại.');
       rec.onstop=async()=>{
+        if(recorderRef.current===rec)recorderRef.current=null;
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;
         setIsFinalizing(true);
-        const chunks=chunksRef.current.splice(0);const blob=new Blob(chunks,{type:rec.mimeType||'video/webm'});
+        const live=liveRef.current,source=streamRef.current;
+        if(live&&source&&source.active){if(live.srcObject!==source)live.srcObject=source;void live.play().catch(()=>{});}
+        const chunks=chunksRef.current.splice(0);const blob=new Blob(chunks,{type:rec.mimeType||chosenType});
         setIsRecording(false);
         if(!blob.size){triggerTransientToast('Không ghi được video.');setIsFinalizing(false);return;}
         const date=new Date(),item:MediaItem={id:`video-${Date.now()}`,title:`Video HNL ${date.toLocaleString('vi-VN')}`,
           kind:'video',origin:'newly-picked',rawBlob:blob,url:URL.createObjectURL(blob),createdAt:date.toISOString(),
-          durationSec:Math.max(1,recordSeconds),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
+          durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current)/1000)),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
           photoCode:`HNL-V${Date.now()}`,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,edits:{...DEFAULT_IMAGE_EDITS}};
         try{await onSaveVideo(item);setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
@@ -289,8 +300,13 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         finally{setIsFinalizing(false);}
 
       };
-      rec.start(1000);setRecordSeconds(0);setIsRecording(true);setShowVideoQualityPopup(false);
-    }else if(recorderRef.current?.state==='recording')recorderRef.current.stop();
+      rec.start(1000);recordStartedAtRef.current=Date.now();setRecordSeconds(0);setIsRecording(true);setShowVideoQualityPopup(false);
+      }catch(e){
+        audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;
+        triggerTransientToast('Không khởi tạo được video: '+String(e));
+        if(liveRef.current&&streamRef.current?.active)void liveRef.current.play().catch(()=>{});
+      }finally{startPendingRef.current=false;setIsRecordingStarting(false);}
+    }else if(recorderRef.current?.state==='recording'){setIsFinalizing(true);recorderRef.current.stop();}
   };
 
   const formatDuration = (sec: number) => {
@@ -420,7 +436,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         <button
           type="button"
           onClick={() => {
-            if (isRecording || isFinalizing || recorderRef.current?.state==='recording') {
+            if (isRecording || isRecordingStarting || isFinalizing || recorderRef.current?.state==='recording') {
               triggerTransientToast('Hãy dừng quay và chờ lưu video hoàn tất trước khi thoát.');
               return;
             }
@@ -476,7 +492,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {mode === 'video' && (
             <button
               type="button"
-              onClick={() => setShowVideoQualityPopup((p) => !p)}
+              disabled={isRecording || isRecordingStarting || isFinalizing}
+               onClick={() => setShowVideoQualityPopup((p) => !p)}
               className={`min-w-[44px] min-h-[44px] px-2 flex items-center justify-center gap-1 rounded-full transition text-[11px] font-mono-tabular font-semibold ${
                 showVideoQualityPopup
                   ? 'bg-[#E2B74B] text-[#060B14]'
@@ -695,7 +712,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           <div className="flex items-center bg-[#111C30] p-0.5 rounded-xl border border-white/[0.07]">
             <button
               type="button"
-              disabled={isRecording}
+              disabled={isRecording || isRecordingStarting || isFinalizing}
               onClick={() => {
                 setMode('photo');
                 setShowVideoQualityPopup(false);
@@ -710,7 +727,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             </button>
             <button
               type="button"
-              disabled={isRecording}
+              disabled={isRecording || isRecordingStarting || isFinalizing}
               onClick={() => {if(!isRecording)setMode('video');}}
               className={`min-h-[34px] px-3.5 rounded-[10px] text-xs font-semibold tracking-wide transition ${
                 mode === 'video'
@@ -752,7 +769,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {/* Left: Gallery Picker Thumbnail */}
           <button
             type="button"
-            disabled={isRecording || isFinalizing}
+            disabled={isRecording || isRecordingStarting || isFinalizing}
             onClick={onOpenLibrary}
             className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/25 bg-[#111C30] flex items-center justify-center hover:border-[#E2B74B] active:scale-95 transition disabled:opacity-40"
             aria-label="Xem ảnh, video đã chụp"
@@ -772,7 +789,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {/* Center: Commercial Shutter / Record Button */}
           <button
             type="button"
-            onClick={()=>{handleShutterPress().catch(e=>triggerTransientToast('Lỗi chụp/quay: '+String(e)));}}
+            disabled={isRecordingStarting || isFinalizing}
+             onClick={()=>{handleShutterPress().catch(e=>triggerTransientToast('Lỗi chụp/quay: '+String(e)));}}
             aria-label={
               mode === 'photo'
                 ? 'Chụp ảnh'
@@ -802,7 +820,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {/* Right: Flip Front / Rear Camera */}
           <button
             type="button"
-            disabled={isRecording}
+            disabled={isRecording || isRecordingStarting || isFinalizing}
             onClick={() => {
               setLens((l) => (l === 'rear' ? 'front' : 'rear'));
               triggerTransientToast(lens === 'rear' ? 'Đã chuyển Camera trước' : 'Đã chuyển Camera sau');

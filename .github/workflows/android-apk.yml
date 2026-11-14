@@ -54,6 +54,7 @@ jobs:
           test -s android/app/src/main/assets/www/studio/index.html
           find android/app/src/main/assets/www/studio/assets -name '*.js' | grep -q .
           python3 tests/test_ai_studio_primary.py
+          python3 tests/test_video_micro_preview_test15.py
           python3 tests/test_launcher_color_fidelity_v2511.py
           node --check android/android-app.js
           python3 tests/test_android_picker_source.py
