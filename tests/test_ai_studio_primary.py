@@ -20,3 +20,9 @@ print('PASS: AI Studio primary UI, original HNL render retained, native picker +
 
 assert "setRoute('home');setLegacyLoadKey" in rd('studio-ui/src/App.tsx')
 assert 'recorderRef.current.stop();' in rd('studio-ui/src/components/camera/CameraApkScreen.tsx')
+
+# Empty library must still expose all real timestamp presets.
+app=rd('studio-ui/src/App.tsx')
+assert "{route === 'stamps' && (" in app
+assert 'activeMedia={activeMedia ?? emptyPreview}' in app
+assert "{route === 'stamps' && activeMedia && (" not in app

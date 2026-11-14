@@ -292,10 +292,10 @@ export default function App() {
               />
             )}
 
-            {route === 'stamps' && activeMedia && (
+            {route === 'stamps' && (
               <StampsAndSettingsScreen
                 key={stampsSubTab}
-                activeMedia={activeMedia}
+                activeMedia={activeMedia ?? emptyPreview}
                 config={watermarkConfig}
                 initialSubTab={stampsSubTab}
                 onChangeConfig={updateWatermarkConfig}
