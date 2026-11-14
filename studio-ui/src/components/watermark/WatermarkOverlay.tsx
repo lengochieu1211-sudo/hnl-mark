@@ -105,18 +105,8 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
       return { left:'50%',top:'50%',maxWidth:orientationDeg===180?'74%':'65%',
         transform:`translate(-50%, -50%) rotate(${orientationDeg}deg)`,transformOrigin:'center center' };
     }
-    if (isStripFooter) {
-      if (orientationDeg === 90) {
-        return { top: 0, bottom: 0, left: 0, width: compact ? '28%' : 'auto', maxWidth: '34%' };
-      }
-      if (orientationDeg === -90) {
-        return { top: 0, bottom: 0, right: 0, width: compact ? '28%' : 'auto', maxWidth: '34%' };
-      }
-      if (orientationDeg === 180) {
-        return { top: 0, left: 0, right: 0 };
-      }
-      return { bottom: 0, left: 0, right: 0 };
-    }
+    // 90°, -90° and 180° already returned above; the strip here is 0°.
+    if (isStripFooter) return { bottom: 0, left: 0, right: 0 };
 
     if (config.positionPreset === 'custom') {
       return {
