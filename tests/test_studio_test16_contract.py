@@ -29,6 +29,6 @@ assert 'Tệp gốc và sao lưu · Tùy chọn nâng cao' in exp
 assert 'stampedBlob:item.stampedBlob' in storage
 assert 'stampedName' in backup and "zip.file(stampedName,stampedBlob" in backup
 assert 'LEGACY_RATIO = 0.98' in icon and 'BACKGROUND_RGB' not in icon
-assert 'versionCode 2523' in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2523'" in read('android/app/build.gradle')
+assert 'versionCode 2524' in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2524'" in read('android/app/build.gradle')
 print('PASS: TEST21 stamped photo/video, protected originals, pause/resume, spot metering and icon')
