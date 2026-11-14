@@ -27,7 +27,8 @@ export async function restoreProjectZip(zipBlob:Blob):Promise<MediaItem[]>{
  if(!entry.mime?.match(/^(image|video)\//)||!Number.isSafeInteger(entry.size)||entry.size<=0||entry.size>MAX_ARCHIVE_BYTES)throw Error('Tệp media sai định dạng');
  const data=zip.file(entry.name);if(!data)throw Error('Thiếu '+entry.name);
  const bytes=await data.async('uint8array');sum+=bytes.byteLength;if(bytes.byteLength!==entry.size||sum>MAX_ARCHIVE_BYTES)throw Error('Kích thước media không hợp lệ');
- const blob=new Blob([bytes],{type:entry.mime});const id=`restored-${Date.now()}-${loaded.length}-${Math.random().toString(36).slice(2,6)}`;
+ const raw=new ArrayBuffer(bytes.byteLength);new Uint8Array(raw).set(bytes);
+ const blob=new Blob([raw],{type:entry.mime});const id=`restored-${Date.now()}-${loaded.length}-${Math.random().toString(36).slice(2,6)}`;
  const media={...entry.meta,id,rawBlob:blob,url:URL.createObjectURL(blob)} as MediaItem;
  await storeMedia(media);loaded.push(media);
  }
