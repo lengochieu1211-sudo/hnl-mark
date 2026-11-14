@@ -1,4 +1,5 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
 import JSZip from 'jszip';
 import {ArrowDown,ArrowLeft,ArrowUp,Camera,Download,FileImage,FileText,Folder,FolderPlus,ImagePlus,Loader2,Move,RotateCcw,Save,ScanLine,Trash2,Upload,X} from 'lucide-react';
 import {saveToDevice} from '../../services/deviceBridge';
@@ -31,8 +32,51 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [twoPerPage,setTwoPerPage]=useState(false),[margin,setMargin]=useState(10);
  const [customW,setCustomW]=useState(210),[customH,setCustomH]=useState(297);
  const [draggingId,setDraggingId]=useState<string|null>(null);
+ // The file input's capture=environment is only a picker hint on Android WebView.
+ // Use an actual in-app MediaStream, kept open across continuous page captures.
+ const [scanCameraOpen,setScanCameraOpen]=useState(false);
+ const [scanMode,setScanMode]=useState<'single'|'continuous'>('continuous');
+ const [cameraFacing,setCameraFacing]=useState<'environment'|'user'>('environment');
+ const [scanCameraReady,setScanCameraReady]=useState(false);
+ const [scanCameraError,setScanCameraError]=useState('');
+ const [scanCameraBusy,setScanCameraBusy]=useState(false);
+ const [scanCameraNotice,setScanCameraNotice]=useState('');
+ const [scanSessionIds,setScanSessionIds]=useState<string[]>([]);
+ const scanSessionIdsRef=useRef<string[]>([]);
+ const scanVideoRef=useRef<HTMLVideoElement>(null),scanStreamRef=useRef<MediaStream|null>(null);
+ const scanCaptureLock=useRef(false);
+
  const importInput=useRef<HTMLInputElement>(null),cameraInput=useRef<HTMLInputElement>(null),restoreInput=useRef<HTMLInputElement>(null);
  const abortProcessing=useRef<AbortController|null>(null),dragPoint=useRef<number|null>(null),stageRef=useRef<HTMLDivElement>(null);
+ // Stop tracks on camera close, navigation, facing-mode switch or unmount.
+ useEffect(()=>{
+  if(!scanCameraOpen)return;
+  let canceled=false;
+  setScanCameraReady(false);setScanCameraError('');
+  const open=async()=>{
+   try{
+    if(!navigator.mediaDevices?.getUserMedia)throw Error('Thiết bị / WebView chưa hỗ trợ camera trực tiếp');
+    const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{
+     facingMode:{ideal:cameraFacing},width:{ideal:2560},height:{ideal:1920},frameRate:{ideal:30}
+    }});
+    if(canceled){stream.getTracks().forEach(track=>track.stop());return;}
+    scanStreamRef.current=stream;
+    const video=scanVideoRef.current;
+    if(!video){stream.getTracks().forEach(track=>track.stop());return;}
+    video.srcObject=stream;
+    // Some Android WebViews do not auto-start a dynamically mounted <video>.
+    await video.play();
+    if(!canceled)setScanCameraReady(true);
+   }catch(error){if(!canceled)setScanCameraError('Không mở được camera: '+String(error));}
+  };
+  void open();
+  return ()=>{
+   canceled=true;
+   scanStreamRef.current?.getTracks().forEach(track=>track.stop());scanStreamRef.current=null;
+   if(scanVideoRef.current)scanVideoRef.current.srcObject=null;
+  };
+ },[scanCameraOpen,cameraFacing]);
+
  useEffect(()=>{let alive=true;Promise.all([listScans(),listScanFolders()]).then(([p,f])=>{if(alive){setPages(p);setFolders(f);}}).catch(e=>{if(alive)setProblem('Không mở được thư viện quét: '+String(e));});return()=>{alive=false;abortProcessing.current?.abort();};},[]);
  const displayUrls=useMemo(()=>Object.fromEntries(pages.map(p=>[p.id,URL.createObjectURL(p.processed||p.original)])),[pages]);
  useEffect(()=>()=>Object.values(displayUrls).forEach(url=>URL.revokeObjectURL(url)),[displayUrls]);
@@ -60,6 +104,73 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setNotice(`Đã giữ ${created.length} ảnh gốc trong ứng dụng. Kéo 4 điểm để chỉnh mép giấy.`);
   });
  };
+ /** Capture one immutable source JPEG, persist it, and only then detect edges.
+  * A failed edge detector must never lose the newly photographed page. */
+ const captureScanFrame=async()=>{
+  if(scanCaptureLock.current||!scanCameraReady)return;
+  if(scanSessionIdsRef.current.length>=30){setScanCameraError('Một lượt tối đa 30 trang. Bấm Xong để chỉnh và lưu, rồi quét tiếp.');return;}
+  const video=scanVideoRef.current;
+  if(!video||video.readyState<2||!video.videoWidth||!video.videoHeight){
+   setScanCameraError('Khung camera chưa có hình. Hãy thử chụp lại.');return;
+  }
+  scanCaptureLock.current=true;setScanCameraBusy(true);setScanCameraError('');
+  try{
+   const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+   const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không thể tạo khung ảnh scan');
+   ctx.drawImage(video,0,0,canvas.width,canvas.height);
+   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(
+    b=>b&&b.size?resolve(b):reject(Error('Camera không xuất được ảnh JPEG')),'image/jpeg',.94));
+   const id=newScanId(),date=Date.now();
+   const page:ScanPage={id,folderId:currentFolder==='*'?'':currentFolder,
+    name:`Scan_${new Date(date).toISOString().replace(/[:.]/g,'-')}_${scanSessionIdsRef.current.length+1}`,
+    original:blob,corners:emptyCorners(),filter:'enhance',createdAt:date,order:date+scanSessionIdsRef.current.length};
+   await putScan(page); // Mandatory transaction completion before showing success.
+   scanSessionIdsRef.current.push(id);setScanSessionIds([...scanSessionIdsRef.current]);
+   setPages(prev=>[...prev,page]);setScanCameraNotice(`Đã lưu ${scanSessionIdsRef.current.length} trang gốc`);
+   // Estimate corners after persistence. Edge-detection failure is nonfatal.
+   let saved=page;
+   try{
+    const detected=await suggestDocumentEdges(blob);
+    if(validCorners(detected.corners)){
+     saved={...page,corners:detected.corners};await putScan(saved);
+     setPages(prev=>prev.map(p=>p.id===id?saved:p));
+    }
+   }catch(error){console.warn('Không nhận diện được mép; giữ bản gốc:',error);}
+   if(scanMode==='single'){
+    setScanCameraOpen(false);
+    setSelection([id]);setEditingId(id);
+    setCornerDraft(saved.corners.map(p=>({...p})) as ScanCorners);
+    setFilterDraft(saved.filter);setShowResult(false);
+    setNotice('Đã chụp 1 trang. Kéo 4 góc rồi bấm Làm phẳng & lưu bản scan.');
+   }
+  }catch(error){setScanCameraError('Không lưu được ảnh quét. Chưa xóa dữ liệu cũ: '+String(error));}
+  finally{scanCaptureLock.current=false;setScanCameraBusy(false);}
+ };
+ const startScanCamera=()=>{
+  if(working)return;
+  scanSessionIdsRef.current=[];setScanSessionIds([]);
+  setScanCameraNotice('');setScanCameraError('');setScanCameraReady(false);
+  setScanMode('continuous');setCameraFacing('environment');setScanCameraOpen(true);
+ };
+ const finishScanCamera=()=>{
+  if(scanCaptureLock.current)return; // Don't interrupt an IndexedDB write.
+  const ids=[...scanSessionIdsRef.current];
+  setScanCameraOpen(false);
+  if(ids.length){
+   setSelection(ids);
+   const first=pages.find(p=>p.id===ids[0]);
+   if(first){setEditingId(first.id);setCornerDraft(first.corners.map(p=>({...p})) as ScanCorners);
+    setFilterDraft(first.filter);setShowResult(false);}
+   setNotice(`Đã lưu ${ids.length} trang gốc. Có thể chỉnh 4 góc từng trang rồi xuất PDF hoặc ảnh.`);
+  }
+ };
+ // After a capture session, show the chosen page rather than leaving the user
+ // at the long folder/list section above the editable four-corner preview.
+ useEffect(()=>{
+  if(scanCameraOpen||!editingId||!scanSessionIds.length)return;
+  const id=window.requestAnimationFrame(()=>document.querySelector('[data-hnl-scan-corners]')?.scrollIntoView({behavior:'smooth',block:'start'}));
+  return()=>window.cancelAnimationFrame(id);
+ },[scanCameraOpen,editingId,scanSessionIds.length]);
  const addFolder=async()=>{const name=folderName.trim();if(!name)return;await task('Đang tạo thư mục…',async()=>{
    if(folders.some(f=>f.name.toLocaleLowerCase()===name.toLocaleLowerCase()))throw Error('Tên thư mục đã tồn tại');
    const folder:ScanFolder={id:newScanId(),name:name.slice(0,70),createdAt:Date.now()};await putScanFolder(folder);
@@ -166,12 +277,51 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
        <div className="min-w-0"><h1 className="font-bold text-[17px] flex items-center gap-2"><ScanLine size={20} className="text-[#E2B74B]"/>Quét tài liệu</h1><p className="text-xs text-[#94A3B8]">Làm phẳng ảnh · Offline · Giữ ảnh gốc</p></div></div>
      <span className="text-xs text-[#E2B74B]">{pages.length} trang</span>
    </header>
+   {scanCameraOpen&&createPortal(
+    <div data-hnl-scan-camera="true" role="dialog" aria-modal="true" aria-label="Camera quét tài liệu"
+      className="fixed inset-0 z-[100] flex flex-col bg-[#030812] text-white" style={{paddingTop:'max(10px,env(safe-area-inset-top))',paddingBottom:'max(12px,env(safe-area-inset-bottom))'}}>
+      <div className="shrink-0 flex items-center justify-between gap-2 px-3 pb-2">
+        <button disabled={scanCameraBusy} type="button" aria-label="Đóng camera quét" onClick={finishScanCamera}
+          className="min-w-10 min-h-10 grid place-items-center rounded-xl bg-[#17253D] disabled:opacity-50"><X size={19}/></button>
+        <span className="font-semibold text-sm truncate">Quét tài liệu · {scanSessionIds.length} trang</span>
+        <button type="button" disabled={scanCameraBusy} aria-label="Đổi camera trước sau" onClick={()=>setCameraFacing(f=>f==='environment'?'user':'environment')}
+          className="min-w-10 min-h-10 grid place-items-center rounded-xl bg-[#17253D] disabled:opacity-50"><RotateCcw size={19}/></button>
+      </div>
+      <div className="shrink-0 px-3 pb-3 flex items-center justify-center gap-2">
+        <button type="button" disabled={scanCameraBusy} onClick={()=>setScanMode('single')} aria-pressed={scanMode==='single'}
+          className={`min-h-10 rounded-lg px-4 text-xs font-semibold border disabled:opacity-50 ${scanMode==='single'?'bg-[#E2B74B] text-[#06101E] border-[#E2B74B]':'bg-[#14243B] text-white border-white/15'}`}>Một trang</button>
+        <button type="button" disabled={scanCameraBusy} onClick={()=>setScanMode('continuous')} aria-pressed={scanMode==='continuous'}
+          className={`min-h-10 rounded-lg px-4 text-xs font-semibold border disabled:opacity-50 ${scanMode==='continuous'?'bg-[#E2B74B] text-[#06101E] border-[#E2B74B]':'bg-[#14243B] text-white border-white/15'}`}>Liên tục</button>
+      </div>
+      <div className="relative flex-1 min-h-0 mx-3 rounded-2xl border border-white/15 bg-black overflow-hidden flex items-center justify-center">
+        <video ref={scanVideoRef} autoPlay muted playsInline aria-label="Khung camera quét trực tiếp"
+          className="w-full h-full object-contain"/>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-[8%] rounded-xl border border-[#E2B74B]/65"/>
+        {!scanCameraReady&&!scanCameraError&&<span className="absolute text-sm text-white bg-black/70 rounded-lg px-3 py-2">Đang mở camera…</span>}
+        {scanCameraError&&<div role="alert" className="absolute inset-x-3 bottom-3 rounded-xl bg-[#531A21]/95 p-3 text-sm">
+          <p>{scanCameraError}</p>
+          <button type="button" className="mt-2 min-h-9 rounded-lg bg-white/15 px-3" onClick={()=>{setScanCameraOpen(false);cameraInput.current?.click();}}>Dùng camera hệ thống (dự phòng)</button>
+        </div>}
+      </div>
+      <div className="shrink-0 px-4 pt-3 space-y-2">
+        <p role="status" className="text-xs text-center text-[#AFC0D6] min-h-5">{scanCameraNotice||(scanMode==='continuous'?'Chụp liên tiếp, mỗi trang được lưu ngay.':'Chụp một trang rồi chỉnh mép giấy.')}</p>
+        <div className="flex items-center justify-between gap-4">
+          <span className="min-w-[72px] text-xs text-[#E2B74B]">{scanSessionIds.length} trang</span>
+          <button type="button" aria-label="Chụp trang tài liệu" onClick={()=>void captureScanFrame()}
+            disabled={scanCameraBusy||!scanCameraReady} className="size-[70px] shrink-0 rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
+            <span className="size-12 rounded-full bg-[#E2B74B]"/>
+          </button>
+          <button type="button" disabled={scanCameraBusy} onClick={finishScanCamera}
+            className="min-h-11 min-w-[78px] rounded-xl bg-[#17253D] px-3 text-xs font-semibold disabled:opacity-40">Xong</button>
+        </div>
+      </div>
+    </div>,document.body)}
    {problem&&<div role="alert" className="rounded-xl bg-red-950/60 border border-red-700/50 text-red-200 p-3 text-xs">{problem}</div>}
    {notice&&<div role="status" className="rounded-xl bg-[#102D2A] border border-emerald-800/40 text-emerald-200 p-3 text-xs">{notice}</div>}
    <div className="grid grid-cols-2 gap-2">
      <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={e=>{void importFiles(e.target.files);e.currentTarget.value='';}} />
      <input ref={importInput} type="file" accept="image/*" multiple hidden onChange={e=>{void importFiles(e.target.files);e.currentTarget.value='';}} />
-     <button disabled={working} onClick={()=>cameraInput.current?.click()} className="min-h-11 flex items-center justify-center gap-2 bg-[#E2B74B] text-[#071121] font-semibold rounded-xl disabled:opacity-50"><Camera size={18}/>Chụp quét</button>
+     <button disabled={working} onClick={startScanCamera} className="min-h-11 flex items-center justify-center gap-2 bg-[#E2B74B] text-[#071121] font-semibold rounded-xl disabled:opacity-50"><Camera size={18}/>Chụp quét</button>
      <button disabled={working} onClick={()=>importInput.current?.click()} className="min-h-11 flex items-center justify-center gap-2 bg-[#17253D] text-white rounded-xl disabled:opacity-50"><ImagePlus size={18}/>Chọn nhiều ảnh</button>
    </div>
    <div className="rounded-2xl border border-white/10 bg-[#0D1729] p-3 space-y-2">

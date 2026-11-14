@@ -53,6 +53,7 @@ jobs:
           python3 tests/test_studio19_ui_video_guard.py
           python3 tests/test_logo_fonts_test20.py
           python3 tests/test_document_scanner_source.py
+          python3 tests/test_document_scanner_live_camera.py
           python3 tests/test_studio21_simple_stamp_storage.py
           python3 tests/test_studio22_timemark_catalog.py
           python3 tests/test_studio23_rotation.py

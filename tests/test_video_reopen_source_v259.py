@@ -18,6 +18,6 @@ assert '--apk-photo-preview-height' in css
 assert 'preview-zoom-v259.css' in bundle and 'preview-zoom-v259.js' in bundle
 assert 'grid-template-columns:repeat(2,minmax(0,1fr))' in polish
 assert 'video-canvas-wrap::after{content:none' in polish
-assert "versionCode 2526" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2526'" in read('android/app/build.gradle')
+assert "versionCode 2527" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2527'" in read('android/app/build.gradle')
 print('PASS: video close/reopen flow, pinch camera, zoomable preview, crop/library alignment')
