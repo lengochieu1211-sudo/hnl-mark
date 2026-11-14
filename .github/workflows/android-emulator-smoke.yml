@@ -58,11 +58,42 @@ jobs:
             sleep 12
             adb shell pidof vn.hnl.xaydung.hnlmark.trial2514 | tee android-smoke-evidence/pid.txt
             adb exec-out screencap -p > android-smoke-evidence/studio-camera-emulator.png
+            # The Pixel_5 emulator is 1080x2340. Real camera button center:
+            # use screenshots as evidence instead of trusting button clicks alone.
+            adb shell input tap 540 2160
+            sleep 7
+            adb exec-out screencap -p > android-smoke-evidence/studio-after-shutter.png
+            adb shell ls -l /sdcard/Pictures/HNLMark > android-smoke-evidence/public-pictures.txt 2>&1 || true
+            if ! grep -Ei '\\.(jpg|jpeg|png)' android-smoke-evidence/public-pictures.txt; then
+              echo 'FAIL: shutter did not create an image in Pictures/HNLMark'
+              cat android-smoke-evidence/public-pictures.txt
+              exit 1
+            fi
+            echo 'PASS: camera capture saved a real public device image' > android-smoke-evidence/capture-result.txt
+            adb shell settings put system accelerometer_rotation 0
+            adb shell settings put system user_rotation 1
+            sleep 5
+            adb exec-out screencap -p > android-smoke-evidence/studio-landscape-right.png
+            adb shell settings put system user_rotation 3
+            sleep 5
+            adb exec-out screencap -p > android-smoke-evidence/studio-landscape-left.png
+            adb shell settings put system user_rotation 0
+            python3 - <<'PY'
+from PIL import Image
+from pathlib import Path
+p=Path('android-smoke-evidence')
+for name in ['studio-landscape-right.png','studio-landscape-left.png']:
+    im=Image.open(p/name)
+    print(name,im.size)
+    if im.width <= im.height:
+        raise SystemExit('FAIL: emulator screenshot not landscape: '+name)
+print('PASS: emulator screen rotates into both landscape directions')
+PY
             adb logcat -d -t 1200 > android-smoke-evidence/logcat.txt
             adb shell dumpsys window windows > android-smoke-evidence/windows.txt
             python3 -c "from PIL import Image; im=Image.open('android-smoke-evidence/studio-camera-emulator.png').convert('RGB'); assert im.width>=320 and im.height>=480; print('PASS: emulator screenshot',im.size)"
             if grep -q 'Process: vn.hnl.xaydung.hnlmark.trial2514' android-smoke-evidence/logcat.txt && grep -q 'FATAL EXCEPTION' android-smoke-evidence/logcat.txt; then echo 'FAIL: app crash detected'; exit 1; fi
-            echo 'Emulator APP PROCESS + screenshot + logcat smoke PASS; this is NOT physical Xiaomi runtime verification.' > android-smoke-evidence/RESULT.txt
+            echo 'Emulator app boot + camera preview + shutter saved to Pictures/HNLMark + both landscape screenshot smoke PASS; physical Xiaomi camera/video/share still PENDING.' > android-smoke-evidence/RESULT.txt
       - name: Upload emulator screen and runtime logs
         if: always()
         uses: actions/upload-artifact@v4
