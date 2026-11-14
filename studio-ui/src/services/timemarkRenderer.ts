@@ -25,10 +25,13 @@ export async function prepareTimemarkFont(key:WatermarkFontKey):Promise<void>{
 }
 /** Stable per-file visual serial; this is a display code, not cryptographic authentication. */
 export function createTimemarkCode():string{
- const values=new Uint32Array(2);
+ const values=new Uint32Array(1);
  if(typeof crypto!=='undefined'&&crypto.getRandomValues)crypto.getRandomValues(values);
- else{values[0]=Math.floor(Math.random()*0xFFFFFFFF);values[1]=Math.floor(Math.random()*0xFFFFFFFF);}
- return (Date.now().toString(36).toUpperCase()+Array.from(values,v=>v.toString(36).toUpperCase().padStart(7,'0')).join('')).slice(0,22);
+ else values[0]=Math.floor(Math.random()*0xFFFFFFFF);
+ // The vertical ID is 14 characters; the separate "Timemark Verified" caption stays.
+ const timePart=Date.now().toString(36).toUpperCase().padStart(9,'0').slice(-9);
+ const randomPart=values[0].toString(36).toUpperCase().padStart(7,'0').slice(-5);
+ return timePart+randomPart;
 }
 function ellipsis(g:CanvasRenderingContext2D,s:string,max:number){
  let t=String(s||'').replace(/\s+/g,' ').trim();
@@ -80,17 +83,36 @@ export function drawOriginalTimemark(
    rect(g,x-base*.28,y-base*.35,maxW+base*.5,blockH+base*.45,base*.22);g.fill();
  }
  g.shadowColor='rgba(0,0,0,.74)';g.shadowBlur=base*.19;g.shadowOffsetY=base*.095;
- g.font=font(fontTime,900,config.fontKey);
- const raw=g.measureText(time).width;
- const squeeze=Math.min(.66,Math.max(base,maxW*.40)/Math.max(raw,1));
- const painted=raw*squeeze;
- g.fillStyle=white;g.save();g.translate(x,y+firstH*.87);g.scale(squeeze,1);g.fillText(time,0,0);g.restore();
+ // Align the visible upper/lower edges of the large time glyphs to the
+ // complete two-line date + weekday block; the gold divider spans that exact height.
+ // Measure actual glyph bounds instead of using an independent bar/clock multiplier.
+ const dateBaseline=y+firstH*.47,weekBaseline=y+firstH*.90;
+ const weekdayText=weekdays[date.getDay()];
+ const measure=(value:string,size:number)=>{
+   const m=g.measureText(value);
+   return {
+     width:m.width,
+     ascent:Number.isFinite(m.actualBoundingBoxAscent)&&m.actualBoundingBoxAscent>0?m.actualBoundingBoxAscent:size*.78,
+     descent:Number.isFinite(m.actualBoundingBoxDescent)&&m.actualBoundingBoxDescent>=0?m.actualBoundingBoxDescent:size*.15,
+   };
+ };
+ g.font=font(fDate,400,config.fontKey);const dateGlyph=measure(dateText,fDate);
+ g.font=font(fWeek,400,config.fontKey);const weekGlyph=measure(weekdayText,fWeek);
+ const textTop=Math.min(dateBaseline-dateGlyph.ascent,weekBaseline-weekGlyph.ascent);
+ const textBottom=Math.max(dateBaseline+dateGlyph.descent,weekBaseline+weekGlyph.descent);
+ const pairedHeight=Math.max(1,textBottom-textTop);
+ g.font=font(fontTime,900,config.fontKey);const timeGlyph=measure(time,fontTime);
+ const scaleY=pairedHeight/Math.max(1,timeGlyph.ascent+timeGlyph.descent);
+ const squeeze=Math.min(.66,Math.max(base,maxW*.40)/Math.max(timeGlyph.width,1));
+ const painted=timeGlyph.width*squeeze;
+ g.fillStyle=white;g.save();
+ g.translate(x,textBottom-timeGlyph.descent*scaleY);g.scale(squeeze,scaleY);g.fillText(time,0,0);g.restore();
  const barX=x+painted+base*.86;
  g.save();g.shadowColor='transparent';g.shadowBlur=0;g.shadowOffsetY=0;g.fillStyle=gold;
- rect(g,barX,y+base*.20,Math.max(2,base*.105),firstH-base*.29,base*.04);g.fill();g.restore();
+ rect(g,barX,textTop,Math.max(2,base*.105),pairedHeight,base*.04);g.fill();g.restore();
  const dateX=barX+base*.74,avail=Math.max(base,W-dateX-padx-W*.025);
- g.fillStyle=white;g.font=font(fDate,400,config.fontKey);g.fillText(ellipsis(g,dateText,avail),dateX,y+firstH*.47);
- g.font=font(fWeek,400,config.fontKey);g.fillText(ellipsis(g,weekdays[date.getDay()],avail),dateX,y+firstH*.90);
+ g.fillStyle=white;g.font=font(fDate,400,config.fontKey);g.fillText(ellipsis(g,dateText,avail),dateX,dateBaseline);
+ g.font=font(fWeek,400,config.fontKey);g.fillText(ellipsis(g,weekdayText,avail),dateX,weekBaseline);
  let cursor=y+firstH;
  if(address){cursor+=gap+base*.30;g.font=font(fAddress,400,config.fontKey);g.fillText(ellipsis(g,address,Math.min(maxW,W*.73)),x,cursor+fAddress*1.03);cursor+=locH;}
  for(const note of comments){g.font=font(base*.79,400,config.fontKey);g.fillText(ellipsis(g,note,maxW),x,cursor+base*.77);cursor+=base*1.08;}
@@ -113,16 +135,21 @@ export function drawOriginalTimemark(
  g.restore();
  // Original separate vertical code, in bounds even after 90°/180° rotation.
  if(config.showPhotoCode){
- const rawCode=codeOverride||`X${String(date.getTime().toString(36)).toUpperCase().padStart(10,'0')}${String(config.photoCodeSeq.toString(36)).toUpperCase().padStart(5,'0')}`;
- const cleanCode=rawCode.replace(/^HNL(?:[-_: ]+)/i,'');
+ // Older saved IDs remain untouched in storage; only their displayed code is
+ // normalized to 14 characters. Never truncate the "Timemark Verified" caption.
+ const fallbackCode=`${Math.max(0,date.getTime()).toString(36).toUpperCase().padStart(9,'0').slice(-9)}${Math.max(0,config.photoCodeSeq||0).toString(36).toUpperCase().padStart(5,'0').slice(-5)}`;
+ const rawCode=codeOverride||fallbackCode;
+ const cleanCode=String(rawCode).replace(/^HNL(?:[-_: ]+)/i,'').replace(/[^A-Za-z0-9]/g,'').toUpperCase().slice(0,14).padEnd(14,'0');
  const label=`${cleanCode} Timemark Verified`;
  const f=base*.58;
  g.save();g.textBaseline='middle';g.textAlign='center';g.font=font(f,400,config.fontKey);
- const text=ellipsis(g,label,Math.max(10,H*.76)),len=g.measureText(text).width;
+ const fullLen=g.measureText(label).width;
+ const labelScale=Math.min(1,Math.max(10,H*.76)/Math.max(1,fullLen));
+ const len=fullLen*labelScale;
  const vx=clamp(.981*W,Math.max(7,f*.8),W-Math.max(7,f*.45));
  const vy=clamp(.43*H,Math.max(8,len*.5+f*1.5),Math.max(len*.5+f*1.5,H-len*.5-f*1.5));
  g.translate(vx,vy);g.rotate(-Math.PI/2);g.shadowColor='rgba(0,0,0,.84)';g.shadowBlur=f*.27;
- g.fillStyle='#ffffff';g.fillText(text,0,0);
+ g.fillStyle='#ffffff';g.save();g.scale(labelScale,1);g.fillText(label,0,0);g.restore();
  g.translate(-len*.5-f*.84,0);shield(g,f*.68,'#ffffff');g.restore();
  }
  drawWatermarkLogo(g,W,H,config,logo);
