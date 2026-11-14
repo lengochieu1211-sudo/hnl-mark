@@ -23,3 +23,10 @@ print('PASS: thumbnail -> camera roll, real stored photos, swipe, thumbnails, no
 assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={0} />' in camera
 assert 'disabled={isRecording || isFinalizing}' in camera
 print('PASS: watermark preview follows display naturally, no gallery during pending recording')
+
+java=read('android/app/src/main/java/vn/hnl/xaydung/hnlmark/MainActivity.java')
+assert 'if (s.destination.startsWith(Environment.DIRECTORY_DOWNLOADS + "/"))' in java
+assert 'toast("Đã lưu vào " + s.destination);' in java  # Explicit ZIP download only.
+assert 'const newestFirst=[...items].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));' in app
+assert 'setMediaItems(newestFirst)' in app
+print('PASS: no per-shutter Android Toast; newest captured photo first after library restart')

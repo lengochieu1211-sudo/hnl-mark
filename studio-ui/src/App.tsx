@@ -84,7 +84,10 @@ export default function App() {
   const emptyPreview:MediaItem={id:'no-media',title:'Ảnh minh họa (chưa chọn ảnh)',kind:'photo',origin:'newly-picked',url:'./demo-camera-rear.jpg',createdAt:formatLocalIsoNow(),resolutionLabel:'Chưa có ảnh',sizeLabel:'—',location:'',coordinates:'',photoCode:'',customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
   useEffect(()=>{
     let alive=true;loadMedia().then(items=>{
-      if(!alive)return;setMediaItems(items);if(items[0])setActiveMediaId(items[0].id);
+      if(!alive)return;
+      const newestFirst=[...items].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+      setMediaItems(newestFirst);
+      if(newestFirst[0])setActiveMediaId(newestFirst[0].id);
     }).catch(err=>{console.error('Không đọc được thư viện:',err);}).finally(()=>{if(alive)setLibraryReady(true);});
     return ()=>{alive=false};
   },[]);

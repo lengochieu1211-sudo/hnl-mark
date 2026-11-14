@@ -673,7 +673,11 @@ public final class MainActivity extends Activity {
             done.put(MediaStore.MediaColumns.IS_PENDING, 0);
             if (getContentResolver().update(s.uri, done, null, null) < 1)
                 throw new IOException("MediaStore finalization rejected");
-            toast("Đã lưu vào " + s.destination);
+            // The camera already confirms capture through shutter/thumbnail. Do not show
+            // a blocking native Toast for every photo/video, especially burst shooting.
+            // Explicit ZIP/download saves still get a completion toast.
+            if (s.destination.startsWith(Environment.DIRECTORY_DOWNLOADS + "/"))
+                toast("Đã lưu vào " + s.destination);
             return true;
         } catch (Exception e) {
             try { s.stream.close(); } catch (Exception ignored) {}

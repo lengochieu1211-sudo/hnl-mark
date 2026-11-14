@@ -13,3 +13,10 @@
 
 ## Trạng thái kiểm chứng
 Kiểm tra source/regression tĩnh tại local PASS. Android runtime trên Redmi thật và MediaStore thực tế vẫn PENDING. Không tự ý update main/production, không gỡ bản cũ hoặc xoá dữ liệu.
+
+
+BỔ SUNG 14/11/2026 — UX chụp ảnh:
+- Native MainActivity.finishSession không còn Toast “Đã lưu vào Pictures/HNLMark” hoặc Movies/HNLMark mỗi lần camera tự lưu. Lưu ZIP ở Downloads/HNLMark vẫn có thông báo xác nhận.
+- React loadMedia() sắp xếp mới nhất theo createdAt trước khi đưa ảnh ra ô thumbnail, kể cả sau khởi động lại APK.
+- Chụp xong vẫn ở camera; bấm thumbnail vào CameraRollScreen, vuốt trái/phải, xem ảnh lớn + dải ảnh dưới, có nút Trở về camera.
+- Lỗi ghi IndexedDB/MediaStore vẫn được báo riêng. Không xóa/ghi đè dữ liệu cũ.
