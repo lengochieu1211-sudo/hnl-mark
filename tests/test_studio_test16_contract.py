@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TEST16 cross-module safety contracts; Android device QA still mandatory."""
+"""TEST17 cross-module safety contracts; Android device QA still mandatory."""
 from pathlib import Path
 R=Path(__file__).resolve().parents[1]
 read=lambda p:(R/p).read_text(encoding='utf-8')
@@ -28,7 +28,7 @@ assert 'Lưu ảnh / video có dấu vào máy' in exp and 'Chia sẻ ảnh / vi
 assert 'Tệp gốc và sao lưu · Tùy chọn nâng cao' in exp
 assert 'stampedBlob:item.stampedBlob' in storage
 assert 'stampedName' in backup and "zip.file(stampedName,stampedBlob" in backup
-assert 'ARTWORK_SIZE = 270' in icon and 'BACKGROUND_RGB = (8, 20, 38)' in icon
-assert 'versionCode 2516' in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2516'" in read('android/app/build.gradle')
-print('PASS: TEST16 stamped photo/video, protected originals, pause/resume, spot metering and icon')
+assert 'LEGACY_RATIO = 0.98' in icon and 'BACKGROUND_RGB' not in icon
+assert 'versionCode 2517' in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2517'" in read('android/app/build.gradle')
+print('PASS: TEST17 stamped photo/video, protected originals, pause/resume, spot metering and icon')

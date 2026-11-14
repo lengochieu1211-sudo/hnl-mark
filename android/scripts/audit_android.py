@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"fullUser\"" in manifest
-assert "versionCode 2516" in gradle and "versionName '2.5.16-studio-test'" in gradle
+assert "versionCode 2517" in gradle and "versionName '2.5.17-studio-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -89,7 +89,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.16-studio-test'" in bridge
+assert "version:'2.5.17-studio-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -106,9 +106,12 @@ assert 'android:icon="@mipmap/ic_launcher"' in manifest
 assert '@mipmap/ic_launcher' in manifest
 assert 'android:screenOrientation="fullUser"' in manifest
 assert 'original_full_color_image(root)' in launcher and '_cut_out_neutral_plate' not in launcher
-assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
-assert (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()
-assert 'hnlmark_icon_bg' in r("android/app/src/main/res/values/colors.xml")
+assert 'LEGACY_RATIO = 0.98' in launcher
+assert 'Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))' in launcher
+assert not (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()
+assert 'android:roundIcon="@mipmap/ic_launcher_round"' in manifest
+for density in ('mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'):
+    assert (root/f"android/app/src/main/res/mipmap-{density}/ic_launcher.png").exists(),density
 for token in ('apk-camera-topbar','apk-grid-toggle','syncCameraToolbar',
               'wrapModeLabels','apk-rotate-label'):
     assert token in camera_js,token
@@ -123,20 +126,18 @@ for file in ('android-camera-v25.css','android-camera-v25.js',
              'android-select-v25.css','android-select-v25.js',
              'android-ux-v251.css','android-ux-v251.js'):
     assert (root/"android/app/src/main/assets/www"/file).exists(),file
-assert (root/"android/app/src/main/res/drawable/hnlmark_foreground.png").exists()
-assert (root/"android/app/src/main/res/drawable/hnlmark_icon.png").exists()
+assert not (root/"android/app/src/main/res/drawable/hnlmark_foreground.png").exists()
+assert not (root/"android/app/src/main/res/drawable/hnlmark_icon.png").exists()
 
 # v2.5.1: Android launcher, orientation, camera shutter and compact UX.
 ux=r("android/android-ux-v251.js")
 uxcss=r("android/android-ux-v251.css")
 camera_core=r("android/android-camera-v25.js")
 assert 'OUTER_PADDING = 19' in launcher
-assert "icon = _centered_art(original, CANVAS, ARTWORK_SIZE)" in launcher
-assert "ARTWORK_SIZE = 270" in launcher
-assert "BACKGROUND_RGB = (8, 20, 38)" in launcher
-assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
-assert 'android:drawable="@drawable/hnlmark_icon"' in r("android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
-assert "#FFFFFF" in r("android/app/src/main/res/values/colors.xml")
+assert "icon = _centered_art(original, size, visible)" in launcher
+assert "LEGACY_RATIO = 0.98" in launcher
+assert 'no black/white border layer' in launcher
+assert not (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()
 assert "apkImportHint" not in bridge
 assert "body.hnl-android-apk .editor .library-note" in r("android/android-ui.css")
 assert "body.hnl-android-apk .editor #photoHint" in r("android/android-ui.css")
@@ -157,10 +158,10 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial2516'" in gradle
-assert "HNLMark STUDIO 16" in gradle
+assert "applicationIdSuffix '.trial2517'" in gradle
+assert "HNLMark STUDIO 17" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.16" in ux
+assert "TEST v2.5.17" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 
@@ -216,7 +217,7 @@ polish_css=r("android/android-polish-v257.css")
 polish_js=r("android/android-polish-v257.js")
 core_controls=r("camera-controls.js")
 assert 'OUTER_PADDING = 19' in launcher
-assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
+assert 'icon.save(folder / "ic_launcher.png")' in launcher
 assert 'dock:$(' in photo and "dock:studio.querySelector('.video-ios-controls')" in video
 assert 'getDigitalZoom' in core_controls and 'hnl-camera-dock-adjust' in core_controls
 assert 'digitalZoom' in photo and 'digitalZoom' in video
