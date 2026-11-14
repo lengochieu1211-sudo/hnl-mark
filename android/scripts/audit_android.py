@@ -239,4 +239,4 @@ assert 'cameraOpenGeneration' in video and "selectedMedia='photo';updateMediaPic
 assert 'isVideoSelected' in video and 'isVideoSelected' in photo
 assert 'dock&&!apk' in core_controls and '&&caps.zoom' not in core_controls
 assert 'grid-template-columns:repeat(2,minmax(0,1fr))' in polish_css
-assert 'DENSITIES =' in launcher and 'background.save' in launcher and 'ImageFilter' not in launcher
+assert 'DENSITIES =' in launcher and 'icon.save(folder / "ic_launcher.png")' in launcher and 'ImageFilter' not in launcher
