@@ -1,0 +1,73 @@
+name: HNLMark Android Emulator UI smoke (DEV)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/android-emulator-smoke.yml'
+      - 'studio-ui/**'
+      - 'android/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  emulator-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Pillow and React UI dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check pillow==11.1.0
+          npm install --prefix studio-ui --no-audit --no-fund
+      - name: Enable hardware virtualization for Android Emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run Android TEST14 APK in clean API 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: '-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim'
+          disable-animations: true
+          script: |
+            mkdir -p android-smoke-evidence
+            python3 android/scripts/package_web.py
+            python3 android/scripts/audit_android.py
+            (cd android && gradle :app:assembleDebug --no-daemon)
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm grant vn.hnl.xaydung.hnlmark.trial2514 android.permission.CAMERA
+            adb shell pm grant vn.hnl.xaydung.hnlmark.trial2514 android.permission.RECORD_AUDIO
+            adb shell am start -W -n vn.hnl.xaydung.hnlmark.trial2514/vn.hnl.xaydung.hnlmark.MainActivity
+            sleep 12
+            adb shell pidof vn.hnl.xaydung.hnlmark.trial2514 | tee android-smoke-evidence/pid.txt
+            adb exec-out screencap -p > android-smoke-evidence/studio-camera-emulator.png
+            adb logcat -d -t 1200 > android-smoke-evidence/logcat.txt
+            adb shell dumpsys window windows > android-smoke-evidence/windows.txt
+            python3 -c "from PIL import Image; im=Image.open('android-smoke-evidence/studio-camera-emulator.png').convert('RGB'); assert im.width>=320 and im.height>=480; print('PASS: emulator screenshot',im.size)"
+            if grep -q 'Process: vn.hnl.xaydung.hnlmark.trial2514' android-smoke-evidence/logcat.txt && grep -q 'FATAL EXCEPTION' android-smoke-evidence/logcat.txt; then echo 'FAIL: app crash detected'; exit 1; fi
+            echo 'Emulator APP PROCESS + screenshot + logcat smoke PASS; this is NOT physical Xiaomi runtime verification.' > android-smoke-evidence/RESULT.txt
+      - name: Upload emulator screen and runtime logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HNLMark-STUDIO14-EMULATOR-EVIDENCE
+          path: android-smoke-evidence/
+          if-no-files-found: warn
+          retention-days: 30
