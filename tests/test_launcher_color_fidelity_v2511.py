@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = (ROOT/'android/scripts/make_launcher_icon.py').read_text(encoding='utf-8')
 assert 'original_full_color_image' in SCRIPT
 assert 'OUTER_PADDING = 19' in SCRIPT
+assert 'ARTWORK_SIZE = 270' in SCRIPT
+assert 'LEGACY_RATIO = 0.95' in SCRIPT
 assert '_cut_out_neutral_plate' not in SCRIPT and 'ImageFilter' not in SCRIPT
 assert 'art.putalpha' not in SCRIPT and 'saturation' not in SCRIPT
 spec = importlib.util.spec_from_file_location('hnl_launcher', ROOT/'android/scripts/make_launcher_icon.py')
@@ -39,6 +41,7 @@ with tempfile.TemporaryDirectory(prefix='hnl_launcher_safe_') as tmp:
     assert image.getpixel((0,0))[3] == 0 and image.getpixel((W-1,W-1))[3] == 0
     background=Image.open(Path(tmp)/'res/drawable/hnlmark_icon.png').convert('RGBA')
     assert background.getpixel((0,0))[:3]==module.BACKGROUND_RGB
+    assert module.BACKGROUND_RGB == (8, 20, 38)  # no pale/white adaptive border
     # Android's 108dp canvas exposes center ~72dp. Both MIUI squircle and the
     # stricter circular mask must not clip BLUE/GOLD (non-neutral) artwork.
     lo=(W-module.VISIBLE_DIAMETER)//2
@@ -53,10 +56,15 @@ with tempfile.TemporaryDirectory(prefix='hnl_launcher_safe_') as tmp:
         for y in range(first,first+S):
             for x in range(first,first+S):
                 r,g,b,a=artpix[x,y]
-                if a>240 and ((max(r,g,b)-min(r,g,b)>55 and min(r,g,b)<220) or max(r,g,b)<160):
+                # HNL text and camera stay inside all OEM masks. Decorative bottom
+                # gold may be naturally trimmed by circular mask, not the logo.
+                source_y=(y-first+.5)/S*474+19
+                source_x=(x-first+.5)/S*474+19
+                core=(source_y<310 and source_x>60) or (310<=source_y<429 and 265<source_x<460)
+                if a>240 and core and ((max(r,g,b)-min(r,g,b)>55 and min(r,g,b)<220) or max(r,g,b)<160):
                     colored+=1
-                    assert visible[x,y]>0, f'{mask_type} clips HNL blue/gold at {(x,y)}'
-        assert colored>12000
+                    assert visible[x,y]>0, f'{mask_type} clips core HNL artwork at {(x,y)}'
+        assert colored>9000
     for density,size in module.DENSITIES:
         legacy_size=round(size*module.LEGACY_RATIO)
         start=(size-legacy_size)//2
@@ -70,4 +78,4 @@ with tempfile.TemporaryDirectory(prefix='hnl_launcher_safe_') as tmp:
             actual=Image.open(Path(tmp)/f'res/mipmap-{density}'/name).convert('RGBA')
             assert actual.size==(size,size)
             assert ImageChops.difference(actual.crop((start,start,start+legacy_size,start+legacy_size)),expected_bg).getbbox() is None,(density,name)
-    print('PASS: HNL pixel colors original, icon no corner clipping under circular/squircle mask')
+    print('PASS: full-bleed HNL launcher navy background, core logo/camera safe inside MIUI masks')

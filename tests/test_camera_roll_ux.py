@@ -20,8 +20,8 @@ assert "if(route==='review'){setRoute('camera');return true;}" in app
 assert 'onOpenLegacyCamera' not in camera
 print('PASS: thumbnail -> camera roll, real stored photos, swipe, thumbnails, no save-success toast, native picker preserved in library')
 
-assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={0} />' in camera
-assert 'disabled={isRecording || isFinalizing}' in camera
+assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={isLandscapeViewport?0:orientationDeg} />' in camera
+assert 'disabled={isRecording || isRecordingStarting || isFinalizing}' in camera
 print('PASS: watermark preview follows display naturally, no gallery during pending recording')
 
 java=read('android/app/src/main/java/vn/hnl/xaydung/hnlmark/MainActivity.java')

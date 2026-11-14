@@ -11,15 +11,15 @@ from PIL import Image, ImageDraw
 
 CANVAS = 432
 # On the 432px adaptive canvas the Android visible window is ~288px centered.
-# Size 220px protects original dark blue lettering and gold flourish even under
-# a central circular 288px mask, while occupying ~76% of the visible icon.
-ARTWORK_SIZE = 220
+# Size 270px fills 94% of the visible 288px mask; HNL letters and camera remain
+# intact while OEM masks may trim only the outer decorative gold rim.
+ARTWORK_SIZE = 270
 VISIBLE_DIAMETER = 288
 OUTER_PADDING = 19
 DENSITIES = (("mdpi", 48), ("hdpi", 72), ("xhdpi", 96),
              ("xxhdpi", 144), ("xxxhdpi", 192))
-BACKGROUND_RGB = (248, 241, 234)  # warm off-white matches neutral original background
-LEGACY_RATIO = 0.82
+BACKGROUND_RGB = (8, 20, 38)  # warm off-white matches neutral original background
+LEGACY_RATIO = 0.95
 
 
 def original_full_color_image(root: Path) -> Image.Image:

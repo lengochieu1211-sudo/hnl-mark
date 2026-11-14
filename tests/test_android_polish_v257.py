@@ -5,8 +5,8 @@ from PIL import Image
 import sys
 root=Path(__file__).resolve().parents[1]
 s=lambda file:(root/file).read_text(encoding='utf-8')
-assert "versionName '2.5.15-studio-test'" in s('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2515'" in s('android/app/build.gradle')
+assert "versionName '2.5.16-studio-test'" in s('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2516'" in s('android/app/build.gradle')
 assert 'dock&&!apk' in s('camera-controls.js')
 assert 'getDigitalZoom' in s('camera-controls.js')
 assert 'drawSource' in s('app.js') and 'drawSource' in s('video.js')
@@ -18,7 +18,7 @@ fg=Image.open(root/'android/app/src/main/res/drawable/hnlmark_foreground.png').c
 assert fg.size==(432,432)
 # TEST 13 uses an inset, pixel-faithful image; transparent OUTSIDE the source,
 # never selectively transparent white/silver pixels inside the original art.
-assert fg.getchannel('A').getbbox() == (106,106,326,326)
+assert fg.getchannel('A').getbbox() == (81,81,351,351)
 assert fg.getpixel((0,0))[3]==0 and fg.getpixel((431,431))[3]==0
 assert fg.getpixel((216,216))[3]==255
 print('PASS: MIUI safe adaptive icon, photo/video zoom crop, compact APK controls')

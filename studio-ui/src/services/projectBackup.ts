@@ -2,7 +2,7 @@
 import JSZip from 'jszip';
 import type {MediaItem} from '../types/hnl';
 import {storeMedia} from './mediaStorage';
-interface Entry {name:string;mime:string;size:number;meta:Omit<MediaItem,'rawBlob'|'url'>}
+interface Entry {name:string;mime:string;size:number;stampedName?:string;meta:Omit<MediaItem,'rawBlob'|'stampedBlob'|'url'>}
 const MAX_ARCHIVE_BYTES=512*1024*1024;
 export async function createProjectZip(items:MediaItem[]):Promise<Blob>{
  const zip=new JSZip();const manifest:{app:string,format:number,createdAt:string,items:Entry[]}={app:'HNLMark',format:1,createdAt:new Date().toISOString(),items:[]};let total=0;
@@ -10,8 +10,14 @@ export async function createProjectZip(items:MediaItem[]):Promise<Blob>{
  total+=blob.size;if(total>MAX_ARCHIVE_BYTES)throw Error('Dự án vượt 512MB, hãy chia ra các ZIP nhỏ để không tràn bộ nhớ.');
  const ext=blob.type.startsWith('video/')?(blob.type.includes('mp4')?'mp4':'webm'):blob.type.includes('png')?'png':'jpg';
  const name=`media/${manifest.items.length.toString().padStart(4,'0')}.${ext}`;
- const {rawBlob,url,...meta}=item;void rawBlob;void url;
- zip.file(name,blob,{compression:'STORE'});manifest.items.push({name,mime:blob.type,size:blob.size,meta});
+ const {rawBlob,stampedBlob,url,...meta}=item;void rawBlob;void url;
+ let stampedName: string|undefined;
+ if(stampedBlob?.size){
+   total+=stampedBlob.size;if(total>MAX_ARCHIVE_BYTES)throw Error('Dự án vượt 512MB, chia ZIP nhỏ hơn.');
+   stampedName=`media/${manifest.items.length.toString().padStart(4,'0')}_stamped.jpg`;
+   zip.file(stampedName,stampedBlob,{compression:'STORE'});
+ }
+ zip.file(name,blob,{compression:'STORE'});manifest.items.push({name,mime:blob.type,size:blob.size,stampedName,meta});
  }
  zip.file('manifest.json',JSON.stringify(manifest,null,2));
  return zip.generateAsync({type:'blob',compression:'STORE'});
@@ -29,7 +35,14 @@ export async function restoreProjectZip(zipBlob:Blob):Promise<MediaItem[]>{
  const bytes=await data.async('uint8array');sum+=bytes.byteLength;if(bytes.byteLength!==entry.size||sum>MAX_ARCHIVE_BYTES)throw Error('Kích thước media không hợp lệ');
  const raw=new ArrayBuffer(bytes.byteLength);new Uint8Array(raw).set(bytes);
  const blob=new Blob([raw],{type:entry.mime});const id=`restored-${Date.now()}-${loaded.length}-${Math.random().toString(36).slice(2,6)}`;
- const media={...entry.meta,id,rawBlob:blob,url:URL.createObjectURL(blob)} as MediaItem;
+ let stamped:Blob|undefined;
+ if(entry.stampedName){
+   if(!/^media\/\d{4}_stamped\.jpg$/.test(entry.stampedName))throw Error('Tệp dấu sai tên');
+   const file=zip.file(entry.stampedName);if(!file)throw Error('Thiếu ảnh có dấu');
+   stamped=new Blob([await file.async('arraybuffer')],{type:'image/jpeg'});
+   sum+=stamped.size;if(sum>MAX_ARCHIVE_BYTES)throw Error('Vượt giới hạn giải nén');
+ }
+ const media={...entry.meta,id,rawBlob:blob,stampedBlob:stamped,url:URL.createObjectURL(stamped||blob)} as MediaItem;
  await storeMedia(media);loaded.push(media);
  }
  return loaded;

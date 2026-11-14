@@ -119,7 +119,7 @@ export function loadTimemarkLogo():Promise<HTMLImageElement|undefined>{
    logo.src='./hnl-logo-192.png';
  });
 }
-export async function createTimemarkPhoto(source:Blob,config:WatermarkConfig,photoCode?:string):Promise<Blob>{
+export async function createTimemarkPhoto(source:Blob,config:WatermarkConfig,photoCode?:string,orientation:OrientationDeg=0):Promise<Blob>{
  const bitmap=await createImageBitmap(source);
  try{
    const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
@@ -127,7 +127,7 @@ export async function createTimemarkPhoto(source:Blob,config:WatermarkConfig,pho
    ctx.drawImage(bitmap,0,0);
    if(config.templateId!=='none'){
      const logo=config.showLogo?await loadTimemarkLogo():undefined;
-     drawOriginalTimemark(ctx,canvas.width,canvas.height,config,0,photoCode,logo);
+     drawOriginalTimemark(ctx,canvas.width,canvas.height,config,orientation,photoCode,logo);
    }
    return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Không kết xuất được JPEG')),'image/jpeg',clamp(config.jpegQuality/100,.5,1)));
  }finally{bitmap.close();}

@@ -27,6 +27,7 @@ import { ViewportTesterModal } from './components/qa/ViewportTesterModal';
 import {storeMedia,loadMedia,removeMedia} from './services/mediaStorage';
 import {restoreProjectZip} from './services/projectBackup';
 import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
+import { createTimemarkPhoto } from './services/timemarkRenderer';
 
 function formatLocalIsoNow(): string {
   const now = new Date();
@@ -137,13 +138,25 @@ export default function App() {
 
   // Never show a captured original as safely saved before IndexedDB commits.
   const handleCapturePhoto = async(newPhoto:MediaItem):Promise<void>=>{
+    // First commit the original so a failed stamp/export never destroys the shutter result.
     await storeMedia(newPhoto);
-    setMediaItems(prev=>[newPhoto,...prev]);
-    setActiveMediaId(newPhoto.id);
+    let item=newPhoto;
+    try{
+      const config=newPhoto.captureWatermark||watermarkConfig;
+      if(!['timemark','none'].includes(config.templateId))throw Error('Mẫu dấu này chưa hỗ trợ xuất ảnh thật. Hãy chọn Timemark.');
+      if(!newPhoto.rawBlob)throw Error('Không có ảnh gốc để tạo dấu');
+      const stamped=await createTimemarkPhoto(newPhoto.rawBlob,config,newPhoto.photoCode,newPhoto.orientationDeg||0);
+      item={...newPhoto,stampedBlob:stamped,isStamped:config.templateId!=='none',url:URL.createObjectURL(stamped)};
+      await storeMedia(item);
+    }catch(e){
+      alert('Ảnh gốc đã được giữ trong Thư viện HNL nhưng CHƯA lưu ảnh có dấu: '+String(e));
+    }
+    setMediaItems(prev=>[item,...prev]);
+    setActiveMediaId(item.id);
     setWatermarkConfig(prev=>({...prev,photoCodeSeq:prev.photoCodeSeq+1}));
-    if(isAndroidApk()&&newPhoto.rawBlob){
-      try{await saveToDevice(newPhoto.rawBlob,`HNLMark_Original_${Date.now()}.jpg`);}
-      catch(e){alert('Ảnh gốc vẫn lưu trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
+    if(isAndroidApk()&&item.stampedBlob&&item.isStamped){
+      try{await saveToDevice(item.stampedBlob,`HNLMark_Timemark_${Date.now()}.jpg`);}
+      catch(e){alert('Ảnh có dấu còn trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
     }
   };
   const handleSaveVideo = async(newVideo:MediaItem):Promise<void>=>{
@@ -153,8 +166,9 @@ export default function App() {
     setMediaItems(prev=>[newVideo,...prev]);
     setActiveMediaId(newVideo.id);
     if(isAndroidApk()&&newVideo.rawBlob){
-      try{await saveToDevice(newVideo.rawBlob,`HNLMark_Original_${Date.now()}.${newVideo.rawBlob.type.includes('mp4')?'mp4':'webm'}`);}
-      catch(e){alert('Video gốc vẫn lưu trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
+      if(!newVideo.isStamped){alert('Video chưa có dấu, chỉ được giữ trong Thư viện HNL để tránh xuất nhầm.');return;}
+      try{await saveToDevice(newVideo.rawBlob,`HNLMark_Timemark_${Date.now()}.${newVideo.rawBlob.type.includes('mp4')?'mp4':'webm'}`);}
+      catch(e){alert('Video có dấu vẫn trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
     }
   };
 

@@ -28,6 +28,7 @@ import {
 import { DEMO_IMAGES, DEFAULT_IMAGE_EDITS } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
+import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
 
 interface CameraApkScreenProps {
   watermarkConfig: WatermarkConfig;
@@ -65,6 +66,10 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [isRecordingStarting, setIsRecordingStarting] = useState(false);
   const startPendingRef = useRef(false);
   const recordStartedAtRef = useRef(0);
+  const pausedAtRef = useRef(0);
+  const pausedTotalRef = useRef(0);
+  const [isPaused,setIsPaused] = useState(false);
+  const stampedCaptureRef = useRef<{stop:()=>void}|null>(null);
   const [isFinalizing, setIsFinalizing] = useState<boolean>(false);
   const [recordSeconds, setRecordSeconds] = useState<number>(0);
   const [showVideoQualityPopup, setShowVideoQualityPopup] = useState<boolean>(false);
@@ -86,6 +91,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const pinchStartZoomRef = useRef<number>(1);
 
   const [focusPoint, setFocusPoint] = useState<{ xPct: number; yPct: number; key: number } | null>(null);
+  const [exposureFactor,setExposureFactor] = useState(1);
+  const [focusFeedback,setFocusFeedback] = useState('');
   const [shutterFlash, setShutterFlash] = useState<boolean>(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -127,7 +134,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     };
     start();
     return ()=>{closed=true;
-      try{if(recorderRef.current?.state==='recording')recorderRef.current.stop();}catch{}
+      try{if(recorderRef.current&&recorderRef.current.state!=='inactive')recorderRef.current.stop();}catch{}
       streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;
       audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;
       setAndroidCameraActive(false);
@@ -140,14 +147,14 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   useEffect(()=>{(window as any).__hnlStudioRecording=isRecording||isRecordingStarting||isFinalizing;
     return ()=>{(window as any).__hnlStudioRecording=false};},[isRecording,isRecordingStarting,isFinalizing]);
   // Stop and preserve what was recorded when the app becomes hidden/locked.
-  useEffect(()=>{const hide=()=>{if(document.hidden&&recorderRef.current?.state==='recording')recorderRef.current.stop();};
+  useEffect(()=>{const hide=()=>{if(document.hidden&&recorderRef.current&&recorderRef.current.state!=='inactive')recorderRef.current.stop();};
     document.addEventListener('visibilitychange',hide);
     return ()=>document.removeEventListener('visibilitychange',hide);},[]);
   // Recording timer
   useEffect(() => {
     if (!isRecording) return;
     const interval = window.setInterval(() => {
-      setRecordSeconds((prev) => prev + 1);
+      if(!pausedAtRef.current)setRecordSeconds(Math.floor((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000));
     }, 1000);
     return () => window.clearInterval(interval);
   }, [isRecording]);
@@ -201,17 +208,59 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     triggerZoomUpdate(zoomLevel + delta);
   };
 
-  // Tap-to-focus handler
-  const handlePreviewTap = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!previewRef.current) return;
-    if (showVideoQualityPopup) {
-      setShowVideoQualityPopup(false);
-      return;
+  // Tap-to-meter and focus: request actual track constraints when provided by WebView.
+  // Software metering is used only as a labeled fallback; it affects previews AND exports.
+  const handlePreviewTap = async (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!previewRef.current || !liveRef.current) return;
+    if (showVideoQualityPopup) { setShowVideoQualityPopup(false); return; }
+    if(pinchStartDistRef.current)return;
+    const rect=previewRef.current.getBoundingClientRect();
+    const x=Math.min(.90,Math.max(.10,(e.clientX-rect.left)/rect.width));
+    const y=Math.min(.90,Math.max(.10,(e.clientY-rect.top)/rect.height));
+    setFocusPoint({xPct:x*100,yPct:y*100,key:Date.now()});
+    const track=streamRef.current?.getVideoTracks()[0];
+    let hardwareFocused=false;
+    if(track && typeof track.getCapabilities==='function'){
+      const caps=track.getCapabilities() as MediaTrackCapabilities & {focusMode?:string[];exposureMode?:string[];pointsOfInterest?:unknown};
+      const changes:Record<string,unknown>={};
+      if(caps.focusMode?.includes('single-shot'))changes.focusMode='single-shot';
+      else if(caps.focusMode?.includes('continuous'))changes.focusMode='continuous';
+      if(caps.pointsOfInterest!==undefined)changes.pointsOfInterest=[{x,y}];
+      if(caps.exposureMode?.includes('continuous'))changes.exposureMode='continuous';
+      if(Object.keys(changes).length){
+        try { await track.applyConstraints({advanced:[changes as MediaTrackConstraintSet]}); hardwareFocused=true; }
+        catch { /* WebView may advertise but reject camera constraints. */ }
+      }
     }
-    const rect = previewRef.current.getBoundingClientRect();
-    const xPct = Math.min(90, Math.max(10, ((e.clientX - rect.left) / rect.width) * 100));
-    const yPct = Math.min(90, Math.max(10, ((e.clientY - rect.top) / rect.height) * 100));
-    setFocusPoint({ xPct, yPct, key: Date.now() });
+    // Spot metering of the clicked camera region: predictable visual fallback on MIUI.
+    // No claim of sensor autofocus/exposure adjustment when the hardware API rejects it.
+    try{
+      const sample=document.createElement('canvas');sample.width=64;sample.height=64;
+      const ctx=sample.getContext('2d',{willReadFrequently:true});
+      if(ctx){
+        ctx.drawImage(liveRef.current,0,0,64,64);
+        const sx=Math.min(56,Math.max(0,Math.round(x*64)-4));
+        const sy=Math.min(56,Math.max(0,Math.round(y*64)-4));
+        const pixels=ctx.getImageData(sx,sy,8,8).data;
+        let sum=0;for(let i=0;i<pixels.length;i+=4)sum+=.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2];
+        const average=sum/64;
+        setExposureFactor(Math.max(.72,Math.min(1.5,128/Math.max(40,average))));
+      }
+    }catch{ /* Preserve preview if this WebView blocks pixel reading. */ }
+    setFocusFeedback(hardwareFocused?'Đã gửi yêu cầu lấy nét':'Bù sáng tại điểm chạm (lấy nét tự động)');
+    const focusKey=Date.now();
+    window.setTimeout(()=>setFocusPoint(current=>current&&current.key<=focusKey?null:current),5500);
+  };
+
+  const togglePause = () => {
+    const recorder=recorderRef.current;
+    if(!recorder || !isRecording)return;
+    if(recorder.state==='recording' && typeof recorder.pause==='function'){
+      try{recorder.pause();pausedAtRef.current=Date.now();setIsPaused(true);}catch(e){triggerTransientToast('Không thể tạm dừng: '+String(e));}
+    }else if(recorder.state==='paused' && typeof recorder.resume==='function'){
+      try{recorder.resume();pausedTotalRef.current+=Date.now()-pausedAtRef.current;pausedAtRef.current=0;setIsPaused(false);}
+      catch(e){triggerTransientToast('Không thể quay tiếp: '+String(e));}
+    }
   };
 
   const handleCycleOrientation = () => {
@@ -242,14 +291,17 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không khởi tạo được Canvas');
         if(lens==='front'){ctx.translate(canvas.width,0);ctx.scale(-1,1);}
         const w=canvas.width/zoomLevel,h=canvas.height/zoomLevel;
+        ctx.filter=`brightness(${exposureFactor})`;
         ctx.drawImage(live,(canvas.width-w)/2,(canvas.height-h)/2,w,h,0,0,canvas.width,canvas.height);
+        ctx.filter='none';
         const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không xuất được ảnh')),'image/jpeg',.95));
         const at=new Date();const item:MediaItem={id:`cam-${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}`,
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
           createdAt:at.toISOString(),resolutionLabel:`${canvas.width} × ${canvas.height}`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,
           coordinates:watermarkConfig.coordinates,photoCode:`HNL-${Date.now()}-${i}`,
-          customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,edits:{...DEFAULT_IMAGE_EDITS}};
+          customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
+          orientationDeg:isLandscapeViewport?0:orientationDeg, captureWatermark:{...watermarkConfig},edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
       }
@@ -260,53 +312,69 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     if(!isRecording){
       startPendingRef.current=true;setIsRecordingStarting(true);
       try{
-      const stream=streamRef.current;if(!stream)throw Error('Camera chưa sẵn sàng');
-      if(typeof MediaRecorder==='undefined'){triggerTransientToast('Thiết bị không hỗ trợ ghi video WebM.');return;}
-      const type=['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm','video/mp4'].find(t=>MediaRecorder.isTypeSupported(t));
-      if(!type){triggerTransientToast('Không tìm thấy codec video được hỗ trợ.');return;}
-      let recordStream=stream;
-      // Microphone can be unavailable in MIUI WebView. VIDEO still records silently.
-      try {
-        const audio=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+      const stream=streamRef.current;if(!stream||!stream.active)throw Error('Camera chưa sẵn sàng');
+      if(typeof MediaRecorder==='undefined')throw Error('WebView không hỗ trợ MediaRecorder');
+      let audio:MediaStream|null=null;
+      try{
+        audio=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+        if(!audio.getAudioTracks().some(t=>t.readyState==='live'))throw Error('Không có đường tiếng hoạt động');
         audioStreamRef.current=audio;
-        recordStream=new MediaStream([...stream.getVideoTracks(),...audio.getAudioTracks()]);
         setAudioUnavailable(false);
-      } catch(e) {
-        setAudioUnavailable(true);
-        triggerTransientToast('Micro không khả dụng: video sẽ quay không tiếng.');
+      }catch(e){
+        audio?.getTracks().forEach(t=>t.stop());
+        audioStreamRef.current=null;setAudioUnavailable(true);
+        triggerTransientToast('Micro không khả dụng. Bật quyền Micro cho HNL Mark trong Cài đặt Android.');
       }
-      if(streamRef.current!==stream||!stream.active){audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;}
-      const chosenType=audioStreamRef.current?type:(['video/webm;codecs=vp8','video/webm','video/mp4'].find(t=>MediaRecorder.isTypeSupported(t))||type);
-      const rec=new MediaRecorder(recordStream,{mimeType:chosenType,videoBitsPerSecond:videoSettings.quality==='Tối đa'?8000000:videoSettings.quality==='Cao'?5000000:2500000});
+      if(streamRef.current!==stream||!stream.active){
+        audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;
+      }
+      const photoCode='HNL-V'+Date.now();
+      const orientation=isLandscapeViewport?0:orientationDeg;
+      const stampConfig={...watermarkConfig};
+      const capture=await createStampedVideoCapture(live,stampConfig,orientation,photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps);
+      stampedCaptureRef.current=capture;
+      const hasAudio=!!audioStreamRef.current?.getAudioTracks().some(t=>t.readyState==='live');
+      const recStream=new MediaStream([...capture.stream.getVideoTracks(),...(hasAudio?audioStreamRef.current!.getAudioTracks():[])]);
+      const codecs=hasAudio
+        ? ['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4']
+        : ['video/webm;codecs=vp8','video/webm','video/mp4'];
+      const type=codecs.find(t=>MediaRecorder.isTypeSupported(t));
+      if(!type)throw Error('Codec video có dấu không được hỗ trợ trên WebView.');
+      const rec=new MediaRecorder(recStream,{mimeType:type,videoBitsPerSecond:videoSettings.quality==='Tối đa'?8000000:videoSettings.quality==='Cao'?5000000:2500000});
       recorderRef.current=rec;chunksRef.current=[];
       rec.ondataavailable=e=>{if(e.data?.size)chunksRef.current.push(e.data);};
       rec.onerror=()=>triggerTransientToast('Lỗi ghi video; vui lòng kiểm tra lại.');
       rec.onstop=async()=>{
         if(recorderRef.current===rec)recorderRef.current=null;
+        stampedCaptureRef.current?.stop();stampedCaptureRef.current=null;
+        if(pausedAtRef.current){pausedTotalRef.current+=Date.now()-pausedAtRef.current;pausedAtRef.current=0;}
+        setIsPaused(false);
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;
         setIsFinalizing(true);
         const live=liveRef.current,source=streamRef.current;
         if(live&&source&&source.active){if(live.srcObject!==source)live.srcObject=source;void live.play().catch(()=>{});}
-        const chunks=chunksRef.current.splice(0);const blob=new Blob(chunks,{type:rec.mimeType||chosenType});
+        const chunks=chunksRef.current.splice(0);const blob=new Blob(chunks,{type:rec.mimeType||type});
         setIsRecording(false);
         if(!blob.size){triggerTransientToast('Không ghi được video.');setIsFinalizing(false);return;}
         const date=new Date(),item:MediaItem={id:`video-${Date.now()}`,title:`Video HNL ${date.toLocaleString('vi-VN')}`,
           kind:'video',origin:'newly-picked',rawBlob:blob,url:URL.createObjectURL(blob),createdAt:date.toISOString(),
-          durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current)/1000)),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
+          durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000)),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
-          photoCode:`HNL-V${Date.now()}`,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,edits:{...DEFAULT_IMAGE_EDITS}};
+          photoCode,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
+          orientationDeg:orientation,captureWatermark:stampConfig,isStamped:stampConfig.templateId==='timemark',edits:{...DEFAULT_IMAGE_EDITS}};
         try{await onSaveVideo(item);setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
         catch(e){triggerTransientToast('Không lưu được video gốc: '+String(e));}
         finally{setIsFinalizing(false);}
 
       };
-      rec.start(1000);recordStartedAtRef.current=Date.now();setRecordSeconds(0);setIsRecording(true);setShowVideoQualityPopup(false);
+      rec.start(1000);pausedAtRef.current=0;pausedTotalRef.current=0;setIsPaused(false);recordStartedAtRef.current=Date.now();setRecordSeconds(0);setIsRecording(true);setShowVideoQualityPopup(false);
       }catch(e){
+        stampedCaptureRef.current?.stop();stampedCaptureRef.current=null;
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;
         triggerTransientToast('Không khởi tạo được video: '+String(e));
         if(liveRef.current&&streamRef.current?.active)void liveRef.current.play().catch(()=>{});
       }finally{startPendingRef.current=false;setIsRecordingStarting(false);}
-    }else if(recorderRef.current?.state==='recording'){setIsFinalizing(true);recorderRef.current.stop();}
+    }else if(recorderRef.current&&recorderRef.current.state!=='inactive'){setIsFinalizing(true);recorderRef.current.stop();}
   };
 
   const formatDuration = (sec: number) => {
@@ -605,9 +673,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {/* Live camera stream — never an illustrative/mock photo. */}
           <video ref={liveRef} autoPlay playsInline muted
             aria-label="Khung ngắm camera trực tiếp"
-            style={{transform:`scale(${zoomLevel}) ${lens==='front'?'scaleX(-1)':''}`,transition:'transform 110ms ease-out'}}
+            style={{transform:`scale(${zoomLevel}) ${lens==='front'?'scaleX(-1)':''}`,filter:`brightness(${exposureFactor})`,transition:'transform 110ms ease-out'}}
             className="w-full h-full object-cover select-none pointer-events-none" />
-          {cameraReady && mode==='video' && isRecording && audioUnavailable && <div role="status" className="absolute top-2 left-2 right-2 z-20 rounded-lg bg-[#7F1D1D]/85 px-3 py-2 text-center text-xs text-white pointer-events-none">Không ghi được âm thanh từ micro. Video sẽ chỉ có hình.</div>}
+          {cameraReady && mode==='video' && isRecording && audioUnavailable && <div role="status" className="absolute top-14 left-3 z-20 max-w-[70%] rounded-md bg-[#7F1D1D]/90 px-2 py-1 text-left text-[11px] text-white pointer-events-none">Micro tắt · Video không tiếng</div>}
           {!cameraReady && <div className="absolute inset-0 z-10 flex flex-col gap-3 items-center justify-center p-6 bg-[#071121] text-center">
             <p className="text-sm text-[#F8FAFC]">{cameraError||'Đang mở camera thực tế…'}</p>
             <button type="button" onClick={()=>{setCameraError('');setCameraRetryKey(k=>k+1);}} className="rounded-xl bg-[#E2B74B] px-4 py-2 text-[#071121] font-bold text-sm">Thử mở lại camera</button>
@@ -629,14 +697,14 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           )}
 
           {/* Watermark sits cleanly ON preview without control occlusion */}
-          <WatermarkOverlay config={watermarkConfig} orientationDeg={0} />
+          <WatermarkOverlay config={watermarkConfig} orientationDeg={isLandscapeViewport?0:orientationDeg} />
 
           {/* Recording live timer */}
           {isRecording && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 px-3 py-1 rounded-full bg-[#060B14]/80 backdrop-blur-md border border-[#EF4444]/40 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#EF4444]" />
               <span className="text-xs font-mono-tabular font-semibold text-white">
-                {formatDuration(recordSeconds)}
+                {formatDuration(recordSeconds)}{isPaused?' · TẠM DỪNG':''}
               </span>
               <span className="text-[11px] font-mono-tabular text-[#94A3B8]">
                 {videoSettings.resolution}
@@ -659,6 +727,19 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
               className="animate-focus-reticle absolute z-20 w-14 h-14 rounded-full border-[1.5px] border-[#E2B74B] pointer-events-none flex items-center justify-center"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-[#E2B74B]" />
+            </div>
+          )}
+
+          {focusPoint && (
+            <div className="absolute z-30 flex items-center gap-2 rounded-lg bg-[#091423]/90 px-2 py-1.5 shadow-lg"
+              style={{top:`${Math.min(85,focusPoint.yPct+6)}%`,left:`${Math.max(5,Math.min(45,focusPoint.xPct-20))}%`}}
+              onClick={e=>e.stopPropagation()} onPointerDown={e=>e.stopPropagation()}>
+              <span className="text-[10px] text-[#E2B74B]">Sáng</span>
+              <input type="range" min="0.72" max="1.5" step="0.02" value={exposureFactor}
+                aria-label="Bù sáng tại điểm chạm" className="w-24 accent-[#E2B74B]"
+                onChange={e=>setExposureFactor(Number(e.target.value))}/>
+              <span className="text-[10px] tabular-nums">{Math.round(exposureFactor*100)}%</span>
+              <span className="sr-only">{focusFeedback}</span>
             </div>
           )}
 
@@ -818,10 +899,18 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             )}
           </button>
 
+          {/* While recording, keep the same fixed control slot for Pause/Resume. */}
+          {isRecording && <button type="button" onClick={togglePause}
+            className="w-12 h-12 rounded-full bg-[#19253D] border border-[#E2B74B]/50 text-[#E2B74B] flex items-center justify-center"
+            aria-label={isPaused?'Tiếp tục quay video':'Tạm dừng quay video'}
+            title={isPaused?'Tiếp tục quay':'Tạm dừng'}>
+            {isPaused?<Play className="w-5 h-5"/>:<Pause className="w-5 h-5"/>}
+          </button>}
           {/* Right: Flip Front / Rear Camera */}
           <button
             type="button"
             disabled={isRecording || isRecordingStarting || isFinalizing}
+            style={isRecording?{display:'none'}:undefined}
             onClick={() => {
               setLens((l) => (l === 'rear' ? 'front' : 'rear'));
               triggerTransientToast(lens === 'rear' ? 'Đã chuyển Camera trước' : 'Đã chuyển Camera sau');

@@ -84,6 +84,12 @@ export interface ImageEdits {
 export interface MediaItem {
   /** Original bytes for new media; persisted separately in IndexedDB. */
   rawBlob?: Blob;
+  /** Pre-rendered export kept apart from the original, for photo/video playback. */
+  stampedBlob?: Blob;
+  /** True only when video frames were actually encoded with the watermark. */
+  isStamped?: boolean;
+  captureWatermark?: WatermarkConfig;
+  orientationDeg?: OrientationDeg;
   id: string;
   title: string;
   kind: MediaKind;
