@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TEST20 cross-module safety contracts; Android device QA still mandatory."""
+"""TEST21 cross-module safety contracts; Android device QA still mandatory."""
 from pathlib import Path
 R=Path(__file__).resolve().parents[1]
 read=lambda p:(R/p).read_text(encoding='utf-8')
@@ -29,6 +29,6 @@ assert 'Tệp gốc và sao lưu · Tùy chọn nâng cao' in exp
 assert 'stampedBlob:item.stampedBlob' in storage
 assert 'stampedName' in backup and "zip.file(stampedName,stampedBlob" in backup
 assert 'LEGACY_RATIO = 0.98' in icon and 'BACKGROUND_RGB' not in icon
-assert 'versionCode 2520' in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2520'" in read('android/app/build.gradle')
-print('PASS: TEST20 stamped photo/video, protected originals, pause/resume, spot metering and icon')
+assert 'versionCode 2521' in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2521'" in read('android/app/build.gradle')
+print('PASS: TEST21 stamped photo/video, protected originals, pause/resume, spot metering and icon')

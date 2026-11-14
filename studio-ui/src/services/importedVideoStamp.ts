@@ -5,6 +5,8 @@
  */
 import type {WatermarkConfig} from '../types/hnl';
 import {drawOriginalTimemark,prepareTimemarkFont} from './timemarkRenderer';
+import {drawSimpleStamp,isSimpleStamp} from './simpleStampRenderer';
+import {supportedVideoMime} from './videoFormat';
 import {loadWatermarkLogo} from './watermarkLogo';
 
 const MAX_DURATION_SECONDS=300; // Guard against exhausting a mobile device's RAM.
@@ -22,11 +24,10 @@ export async function stampImportedVideo(
  onProgress?:(percent:number)=>void,signal?:AbortSignal,
 ):Promise<Blob>{
  if(!original.size||!original.type.startsWith('video/'))throw Error('Tệp được chọn không phải video hợp lệ.');
- if(!['timemark','none'].includes(config.templateId))throw Error('Hãy chọn mẫu Timemark trước khi chèn vào video.');
+ if(!['timemark','none'].includes(config.templateId)&&!isSimpleStamp(config.templateId))throw Error('Mẫu dấu này chưa hỗ trợ kết xuất video.');
  if(typeof MediaRecorder==='undefined'||typeof HTMLCanvasElement.prototype.captureStream!=='function')
    throw Error('Android WebView chưa hỗ trợ mã hóa video có dấu. Tệp gốc vẫn được giữ nguyên.');
- const candidate=['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm','video/mp4'];
- const mime=candidate.find(t=>MediaRecorder.isTypeSupported(t));
+ const mime=supportedVideoMime(config.videoFormat||'auto',true);
  if(!mime)throw Error('Thiết bị không hỗ trợ codec để xuất video có dấu.');
  const src=URL.createObjectURL(original);
  const video=document.createElement('video');
@@ -71,10 +72,11 @@ export async function stampImportedVideo(
    const render=()=>{
      if(video.readyState<2)return;
      ctx.drawImage(video,0,0,canvas.width,canvas.height);
-     if(config.templateId==='timemark'){
-       // Imported video keeps its selected time and chosen Timemark configuration.
+     if(config.templateId!=='none'){
        const stampedTime=config.dateTimeIso || localDate(new Date());
-       drawOriginalTimemark(ctx,canvas.width,canvas.height,{...config,dateTimeIso:stampedTime},0,code,logo);
+       const cfg={...config,dateTimeIso:stampedTime};
+       if(isSimpleStamp(config.templateId))drawSimpleStamp(ctx,canvas.width,canvas.height,cfg,0,logo);
+       else drawOriginalTimemark(ctx,canvas.width,canvas.height,cfg,0,code,logo);
      }
    };
    await prepareTimemarkFont(config.fontKey);

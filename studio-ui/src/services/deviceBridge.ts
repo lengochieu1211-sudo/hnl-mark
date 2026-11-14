@@ -22,6 +22,13 @@ export async function shareFromDevice(blob:Blob,name:string):Promise<void>{if(na
  const next=queue.catch(()=>{}).then(()=>nativeTransfer(blob,name,true));queue=next;await next;return;
 }const f=new File([blob],name,{type:blob.type});if(navigator.canShare?.({files:[f]})){await navigator.share({files:[f],title:'HNL Mark'});return;}
  throw Error('Thiết bị không hỗ trợ chia sẻ trực tiếp. Hãy dùng Lưu vào máy.');}
+/** SAF picker grants access to a single user-selected internal/SD folder. */
+export function getSaveLocationLabel():string{
+ try{return String(native()?.getSaveDestination?.()||'Web: thư mục Tải xuống của trình duyệt');}
+ catch{return 'Không đọc được nơi lưu, hãy chọn lại thư mục.';}
+}
+export function chooseSaveLocation():void{if(!native()?.chooseSaveFolder)throw Error('Chỉ APK Android hỗ trợ chọn thư mục lưu.');native().chooseSaveFolder();}
+export function clearSaveLocation():void{native()?.resetSaveFolder?.();window.dispatchEvent(new Event('hnl-studio:save-destination'));}
 export function pickDeviceGallery():void{if(native()?.openDeviceGallery)native().openDeviceGallery();else document.querySelector<HTMLInputElement>('#hnl-studio-picker')?.click();}
 export function setAndroidCameraActive(active:boolean){try{native()?.cameraState?.(active);}catch{}}
 export function setupAndroidBridge(onPicked:MediaCallback,onTab:TabCallback,onBack:()=>boolean):void{
@@ -35,5 +42,6 @@ export function setupAndroidBridge(onPicked:MediaCallback,onTab:TabCallback,onBa
  if(!resp.ok)throw Error('Không đọc được '+item.name);const blob=await resp.blob();
  if(!blob.size)throw Error('Tệp rỗng');await selectedCallback?.([new File([blob],item.name,{type:item.type})]);
  }
- },setDeviceOrientation:(angle:number)=>window.dispatchEvent(new CustomEvent('hnl-studio:orientation',{detail:{angle}}))};
+ },setDeviceOrientation:(angle:number)=>window.dispatchEvent(new CustomEvent('hnl-studio:orientation',{detail:{angle}})),
+ saveDestinationChanged:()=>window.dispatchEvent(new Event('hnl-studio:save-destination'))};
 }

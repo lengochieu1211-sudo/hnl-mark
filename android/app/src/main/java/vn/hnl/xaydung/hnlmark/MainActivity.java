@@ -14,6 +14,7 @@ import android.content.ClipData;
 import android.database.Cursor;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.content.ContentResolver;
 import android.webkit.MimeTypeMap;
@@ -24,6 +25,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -65,6 +67,9 @@ public final class MainActivity extends Activity {
     private static final int REQ_FILES = 400;
     private static final int REQ_NATIVE_GALLERY = 402;
     private static final int REQ_MEDIA_PERMISSIONS = 401;
+    private static final int REQ_SAVE_FOLDER = 403;
+    private static final int REQ_GEOLOCATION = 404;
+    private static final String SAVE_FOLDER_PREF = "hnlmark_selected_save_tree";
     private static final int NAVY = Color.rgb(19, 38, 58);
     private static final int GOLD = Color.rgb(255, 210, 83);
 
@@ -75,6 +80,8 @@ public final class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private ValueCallback<Uri[]> fileCallback;
     private PermissionRequest pendingMediaRequest;
+    private GeolocationPermissions.Callback pendingGeoCallback;
+    private String pendingGeoOrigin;
     private String[] pendingResources;
     private boolean cameraImmersive;
     private OrientationEventListener cameraOrientationListener;
@@ -115,10 +122,12 @@ public final class MainActivity extends Activity {
         final Uri uri;
         final OutputStream stream;
         final String destination;
-        SaveSession(Uri uri, OutputStream stream, String destination) {
+        final boolean mediaStore;
+        SaveSession(Uri uri, OutputStream stream, String destination, boolean mediaStore) {
             this.uri = uri;
             this.stream = stream;
             this.destination = destination;
+            this.mediaStore = mediaStore;
         }
     }
 
@@ -228,6 +237,7 @@ public final class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setTextZoom(100);
         settings.setDomStorageEnabled(true);
+        settings.setGeolocationEnabled(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(true);
@@ -291,6 +301,17 @@ public final class MainActivity extends Activity {
         web.setWebChromeClient(new WebChromeClient() {
             @Override public void onPermissionRequest(PermissionRequest request) {
                 runOnUiThread(() -> handleWebPermission(request));
+            }
+            @Override public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                if(!ENTRY.startsWith(origin) && !origin.equals("https://" + HOST)) {
+                    callback.invoke(origin,false,false);return;
+                }
+                if(Build.VERSION.SDK_INT < 23 || checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED ||
+                   checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED) {
+                    callback.invoke(origin,true,false);return;
+                }
+                pendingGeoCallback=callback;pendingGeoOrigin=origin;
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_GEOLOCATION);
             }
             @Override public void onPermissionRequestCanceled(PermissionRequest request) {
                 if (pendingMediaRequest == request) {
@@ -358,6 +379,12 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(
         int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
+        if(requestCode==REQ_GEOLOCATION){
+            boolean allowed=false;
+            for(int grant:results)if(grant==PackageManager.PERMISSION_GRANTED)allowed=true;
+            if(pendingGeoCallback!=null){pendingGeoCallback.invoke(pendingGeoOrigin,allowed,false);pendingGeoCallback=null;pendingGeoOrigin=null;}
+            return;
+        }
         if (requestCode != REQ_MEDIA_PERMISSIONS || pendingMediaRequest == null) return;
         boolean allowed = results.length == permissions.length && results.length > 0;
         for (int result : results) allowed &= result == PackageManager.PERMISSION_GRANTED;
@@ -520,6 +547,19 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int code,int resultCode,Intent data){
         super.onActivityResult(code,resultCode,data);
+        if(code==REQ_SAVE_FOLDER){
+            if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null){
+                final Uri tree=data.getData();
+                try{
+                    int flags=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    getContentResolver().takePersistableUriPermission(tree,flags);
+                    getSharedPreferences("hnlmark_settings",MODE_PRIVATE).edit().putString(SAVE_FOLDER_PREF,tree.toString()).apply();
+                    toast("Đã chọn thư mục lưu. Ảnh và video mới sẽ lưu tại đây.");
+                }catch(Exception e){toast("Không cấp được quyền ghi thư mục. Vị trí lưu cũ được giữ nguyên.");}
+            }
+            if(web!=null)web.post(()->web.evaluateJavascript("window.HNLAndroidApp?.saveDestinationChanged()",null));
+            return;
+        }
         if(code!=REQ_FILES&&code!=REQ_NATIVE_GALLERY)return;
         List<Uri> selected=getPickedUris(resultCode,data);
         if(code==REQ_FILES){
@@ -615,6 +655,36 @@ public final class MainActivity extends Activity {
         runOnUiThread(() -> Toast.makeText(this, text, Toast.LENGTH_LONG).show());
     }
 
+    private Uri selectedSaveTree(){
+        String text=getSharedPreferences("hnlmark_settings",MODE_PRIVATE).getString(SAVE_FOLDER_PREF,"");
+        if(text==null||text.isEmpty())return null;
+        try{return Uri.parse(text);}catch(Exception e){return null;}
+    }
+
+    private String getSaveDestinationLabel(){
+        final Uri uri=selectedSaveTree();
+        if(uri==null)return "Bộ nhớ trong · Ảnh Pictures/HNLMark · Video Movies/HNLMark";
+        try{
+            String id=DocumentsContract.getTreeDocumentId(uri);
+            if(id==null)return "Thư mục đã chọn trong Android";
+            boolean internal=id.startsWith("primary:");
+            String path=id.contains(":")?id.substring(id.indexOf(':')+1):id;
+            if(path.length()>100)path=path.substring(0,100);
+            return (internal?"Bộ nhớ trong – ":"Thẻ nhớ/thư mục – ")+(path.isEmpty()?"Thư mục đã chọn":path);
+        }catch(Exception e){return "Thư mục Android đã chọn";}
+    }
+
+    private void openSaveTreePicker(){
+        runOnUiThread(()->{
+            try{
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                startActivityForResult(intent,REQ_SAVE_FOLDER);
+            }catch(Exception e){toast("Thiết bị không mở được trình chọn thư mục.");}
+        });
+    }
+
     private String beginSession(String requestedName, String mime) {
         String name = requestedName == null ? "HNLMark" : requestedName
             .replaceAll("[\\\\/:*?\"<>|\\r\\n]", "_");
@@ -623,6 +693,26 @@ public final class MainActivity extends Activity {
         // Public Android media collections: visible in device Gallery, unlike WebView IndexedDB.
         // ZIP/project exports remain in Downloads/HNLMark. Android 10+ does not need broad storage access.
         String type = mime == null || mime.isEmpty() ? "application/octet-stream" : mime.split(";", 2)[0].trim().toLowerCase(java.util.Locale.ROOT);
+        final Uri folder=selectedSaveTree();
+        if(folder!=null){
+            // Storage Access Framework: Android's system picker grants ONLY this subtree.
+            try{
+                String rootId=DocumentsContract.getTreeDocumentId(folder);
+                Uri parent=DocumentsContract.buildDocumentUriUsingTree(folder,rootId);
+                Uri document=DocumentsContract.createDocument(getContentResolver(),parent,type,name);
+                if(document==null)return ""; // Never pretend to save on another volume.
+                try{
+                    OutputStream out=getContentResolver().openOutputStream(document,"w");
+                    if(out==null)throw new IOException("No writable stream");
+                    String token=UUID.randomUUID().toString();
+                    sessions.put(token,new SaveSession(document,out,"SAF folder",false));
+                    return token;
+                }catch(Exception error){getContentResolver().delete(document,null,null);return "";}
+            }catch(Exception e){
+                toast("Thư mục lưu không còn quyền ghi. Chọn lại thư mục hoặc chuyển về bộ nhớ trong.");
+                return "";
+            }
+        }
         final Uri destinationCollection;
         final String relativePath;
         if (type.startsWith("image/")) {
@@ -646,7 +736,7 @@ public final class MainActivity extends Activity {
             OutputStream stream = getContentResolver().openOutputStream(uri);
             if (stream == null) throw new IOException("No output stream");
             String token = UUID.randomUUID().toString();
-            sessions.put(token, new SaveSession(uri, stream, relativePath));
+            sessions.put(token, new SaveSession(uri, stream, relativePath,true));
             return token;
         } catch (Exception e) {
             getContentResolver().delete(uri, null, null);
@@ -669,10 +759,12 @@ public final class MainActivity extends Activity {
         if (s == null) return false;
         try {
             synchronized (s) { s.stream.flush(); s.stream.close(); }
-            ContentValues done = new ContentValues();
-            done.put(MediaStore.MediaColumns.IS_PENDING, 0);
-            if (getContentResolver().update(s.uri, done, null, null) < 1)
-                throw new IOException("MediaStore finalization rejected");
+            if(s.mediaStore){
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                if (getContentResolver().update(s.uri, done, null, null) < 1)
+                    throw new IOException("MediaStore finalization rejected");
+            }
             // The camera already confirms capture through shutter/thumbnail. Do not show
             // a blocking native Toast for every photo/video, especially burst shooting.
             // Explicit ZIP/download saves still get a completion toast.
@@ -770,6 +862,11 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public boolean finishShare(String token){return finishShareFile(token);}
         @JavascriptInterface public void abortShare(String token){abortShareFile(token);}
         @JavascriptInterface public void openDeviceGallery(){MainActivity.this.openDeviceGallery();}
+        @JavascriptInterface public void chooseSaveFolder(){openSaveTreePicker();}
+        @JavascriptInterface public String getSaveDestination(){return getSaveDestinationLabel();}
+        @JavascriptInterface public void resetSaveFolder(){
+            getSharedPreferences("hnlmark_settings",MODE_PRIVATE).edit().remove(SAVE_FOLDER_PREF).apply();
+        }
         @JavascriptInterface public void cameraState(boolean active) {
             runOnUiThread(() -> {
                 cameraImmersive = active;

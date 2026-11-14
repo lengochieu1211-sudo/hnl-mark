@@ -29,6 +29,8 @@ import {storeMedia,loadMedia,removeMedia} from './services/mediaStorage';
 import {restoreProjectZip} from './services/projectBackup';
 import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
 import { createTimemarkPhoto,createTimemarkCode } from './services/timemarkRenderer';
+import {isSimpleStamp} from './services/simpleStampRenderer';
+import {mediaWatermarkConfig,readPhotoExifGps} from './services/watermarkLocation';
 
 function formatLocalIsoNow(): string {
   const now = new Date();
@@ -106,11 +108,12 @@ export default function App() {
       if(!detectedType)continue;
       const mediaFile=file.type===detectedType?file:new File([file],file.name,{type:detectedType,lastModified:file.lastModified});
       const now=new Date();
+      const exifCoords=detectedType==='image/jpeg'?await readPhotoExifGps(mediaFile).catch(()=>undefined):undefined;
       const item:MediaItem={id:`import-${Date.now()}-${i}-${Math.random().toString(36).slice(2,6)}`,
       title:file.name.replace(/\.[^/.]+$/,'')||'Tệp mới chọn',kind:detectedType.startsWith('video/')?'video':'photo',
       origin:'newly-picked',url:URL.createObjectURL(mediaFile),rawBlob:mediaFile,createdAt:now.toISOString(),
       resolutionLabel:detectedType.startsWith('video/')?'Video thiết bị':'Ảnh thiết bị',
-      sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:'',photoCode:createTimemarkCode(),
+      sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:exifCoords||'',photoCode:createTimemarkCode(),
       customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
       // Persist EACH original before adding to UI; native picker processes sequentially.
       await storeMedia(item);all.push(item);
@@ -158,9 +161,9 @@ export default function App() {
     let item=newPhoto;
     try{
       const config=newPhoto.captureWatermark||watermarkConfig;
-      if(!['timemark','none'].includes(config.templateId))throw Error('Mẫu dấu này chưa hỗ trợ xuất ảnh thật. Hãy chọn Timemark.');
+      if(!['timemark','none'].includes(config.templateId)&&!isSimpleStamp(config.templateId))throw Error('Mẫu dấu này chưa hỗ trợ kết xuất pixel. Ảnh gốc vẫn còn.');
       if(!newPhoto.rawBlob)throw Error('Không có ảnh gốc để tạo dấu');
-      const stamped=await createTimemarkPhoto(newPhoto.rawBlob,config,newPhoto.photoCode,newPhoto.orientationDeg||0);
+      const stamped=await createTimemarkPhoto(newPhoto.rawBlob,mediaWatermarkConfig(config,newPhoto),newPhoto.photoCode,newPhoto.orientationDeg||0);
       item={...newPhoto,stampedBlob:stamped,isStamped:config.templateId!=='none',url:URL.createObjectURL(stamped)};
       await storeMedia(item);
     }catch(e){
@@ -237,6 +240,7 @@ export default function App() {
         <div className="flex-1 min-h-0 w-full h-full">
           <CameraApkScreen
             watermarkConfig={watermarkConfig}
+            onChangeWatermarkConfig={updateWatermarkConfig}
             recentMedia={mediaItems}
             isLandscapeViewport={isLandscapeViewport}
             onCloseCamera={() => setRoute('home')}

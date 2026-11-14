@@ -8,14 +8,17 @@ export type CameraLens = 'rear' | 'front';
 export type VideoResolution = '720p' | '1080p' | '4K';
 export type VideoFps = 24 | 30 | 60;
 export type VideoQualityLevel = 'Chuẩn' | 'Cao' | 'Tối đa';
+export type VideoExportFormat = 'auto' | 'mp4' | 'webm';
+export type WatermarkLocationSource = 'manual' | 'photo' | 'device' | 'none';
 
 export interface VideoSettings {
   resolution: VideoResolution;
   fps: VideoFps;
   quality: VideoQualityLevel;
+  format?: VideoExportFormat;
 }
 
-export type WatermarkGroup = 'timemark-legacy' | 'hnl-independent';
+export type WatermarkGroup = 'timemark-legacy' | 'hnl-independent' | 'simple';
 
 export type WatermarkPositionPreset =
   | 'bottom-left'
@@ -46,6 +49,10 @@ export interface WatermarkConfig {
   locationText: string;
   coordinates: string;
   showCoordinates: boolean;
+  /** Explicit user choice. Missing EXIF/GPS is never filled from another photo. */
+  locationSource?: WatermarkLocationSource;
+  /** Requested video container. Auto uses MP4 only where MediaRecorder supports it. */
+  videoFormat?: VideoExportFormat;
   customTitle: string;
   customNote: string;
   inspectorName: string;

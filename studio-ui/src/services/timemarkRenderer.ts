@@ -8,6 +8,7 @@
 import type { OrientationDeg, WatermarkConfig, WatermarkFontKey } from '../types/hnl';
 import {watermarkFontFamily} from './watermarkFonts';
 import {drawWatermarkLogo,loadWatermarkLogo} from './watermarkLogo';
+import {drawSimpleStamp,isSimpleStamp} from './simpleStampRenderer';
 
 const clamp = (v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
 const pad = (n:number)=>String(n).padStart(2,'0');
@@ -143,7 +144,9 @@ export async function createTimemarkPhoto(source:Blob,config:WatermarkConfig,pho
    ctx.drawImage(bitmap,0,0);
    if(config.templateId!=='none'){
      const logo=await loadWatermarkLogo(config);
-     drawOriginalTimemark(ctx,canvas.width,canvas.height,config,orientation,photoCode,logo);
+     if(isSimpleStamp(config.templateId))drawSimpleStamp(ctx,canvas.width,canvas.height,config,orientation,logo);
+     else if(config.templateId==='timemark')drawOriginalTimemark(ctx,canvas.width,canvas.height,config,orientation,photoCode,logo);
+     else throw Error('Mẫu dấu này chưa có bộ kết xuất pixel. Ảnh gốc vẫn được giữ riêng.');
    }
    return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Không kết xuất được JPEG')),'image/jpeg',clamp(config.jpegQuality/100,.5,1)));
  }finally{bitmap.close();}

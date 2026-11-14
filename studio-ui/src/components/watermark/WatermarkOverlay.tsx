@@ -4,6 +4,8 @@ import { OrientationDeg, WatermarkConfig } from '../../types/hnl';
 import { WATERMARK_TEMPLATES } from '../../data/templates';
 import { HnlLogoPlaceholder } from '../common/HnlBrandMark';
 import { OriginalTimemarkOverlay } from './OriginalTimemarkOverlay';
+import {SimpleStampOverlay} from './SimpleStampOverlay';
+import {isSimpleStamp} from '../../services/simpleStampRenderer';
 import {watermarkFontFamily} from '../../services/watermarkFonts';
 import {loadWatermarkLogo,drawWatermarkLogo} from '../../services/watermarkLogo';
 
@@ -54,6 +56,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   containerRef,
 }) => {
   if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode} />;
+  if(isSimpleStamp(config.templateId))return <SimpleStampOverlay config={config} orientationDeg={orientationDeg}/>;
   if(config.templateId === 'none') return null;
 
   const template =

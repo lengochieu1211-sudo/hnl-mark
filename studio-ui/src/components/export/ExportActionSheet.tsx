@@ -2,6 +2,8 @@ import React,{useEffect,useRef,useState} from 'react';
 import {Download,Share2,Files,FolderArchive,CheckCircle2,AlertCircle,Loader2,X,Upload} from 'lucide-react';
 import type {MediaItem,WatermarkConfig} from '../../types/hnl';
 import {createTimemarkPhoto} from '../../services/timemarkRenderer';
+import {isSimpleStamp} from '../../services/simpleStampRenderer';
+import {mediaWatermarkConfig} from '../../services/watermarkLocation';
 import {stampImportedVideo} from '../../services/importedVideoStamp';
 import {saveToDevice,shareFromDevice} from '../../services/deviceBridge';
 import {createProjectZip} from '../../services/projectBackup';
@@ -35,7 +37,7 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
    const it=targetItems[0];
    let blob:Blob;
    if(it.kind==='video'){
-     const cfg={...watermarkConfig,...it.watermarkOverride};
+     const cfg=mediaWatermarkConfig({...watermarkConfig,...it.watermarkOverride},it);
      if(it.isStamped&&!it.stampedBlob){ // Camera source frames were stamped while recording.
        blob=await getBlob(it);
      }else if(it.stampedBlob&&it.stampedConfig&&JSON.stringify({...it.stampedConfig,dateTimeIso:it.stampedConfig.autoTime?'':it.stampedConfig.dateTimeIso})===JSON.stringify({...cfg,dateTimeIso:cfg.autoTime?'':cfg.dateTimeIso})){
@@ -51,9 +53,9 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
        }finally{exportAbort.current=null;}
      }
    }else{
-     const cfg={...watermarkConfig,...it.captureWatermark,...it.watermarkOverride};
-     if(!['timemark','none'].includes(cfg.templateId))throw Error('Mẫu dấu đang chọn chưa hỗ trợ kết xuất. Vui lòng chọn Timemark.');
-     blob=it.stampedBlob&&!it.watermarkOverride?it.stampedBlob:await createTimemarkPhoto(await getBlob(it),cfg,it.photoCode,it.orientationDeg||0);
+     const cfg=mediaWatermarkConfig({...watermarkConfig,...it.captureWatermark,...it.watermarkOverride},it);
+     if(!['timemark','none'].includes(cfg.templateId)&&!isSimpleStamp(cfg.templateId))throw Error('Mẫu dấu này chưa có bộ xuất ảnh. Ảnh gốc vẫn được giữ.');
+     blob=it.stampedBlob&&!it.watermarkOverride&&it.captureWatermark?.templateId===cfg.templateId&&cfg.locationSource!=='photo'?it.stampedBlob:await createTimemarkPhoto(await getBlob(it),cfg,it.photoCode,it.orientationDeg||0);
    }
    const extension=it.kind==='video'?(blob.type.includes('mp4')?'mp4':'webm'):'jpg';
    const filename=`HNLMark_Timemark_${Date.now()}.${extension}`;

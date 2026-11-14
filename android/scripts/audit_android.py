@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"fullUser\"" in manifest
-assert "versionCode 2520" in gradle and "versionName '2.5.20-studio-test'" in gradle
+assert "versionCode 2521" in gradle and "versionName '2.5.21-studio-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -89,7 +89,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.20-studio-test'" in bridge
+assert "version:'2.5.21-studio-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -158,10 +158,10 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial2520'" in gradle
-assert "HNLMark STUDIO 20" in gradle
+assert "applicationIdSuffix '.trial2521'" in gradle
+assert "HNLMark STUDIO 21" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.20" in ux
+assert "TEST v2.5.21" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 

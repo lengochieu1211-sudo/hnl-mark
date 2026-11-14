@@ -30,9 +30,13 @@ import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
+import {isSimpleStamp} from '../../services/simpleStampRenderer';
+import {supportedVideoMime} from '../../services/videoFormat';
+import {readDeviceGps,mediaWatermarkConfig} from '../../services/watermarkLocation';
 
 interface CameraApkScreenProps {
   watermarkConfig: WatermarkConfig;
+  onChangeWatermarkConfig?: (patch:Partial<WatermarkConfig>)=>void;
   recentMedia: MediaItem[];
   onCloseCamera: () => void;
   onOpenLibrary: () => void;
@@ -47,6 +51,7 @@ const ASPECT_CYCLE: AspectRatioMode[] = ['4:3', '16:9', '1:1', 'full'];
 
 export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   watermarkConfig,
+  onChangeWatermarkConfig,
   recentMedia,
   onCloseCamera,
   onOpenLibrary,
@@ -287,6 +292,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     if(!cameraReady||!live||live.readyState<2){triggerTransientToast('Camera chưa sẵn sàng; kiểm tra quyền truy cập.');return;}
     if(mode==='photo'){
       const count=burstMode?3:1;
+      // Location lookup is opt-in; failure must never block the shutter.
+      const shotGps=watermarkConfig.locationSource==='device'?await readDeviceGps(3500).catch(()=>undefined):undefined;
       setShutterFlash(true);window.setTimeout(()=>setShutterFlash(false),160);
       for(let i=0;i<count;i++){
         const canvas=document.createElement('canvas');canvas.width=live.videoWidth;canvas.height=live.videoHeight;
@@ -300,10 +307,10 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         const at=new Date();const item:MediaItem={id:`cam-${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}`,
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
           createdAt:at.toISOString(),resolutionLabel:`${canvas.width} × ${canvas.height}`,
-          sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,
-          coordinates:watermarkConfig.coordinates,photoCode:i===0?previewCode:createTimemarkCode(),
+          sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationSource==='manual'?watermarkConfig.locationText:'',
+          coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?previewCode:createTimemarkCode(),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:watermarkTurn, captureWatermark:{...watermarkConfig},edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:watermarkTurn, captureWatermark:mediaWatermarkConfig({...watermarkConfig,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:'',coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);
         setPreviewCode(createTimemarkCode());
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
@@ -339,11 +346,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       stampedCaptureRef.current=capture;
       const hasAudio=!!audioStreamRef.current?.getAudioTracks().some(t=>t.readyState==='live');
       const recStream=new MediaStream([...capture.stream.getVideoTracks(),...(hasAudio?audioStreamRef.current!.getAudioTracks():[])]);
-      const codecs=hasAudio
-        ? ['video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm','video/mp4']
-        : ['video/webm;codecs=vp8','video/webm','video/mp4'];
-      const type=codecs.find(t=>MediaRecorder.isTypeSupported(t));
-      if(!type)throw Error('Codec video có dấu không được hỗ trợ trên WebView.');
+      const type=supportedVideoMime(watermarkConfig.videoFormat||'auto',hasAudio);
       const rec=new MediaRecorder(recStream,{mimeType:type,videoBitsPerSecond:videoSettings.quality==='Tối đa'?8000000:videoSettings.quality==='Cao'?5000000:2500000});
       recorderRef.current=rec;chunksRef.current=[];
       rec.ondataavailable=e=>{if(e.data?.size)chunksRef.current.push(e.data);};
@@ -365,7 +368,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000)),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
           photoCode,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:orientation,captureWatermark:stampConfig,isStamped:stampConfig.templateId==='timemark',edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:orientation,captureWatermark:stampConfig,isStamped:stampConfig.templateId==='timemark'||isSimpleStamp(stampConfig.templateId),edits:{...DEFAULT_IMAGE_EDITS}};
         try{await onSaveVideo(item);setPreviewCode(createTimemarkCode());setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
         catch(e){triggerTransientToast('Không lưu được video gốc: '+String(e));}
         finally{setIsFinalizing(false);}
@@ -601,6 +604,17 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             </button>
           </div>
 
+          <div className="space-y-1.5">
+            <label className="block text-[11px] text-[#94A3B8]">Định dạng file video</label>
+            <select aria-label="Định dạng video camera" value={watermarkConfig.videoFormat||'auto'}
+              onChange={e=>onChangeWatermarkConfig?.({videoFormat:e.target.value as WatermarkConfig['videoFormat']})}
+              disabled={isRecording||isRecordingStarting}
+              className="h-9 w-full rounded-lg border border-white/15 bg-[#101C30] px-2 text-xs text-white">
+              <option value="auto">Tự động: ưu tiên MP4</option>
+              <option value="mp4">MP4 (chỉ nếu máy hỗ trợ)</option>
+              <option value="webm">WebM VP8/Opus</option>
+            </select>
+          </div>
           <div className="space-y-1.5">
             <div className="text-[11px] text-[#94A3B8]">Độ phân giải</div>
             <div className="grid grid-cols-3 gap-1.5">

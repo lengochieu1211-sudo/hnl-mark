@@ -16,6 +16,8 @@ import { HnlLogoPlaceholder } from '../common/HnlBrandMark';
 import {FONT_OPTIONS,watermarkFontFamily} from '../../services/watermarkFonts';
 import {normalizeWatermarkLogo,logoSrc} from '../../services/watermarkLogo';
 import { ImageEditorScreen } from '../editor/ImageEditorScreen';
+import {mediaWatermarkConfig,readDeviceGps} from '../../services/watermarkLocation';
+import {isAndroidApk,getSaveLocationLabel,chooseSaveLocation,clearSaveLocation} from '../../services/deviceBridge';
 
 interface StampsAndSettingsScreenProps {
   activeMedia: MediaItem;
@@ -35,10 +37,20 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
   onUpdateEdits,
 }) => {
   const [subTab, setSubTab] = useState<'templates' | 'customize' | 'editor'>(initialSubTab);
-  const [templateFilter, setTemplateFilter] = useState<'all' | 'timemark-legacy' | 'hnl-independent'>('all');
+  const [templateFilter, setTemplateFilter] = useState<'all' | 'timemark-legacy' | 'hnl-independent' | 'simple'>('all');
   const [openAccordion, setOpenAccordion] = useState<string>('datetime');
   const [logoBusy,setLogoBusy]=useState(false);
   const [logoError,setLogoError]=useState('');
+  const [gpsError,setGpsError]=useState('');
+  const [gpsBusy,setGpsBusy]=useState(false);
+  const [saveLocation,setSaveLocation]=useState(()=>getSaveLocationLabel());
+  const effectiveConfig=mediaWatermarkConfig(config,activeMedia);
+  const fetchGps=async()=>{setGpsBusy(true);setGpsError('');try{
+    const coordinates=await readDeviceGps();onChangeConfig({locationSource:'device',coordinates});
+  }catch(e){setGpsError(e instanceof Error?e.message:String(e));}finally{setGpsBusy(false);}};
+  const pickSaveFolder=()=>{chooseSaveLocation();setSaveLocation('Đang chọn thư mục trong Android…');};
+  React.useEffect(()=>{const fn=()=>setSaveLocation(getSaveLocationLabel());
+    window.addEventListener('hnl-studio:save-destination',fn);return()=>window.removeEventListener('hnl-studio:save-destination',fn);},[]);
   const changeLogoFile=async(file?:File)=>{
     if(!file)return;setLogoBusy(true);setLogoError('');
     try{const data=await normalizeWatermarkLogo(file);onChangeConfig({logoImageDataUrl:data,showLogo:true,timemarkLogoEnabled:true});}
@@ -68,7 +80,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
               onClick={() => setSubTab('templates')}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-white"
             >
-              22 Mẫu dấu
+              {WATERMARK_TEMPLATES.length} Mẫu dấu
             </button>
             <button
               type="button"
@@ -112,7 +124,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                 : 'text-[#94A3B8] hover:text-white'
             }`}
           >
-            22 Mẫu dấu
+            {WATERMARK_TEMPLATES.length} Mẫu dấu
           </button>
           <button
             type="button"
@@ -148,7 +160,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover"
         />
-        <WatermarkOverlay config={config} />
+        <WatermarkOverlay config={effectiveConfig} />
         {subTab==='customize'&&config.logoPosition==='custom'&&
           (config.templateId==='timemark'?config.timemarkLogoEnabled:config.showLogo)&&
           <div aria-label="Kéo để đổi vị trí logo" role="slider" aria-valuenow={config.logoCustomPos?.xPct??85}
@@ -164,13 +176,14 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
           </div>}
       </div>
 
-      {/* TAB 1: 22 WATERMARK TEMPLATES */}
+      {/* TAB 1: independent presets; existing IDs retained for old project metadata */}
       {subTab === 'templates' && (
         <div className="space-y-3">
           {/* Group Filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 hnl-scroll">
             {[
-              { id: 'all', label: 'Tất cả (22)' },
+              { id: 'simple', label: 'Chỉ ngày / giờ (3)' },
+              { id: 'all', label: `Tất cả (${WATERMARK_TEMPLATES.length})` },
               { id: 'hnl-independent', label: '12 Mẫu độc lập' },
               { id: 'timemark-legacy', label: '10 Mẫu Timemark' },
             ].map((grp) => (
@@ -189,6 +202,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
             ))}
           </div>
 
+          <p className="text-[11px] text-[#94A3B8]">Một số mẫu cũ sử dụng cùng bố cục, chỉ khác tiêu đề và màu. Mẫu Chỉ ngày / giờ không có mã dọc hay khung nền lớn.</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {filteredTemplates.map((tpl, idx) => {
               const isSelected = tpl.id === config.templateId;
@@ -209,6 +223,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                     onChangeConfig({
                       templateId: tpl.id,
                       accentColor: tpl.accentHex,
+                      ...(tpl.group==='simple'?{showLogo:false}:{}),
                     })
                   }
                   className={`text-left rounded-2xl overflow-hidden bg-[#111C30] border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E2B74B] ${
@@ -228,7 +243,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                     <WatermarkOverlay
                       compact
                       config={{
-                        ...config,
+                        ...effectiveConfig,
                         templateId: tpl.id,
                         accentColor: tpl.accentHex,
                         positionPreset: 'bottom-left',
@@ -305,13 +320,32 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
           {/* 2. Vị trí / địa chỉ */}
           <AccordionSection
             title="2. Vị trí / Địa chỉ"
-            subtitle={config.locationText}
+            subtitle={config.locationSource==='none'?'Không hiển thị':config.locationSource==='photo'?'GPS từ ảnh gốc':config.locationSource==='device'?'GPS điện thoại':config.locationText||'Nhập địa chỉ thủ công'}
             isOpen={openAccordion === 'location'}
             onToggle={() => toggleAcc('location')}
           >
             <div className="space-y-2">
+              <select value={config.locationSource||'manual'}
+                onChange={e=>onChangeConfig({locationSource:e.target.value as WatermarkConfig['locationSource']})}
+                aria-label="Nguồn vị trí của ảnh"
+                className="w-full h-9 px-2.5 rounded-lg bg-[#111C30] border border-white/[0.07] text-[13px] text-[#F8FAFC]">
+                <option value="manual">Nhập vị trí thủ công</option>
+                <option value="photo">GPS từ ảnh đã chọn (EXIF JPEG nếu có)</option>
+                <option value="device">GPS hiện tại từ điện thoại (xin quyền)</option>
+                <option value="none">Ẩn vị trí trên dấu</option>
+              </select>
+              {config.locationSource==='photo'&&<p className="text-[11px] text-[#CBD5E1]">
+                {activeMedia?.coordinates?`GPS ảnh đang chọn: ${activeMedia.coordinates}`:'Ảnh này không có GPS EXIF đọc được; không tự gán vị trí khác.'}
+              </p>}
+              {config.locationSource==='device'&&<div className="space-y-1">
+                <button type="button" disabled={gpsBusy} onClick={()=>void fetchGps()} className="min-h-10 w-full rounded-lg bg-[#17253D] border border-[#E2B74B]/40 text-[#E2B74B] text-xs">
+                  {gpsBusy?'Đang lấy GPS…':'Lấy GPS từ điện thoại (cấp quyền khi được hỏi)'}</button>
+                <p className="text-[11px] text-[#CBD5E1]">{config.coordinates||'Chưa có GPS; ứng dụng không tự điền tọa độ.'}</p>
+                {gpsError&&<p role="alert" className="text-xs text-red-300">{gpsError}</p>}
+              </div>}
               <input
                 type="text"
+                disabled={config.locationSource==='photo'||config.locationSource==='none'}
                 value={config.locationText}
                 onChange={(e) => onChangeConfig({ locationText: e.target.value })}
                 placeholder="Nhập địa chỉ hiện trường..."
@@ -320,7 +354,8 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
               <div className="grid sm:grid-cols-2 gap-2">
                 <input
                   type="text"
-                  value={config.coordinates}
+                  value={effectiveConfig.coordinates}
+                  disabled={config.locationSource==='photo'||config.locationSource==='none'}
                   onChange={(e) => onChangeConfig({ coordinates: e.target.value })}
                   placeholder="Tọa độ GPS..."
                   className="h-9 px-2.5 rounded-lg bg-[#111C30] border border-white/[0.07] text-[13px] text-[#F8FAFC] font-mono-tabular"
@@ -458,7 +493,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
 
           {/* Optional Timemark logo is OFF by default; other templates preserve original toggle. */}
           <AccordionSection
-            title="7. Logo dấu thời gian"
+            title="7. Logo độc lập – 4 góc / tự kéo"
             subtitle={(config.templateId==='timemark' ? config.timemarkLogoEnabled : config.showLogo) ? 'Đang hiển thị · Có thể thay ảnh, đổi vị trí' : 'Đang ẩn'}
             isOpen={openAccordion === 'logo'}
             onToggle={() => toggleAcc('logo')}
@@ -521,8 +556,8 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
 
           {/* 8. Vị trí watermark */}
           <AccordionSection
-            title="8. Vị trí Watermark"
-            subtitle={`Neo tại: ${config.positionPreset}`}
+            title="8. Vị trí chữ dấu thời gian"
+            subtitle={`Đặt chữ tại: ${config.positionPreset}`}
             isOpen={openAccordion === 'position'}
             onToggle={() => toggleAcc('position')}
           >
@@ -641,6 +676,22 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                 <span className="text-xs font-mono-tabular text-[#E2B74B] w-9 text-right">
                   {config.jpegQuality}%
                 </span>
+              </div>
+              <div className="sm:col-span-2 space-y-2 pt-1 border-t border-white/10">
+                <label className="block text-[12px] text-[#CBD5E1]">Định dạng video khi quay hoặc chèn dấu</label>
+                <select value={config.videoFormat||'auto'} onChange={e=>onChangeConfig({videoFormat:e.target.value as WatermarkConfig['videoFormat']})}
+                  aria-label="Định dạng xuất video" className="w-full h-9 rounded-lg px-2 bg-[#111C30] text-[#F8FAFC] border border-white/[0.07] text-[13px]">
+                  <option value="auto">Tự động – MP4 nếu mã hóa được, nếu không WebM</option>
+                  <option value="mp4">MP4 – bắt buộc hỗ trợ H.264/AAC</option>
+                  <option value="webm">WebM – VP8/Opus</option>
+                </select>
+                <p className="text-[11px] text-[#94A3B8]">Thiết bị không hỗ trợ MP4 sẽ báo rõ lỗi, không đổi đuôi WebM thành MP4.</p>
+                <label className="block text-[12px] text-[#CBD5E1]">Nơi lưu ảnh/video</label>
+                <p className="text-[12px] text-[#E2B74B]">{saveLocation}</p>
+                {isAndroidApk()?<div className="flex gap-2">
+                  <button type="button" onClick={pickSaveFolder} className="min-h-10 px-3 rounded-lg border border-[#E2B74B]/40 bg-[#17253D] text-[#E2B74B] text-xs">Chọn thư mục / thẻ SD</button>
+                  <button type="button" onClick={()=>{clearSaveLocation();setSaveLocation(getSaveLocationLabel());}} className="min-h-10 px-3 rounded-lg border border-white/10 text-white text-xs">Về bộ nhớ trong</button>
+                </div>:<p className="text-[11px] text-[#94A3B8]">Trình duyệt Web sẽ dùng vị trí tải xuống do trình duyệt quản lý.</p>}
               </div>
             </div>
           </AccordionSection>

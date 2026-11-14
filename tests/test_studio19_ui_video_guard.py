@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TEST20 contracts; not a claim of real Xiaomi runtime coverage."""
+"""TEST21 contracts; not a claim of real Xiaomi runtime coverage."""
 from pathlib import Path
 r=Path(__file__).resolve().parents[1]
 read=lambda f:(r/f).read_text(encoding='utf-8')
@@ -28,6 +28,6 @@ assert 'MAX_EDGE=1280' in video and 'const FPS=15' in video
 assert 'STALL_TIMEOUT_MS=12000' in video and 'window.clearInterval(stallInterval)' in video
 assert 'AbortController' in sheet and 'Hủy xử lý' in sheet
 assert 'await stampImportedVideo' in sheet and 'await onStampedMedia?.(it,blob,cfg)' in sheet
-assert "applicationIdSuffix '.trial2520'" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2521'" in read('android/app/build.gradle')
 assert 'mipmap-anydpi-v26/ic_launcher.xml' not in str(list((r/'android/app/src/main/res/mipmap-anydpi-v26').glob('*'))) if (r/'android/app/src/main/res/mipmap-anydpi-v26').exists() else True
-print('PASS: TEST20 removes icon QA; Timemark font/serial/rotation; imported-video bounds, stall detection, cancel')
+print('PASS: TEST21 removes icon QA; Timemark font/serial/rotation; imported-video bounds, stall detection, cancel')

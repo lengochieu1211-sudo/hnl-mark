@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HNL Mark TEST20: isolated font and logo settings without rewriting the launcher icon."""
+"""HNL Mark TEST21: isolated font and logo settings without rewriting the launcher icon."""
 from pathlib import Path
 r=Path(__file__).resolve().parents[1]
 read=lambda f:(r/f).read_text()
@@ -19,11 +19,11 @@ assert 'const logo=await loadWatermarkLogo(config)' in renderer
 assert 'drawWatermarkLogo(g,W,H,config,logo)' in renderer
 assert 'drawOriginalTimemark(ctx,w,h,config,orientationDeg,photoCode,logo)' in preview
 assert 'drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, orientation, photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
-assert 'drawOriginalTimemark(ctx,canvas.width,canvas.height,{...config,dateTimeIso:stampedTime},0,code,logo)' in read('studio-ui/src/services/importedVideoStamp.ts')
+assert 'drawOriginalTimemark(ctx,canvas.width,canvas.height,cfg,0,code,logo)' in read('studio-ui/src/services/importedVideoStamp.ts')
 assert 'hnlmark-watermark-settings-v1' in read('studio-ui/src/App.tsx')
 assert 'logoSrc(config)' in ui and 'logoEnabled(config)' in logo
 assert 'logoPosition?: WatermarkPositionPreset' in config
-assert "applicationIdSuffix '.trial2520'" in read('android/app/build.gradle')
-assert 'HNLMark STUDIO 20' in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2521'" in read('android/app/build.gradle')
+assert 'HNLMark STUDIO 21' in read('android/app/build.gradle')
 assert 'make_launcher_icon.py' not in ''.join(str(p) for p in r.glob('studio-ui/src/services/watermark*.ts'))
-print('PASS: TEST20 13 fonts, movable custom logo, timemark opt-in, preview + image/video stamping, settings persistence')
+print('PASS: TEST21 13 fonts, movable custom logo, timemark opt-in, preview + image/video stamping, settings persistence')

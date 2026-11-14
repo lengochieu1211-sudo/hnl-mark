@@ -1,6 +1,9 @@
 import { ViewportPreset, WatermarkConfig, WatermarkTemplate } from '../types/hnl';
 
 export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
+  {id:'simple-datetime',code:'S-01',name:'Chỉ ngày + giờ',group:'simple',summary:'Chữ gọn · Không khung · 4 góc',accentHex:'#F8FAFC',surfaceMode:'minimal-text'},
+  {id:'simple-date',code:'S-02',name:'Chỉ ngày',group:'simple',summary:'Chỉ hiện ngày · 4 góc',accentHex:'#F8FAFC',surfaceMode:'minimal-text'},
+  {id:'simple-time',code:'S-03',name:'Chỉ giờ',group:'simple',summary:'Chỉ hiện giờ · 4 góc',accentHex:'#F8FAFC',surfaceMode:'minimal-text'},
   {
     "id": "timemark",
     "code": "TM-01",
@@ -209,6 +212,8 @@ export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   locationText: '',
   coordinates: '',
   showCoordinates: true,
+  locationSource: 'manual',
+  videoFormat: 'auto',
   customTitle: '',
   customNote: '',
   inspectorName: '',
