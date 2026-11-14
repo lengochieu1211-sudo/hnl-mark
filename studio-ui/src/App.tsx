@@ -81,7 +81,7 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [watermarkConfig.autoTime]);
 
-  const emptyPreview:MediaItem={id:'no-media',title:'Chưa chọn ảnh',kind:'photo',origin:'newly-picked',url:'./hnl-logo-512.png',createdAt:formatLocalIsoNow(),resolutionLabel:'Chưa có ảnh',sizeLabel:'—',location:'',coordinates:'',photoCode:'',customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
+  const emptyPreview:MediaItem={id:'no-media',title:'Ảnh minh họa (chưa chọn ảnh)',kind:'photo',origin:'newly-picked',url:'./demo-camera-rear.jpg',createdAt:formatLocalIsoNow(),resolutionLabel:'Chưa có ảnh',sizeLabel:'—',location:'',coordinates:'',photoCode:'',customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
   useEffect(()=>{
     let alive=true;loadMedia().then(items=>{
       if(!alive)return;setMediaItems(items);if(items[0])setActiveMediaId(items[0].id);

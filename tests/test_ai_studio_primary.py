@@ -38,3 +38,10 @@ assert 'android:screenOrientation="fullUser"' in rd('android/app/src/main/Androi
 assert "Logo HNL gốc" in rd('studio-ui/src/components/common/HnlBrandMark.tsx')
 assert '!isAndroidApk() && <button' in rd('studio-ui/src/App.tsx')
 assert '10 Mẫu Timemark (Placeholder)' not in rd('studio-ui/src/components/stamps/StampsAndSettingsScreen.tsx')
+
+# AI Studio scene images from original supplied ZIP, offline-only and never stored as user media.
+scenes=rd('studio-ui/src/data/mockMedia.ts')
+for name in ('demo-camera-front.jpg','demo-camera-rear.jpg','demo-survey.jpg','demo-night.jpg','demo-coastal.jpg'):
+ assert (r/'studio-ui/public'/name).is_file() and name in scenes
+assert 'INITIAL_MEDIA_ITEMS: MediaItem[]=[]' in scenes
+assert 'Ảnh minh họa (chưa chọn ảnh)' in rd('studio-ui/src/App.tsx')

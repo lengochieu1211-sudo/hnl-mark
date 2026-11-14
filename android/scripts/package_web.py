@@ -58,6 +58,9 @@ if not (DIST/"index.html").is_file():raise SystemExit("Studio Vite build missing
 STUDIO_WWW=WWW/"studio"
 if STUDIO_WWW.exists():shutil.rmtree(STUDIO_WWW)
 shutil.copytree(DIST,STUDIO_WWW)
+for asset in ('demo-camera-front.jpg','demo-camera-rear.jpg','demo-survey.jpg','demo-night.jpg','demo-coastal.jpg'):
+    if not (STUDIO_WWW / asset).is_file():
+        raise SystemExit(f'AI Studio illustration missing from offline APK: {asset}')
 for name in ("hnl-logo-192.png","hnl-logo-512.png"):
     shutil.copy2(ROOT/name,STUDIO_WWW/name)
 
