@@ -116,17 +116,20 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [cameraRetryKey,setCameraRetryKey] = useState(0);
   const [audioUnavailable,setAudioUnavailable] = useState(false);
   useEffect(()=>{
-    const changed=(ev:Event)=>{
-      const {angle,displayAngle}=(ev as CustomEvent<{angle:number;displayAngle?:number}>).detail||{};
+    const apply=(data?:{angle?:number;displayAngle?:number})=>{
+      const {angle,displayAngle}=data||{};
       if(typeof angle!=='number')return;
-      // Do not force a landscape stamp to 0°: display orientation and physical
-      // orientation can diverge on rotation-locked Android/MIUI devices.
+      // OEL physical angle is CLOCKWISE, Android display rotation is CCW.
+      // Never use viewport aspect ratio as a proxy for rotation lock state.
       const screen=typeof displayAngle==='number'?displayAngle:
         (typeof window.screen.orientation?.angle==='number'?window.screen.orientation.angle:0);
       const target=resolveStampOrientation(angle,screen);
       stampOrientationRef.current=target;setOrientationDeg(target);
     };
+    const changed=(ev:Event)=>apply((ev as CustomEvent<{angle:number;displayAngle?:number}>).detail);
     window.addEventListener('hnl-studio:orientation',changed);
+    // Native onPageFinished may fire before the React Camera screen mounts.
+    apply((window as typeof window & {__hnlNativeOrientation?:{angle:number;displayAngle:number}}).__hnlNativeOrientation);
     return ()=>window.removeEventListener('hnl-studio:orientation',changed);
   },[]);
   useEffect(()=>{

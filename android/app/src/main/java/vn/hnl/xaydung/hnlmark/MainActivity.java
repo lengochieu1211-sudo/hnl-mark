@@ -6,6 +6,7 @@ import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.hardware.display.DisplayManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
@@ -85,7 +86,10 @@ public final class MainActivity extends Activity {
     private String[] pendingResources;
     private boolean cameraImmersive;
     private OrientationEventListener cameraOrientationListener;
+    private DisplayManager displayManager;
+    private DisplayManager.DisplayListener displayRotationListener;
     private int lastPhysicalAngle = 0;
+    private int lastPublishedDisplayAngle = -1;
     private final Map<String, SaveSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, ShareSession> shares = new ConcurrentHashMap<>();
     private final Map<String, PickedContent> pickedContents = new ConcurrentHashMap<>();
@@ -216,20 +220,52 @@ public final class MainActivity extends Activity {
             && HOST.equalsIgnoreCase(uri.getHost());
     }
 
+    /** Send a coherent physical+display pair; retain it for React mounting later. */
+    private void publishOrientation(boolean resize){
+        if(web==null)return;
+        web.post(()->{
+            if(web==null)return;
+            final int displayAngle=screenAngle();
+            lastPublishedDisplayAngle=displayAngle;
+            final String state="{angle:"+lastPhysicalAngle+",displayAngle:"+displayAngle+"}";
+            final String script="window.__hnlNativeOrientation="+state+";"+
+                "window.HNLAndroidApp?.setDeviceOrientation("+lastPhysicalAngle+","+displayAngle+");"+
+                (resize?"window.dispatchEvent(new Event('resize'));":"");
+            web.evaluateJavascript(script,null);
+        });
+    }
+
     private void setupCameraOrientationListener(){
         cameraOrientationListener = new OrientationEventListener(this){
             @Override public void onOrientationChanged(int value){
                 if(value == ORIENTATION_UNKNOWN)return;
-                int snapped=((value+45)/90*90)%360;
-                if(snapped==lastPhysicalAngle)return;
-                lastPhysicalAngle=snapped;
-                if(web!=null){
-                    web.post(()->web.evaluateJavascript(
-                        "window.HNLAndroidApp?.setDeviceOrientation("+snapped+","+screenAngle()+")",null));
+                // 13-degree hysteresis around each quadrant avoids jitter near 45/135.
+                final int snapped=((value+45)/90*90)%360;
+                if(snapped!=lastPhysicalAngle){
+                    int diff=Math.abs(value-lastPhysicalAngle);
+                    diff=Math.min(diff,360-diff);
+                    if(diff<58)return;
                 }
+                if(snapped==lastPhysicalAngle&&screenAngle()==lastPublishedDisplayAngle)return;
+                lastPhysicalAngle=snapped;
+                publishOrientation(false);
             }
         };
         if(cameraOrientationListener.canDetectOrientation())cameraOrientationListener.enable();
+        // 180-degree rotations do not reliably fire onConfigurationChanged.
+        // Listen to the display independently as Android camera apps do.
+        displayManager=(DisplayManager)getSystemService(DISPLAY_SERVICE);
+        if(displayManager!=null){
+            displayRotationListener=new DisplayManager.DisplayListener(){
+                @Override public void onDisplayAdded(int id){}
+                @Override public void onDisplayRemoved(int id){}
+                @Override public void onDisplayChanged(int id){
+                    if(id==getWindowManager().getDefaultDisplay().getDisplayId())
+                        publishOrientation(true);
+                }
+            };
+            displayManager.registerDisplayListener(displayRotationListener,null);
+        }
     }
 
     private void initializeWeb() {
@@ -290,10 +326,8 @@ public final class MainActivity extends Activity {
             }
             @Override public void onPageFinished(WebView view, String url) {
                 if (trusted(Uri.parse(url))) {
-                    view.evaluateJavascript(
-                        "document.body.classList.add('hnl-android-apk');" +
-                        "window.HNLAndroidApp && window.HNLAndroidApp.setDeviceOrientation(" + lastPhysicalAngle + "," + screenAngle() + ")",
-                        null);
+                    view.evaluateJavascript("document.body.classList.add('hnl-android-apk');",null);
+                    publishOrientation(true);
                 }
             }
         });
@@ -605,8 +639,7 @@ public final class MainActivity extends Activity {
 
     @Override public void onConfigurationChanged(Configuration config) {
         super.onConfigurationChanged(config);
-        if (web != null) web.post(() ->
-            web.evaluateJavascript("window.HNLAndroidApp?.setDeviceOrientation(" + lastPhysicalAngle + "," + screenAngle() + ");window.dispatchEvent(new Event('resize'))", null));
+        publishOrientation(true);
     }
 
     @Override public void onBackPressed() {
@@ -631,6 +664,7 @@ public final class MainActivity extends Activity {
         super.onResume();
         if(cameraOrientationListener!=null && cameraOrientationListener.canDetectOrientation())cameraOrientationListener.enable();
         if (web != null) web.onResume();
+        publishOrientation(true);
     }
 
     @Override protected void onPause() {
@@ -641,6 +675,8 @@ public final class MainActivity extends Activity {
 
     @Override protected void onDestroy() {
         if(cameraOrientationListener!=null)cameraOrientationListener.disable();
+        if(displayManager!=null&&displayRotationListener!=null)
+            displayManager.unregisterDisplayListener(displayRotationListener);
         for (String token : new ArrayList<>(sessions.keySet())) abortSession(token);
         for (String token : new ArrayList<>(shares.keySet())) abortShareFile(token);
         if (web != null) {

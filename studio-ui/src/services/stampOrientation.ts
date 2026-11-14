@@ -1,6 +1,10 @@
-/** Camera pixels already follow display rotation in Android WebView.
- * Only the remaining physical-to-display difference belongs on the stamp.
- * Keep this pure helper shared by all templates and capture paths.
+/** Android's OrientationEventListener degrees rotate CLOCKWISE, while
+ * Display#getRotation degrees rotate COUNTERCLOCKWISE (Android documentation).
+ * The remaining angle between physical device orientation and the preview's
+ * display coordinate system is therefore their SUM, not their difference.
+ * E.g. physical 90 + display 270 = 0 (auto-rotated landscape), while
+ * physical 90 + display 0 = 90 (portrait rotation-lock).
+ * Both preview and encoded photo/video watermarks use this helper.
  */
 import type {OrientationDeg} from '../types/hnl';
 export function normalizeStampAngle(value:number):OrientationDeg{
@@ -9,5 +13,5 @@ export function normalizeStampAngle(value:number):OrientationDeg{
  return mod===270?-90:mod===180?180:mod===90?90:0;
 }
 export function resolveStampOrientation(physicalDegrees:number,displayDegrees:number):OrientationDeg{
- return normalizeStampAngle(physicalDegrees-displayDegrees);
+ return normalizeStampAngle(physicalDegrees+displayDegrees);
 }
