@@ -1,6 +1,6 @@
 /** Realistic deterministic document/CCCD regressions, no biometric/personal data. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
-const ts=require('typescript');
+let ts;try{ts=require('../studio-ui/node_modules/typescript');}catch{ts=require('typescript');}
 const source=fs.readFileSync(path.join(__dirname,'../studio-ui/src/services/documentScanner.ts'),'utf8');
 const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
 const mod={exports:{}};vm.runInNewContext(js,{module:mod,exports:mod.exports,Uint8Array,Uint32Array,Int32Array,Uint8ClampedArray,Float32Array,Math,Map,Set,Date,console,Number,Error,Array});
