@@ -34,6 +34,8 @@ import {isRenderableStamp} from '../../services/stampRenderer';
 import {supportedVideoMime} from '../../services/videoFormat';
 import {readDeviceGps,mediaWatermarkConfig} from '../../services/watermarkLocation';
 import {normalizeStampAngle,resolveStampOrientation} from '../../services/stampOrientation';
+import {capturedPhotoTurn,orientCapturedCanvas} from '../../services/capturedPhotoOrientation';
+import {isAndroidApk} from '../../services/deviceBridge';
 
 interface CameraApkScreenProps {
   watermarkConfig: WatermarkConfig;
@@ -68,6 +70,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>(watermarkConfig.defaultAspectRatio || '4:3');
   const [orientationDeg, setOrientationDeg] = useState<OrientationDeg>(0);
   const stampOrientationRef=useRef<OrientationDeg>(0);
+  const physicalPhotoAngleRef=useRef<number>(0);
   const [previewCode,setPreviewCode]=useState(()=>createTimemarkCode());
 
   // Video state
@@ -119,6 +122,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     const apply=(data?:{angle?:number;displayAngle?:number})=>{
       const {angle,displayAngle}=data||{};
       if(typeof angle!=='number')return;
+      physicalPhotoAngleRef.current=angle;
       // OEL physical angle is CLOCKWISE, Android display rotation is CCW.
       // Never use viewport aspect ratio as a proxy for rotation lock state.
       const screen=typeof displayAngle==='number'?displayAngle:
@@ -314,14 +318,20 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         ctx.filter=`brightness(${exposureFactor})`;
         ctx.drawImage(live,(canvas.width-w)/2,(canvas.height-h)/2,w,h,0,0,canvas.width,canvas.height);
         ctx.filter='none';
-        const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không xuất được ảnh')),'image/jpeg',.95));
+        // The preview watermark already rotates correctly. Rotate the actual
+        // image pixels when the camera track raster has the wrong portrait/
+        // landscape shape for the physical handset. No EXIF-only workaround.
+        const quarter=isAndroidApk()?capturedPhotoTurn(canvas.width,canvas.height,
+          physicalPhotoAngleRef.current,stampOrientationRef.current):0;
+        const output=orientCapturedCanvas(canvas,quarter);
+        const blob=await new Promise<Blob>((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(Error('Không xuất được ảnh')),'image/jpeg',.95));
         const at=new Date();const item:MediaItem={id:`cam-${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}`,
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
-          createdAt:at.toISOString(),resolutionLabel:`${canvas.width} × ${canvas.height}`,
+          createdAt:at.toISOString(),resolutionLabel:`${output.width} × ${output.height}`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationSource==='manual'?watermarkConfig.locationText:'',
           coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?previewCode:createTimemarkCode(),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:watermarkTurn, captureWatermark:mediaWatermarkConfig({...watermarkConfig,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:'',coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:'',coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);
         setPreviewCode(createTimemarkCode());
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));

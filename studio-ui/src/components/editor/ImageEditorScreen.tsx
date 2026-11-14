@@ -54,10 +54,20 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
 
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const imageRectRef=useRef<HTMLDivElement|null>(null);
+  const [stageSize,setStageSize]=useState({w:0,h:0});
+  useEffect(()=>{
+    const el=canvasRef.current;if(!el)return;
+    const sync=()=>setStageSize({w:el.clientWidth,h:el.clientHeight});sync();
+    const observer=typeof ResizeObserver!=='undefined'?new ResizeObserver(sync):null;
+    observer?.observe(el);return()=>observer?.disconnect();
+  },[]);
   const pinchStartRef = useRef<number | null>(null);
   const pinchZoomRef = useRef<number>(1);
 
   const edits = media.edits;
+  // Recreate bitmap only when a geometric/erase operation changes, never on color slider ticks.
+  const structureKey=JSON.stringify([media.id,edits.smartErase||[],edits.cropRatio,edits.rotationDeg,edits.flipHorizontal]);
   // Always work from the ORIGINAL Blob, not the already-stamped photo URL.
   // Release every preview object URL when edits change or the editor unmounts.
   useEffect(()=>{
@@ -65,15 +75,16 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
     const timer=window.setTimeout(async()=>{
       try{
         const source=media.rawBlob || await(await fetch(media.url)).blob();
-        const normal=await createEditorPreview(source,edits,false);
-        const erased=await createEditorPreview(source,edits,true);
+        const structuralEdits={...edits,brightness:100,contrast:100,saturation:100};
+        const normal=await createEditorPreview(source,structuralEdits,false);
+        const erased=await createEditorPreview(source,structuralEdits,true);
         if(disposed)return;
         urls=[URL.createObjectURL(normal),URL.createObjectURL(erased)];
         setPreviewUrl(urls[0]);setErasePreviewUrl(urls[1]);setEraseError('');
       }catch(e){if(!disposed)setEraseError('Không tạo được preview chỉnh ảnh: '+String(e));}
-    },120);
+    },40);
     return ()=>{disposed=true;window.clearTimeout(timer);urls.forEach(url=>URL.revokeObjectURL(url));};
-  },[media.id,media.rawBlob,edits]);
+  },[media.id,media.rawBlob,structureKey]);
 
   // Map touch/pen/mouse precisely to the visible object-contain image pixels.
   const pointAt=(event:React.PointerEvent<HTMLDivElement>)=>{
@@ -175,6 +186,10 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
     return 'w-[90%] h-[86%]';
   };
 
+  const scaleToFit=Math.min(stageSize.w/Math.max(1,imageSize.w),stageSize.h/Math.max(1,imageSize.h));
+  const fittedW=Math.max(0,imageSize.w*scaleToFit),fittedH=Math.max(0,imageSize.h*scaleToFit);
+  const imageRect={left:(stageSize.w-fittedW)/2,top:(stageSize.h-fittedH)/2,width:fittedW,height:fittedH};
+
   return (
     <div className="px-4 py-3 space-y-3.5 max-w-4xl mx-auto">
       {/* Top Toolbar: Title + Undo / Reset Original */}
@@ -224,14 +239,24 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
           style={{ height: `${previewHeightPx}px` }}
           className={`relative w-full overflow-hidden bg-[#04070E] flex items-center justify-center ${activeTab==='erase'?'touch-none':media.kind==='video'?'touch-auto':'touch-none'}`}
         >
-          {media.kind==='video' ? <video src={media.url} controls playsInline preload="metadata" className="w-full h-full object-contain" /> : <img
-            src={(activeTab==='erase'?erasePreviewUrl:previewUrl)||media.url}
-            alt={media.title}
-            onLoad={e=>setImageSize({w:e.currentTarget.naturalWidth||4,h:e.currentTarget.naturalHeight||3})}
-            referrerPolicy="no-referrer"
-            style={{transform:`scale(${activeTab==='erase'?1:zoom})`,transition:'transform 140ms ease-out'}}
-            className="w-full h-full object-contain pointer-events-none"
-          />}
+          {media.kind==='video' ? <video src={media.url} controls playsInline preload="metadata" className="w-full h-full object-contain" /> :
+            <div ref={imageRectRef} className="absolute overflow-hidden" style={{
+              left:imageRect.left,top:imageRect.top,width:imageRect.width,height:imageRect.height,
+              transform:`scale(${activeTab==='erase'?1:zoom})`,transition:'transform 140ms ease-out',transformOrigin:'center center'
+            }}>
+              <img src={(activeTab==='erase'?erasePreviewUrl:previewUrl)||media.url}
+                alt={media.title}
+                onLoad={e=>setImageSize(old=>{const w=e.currentTarget.naturalWidth||4,h=e.currentTarget.naturalHeight||3;
+                 return old.w===w&&old.h===h?old:{w,h};})}
+                referrerPolicy="no-referrer"
+                style={{filter:activeTab==='erase'?'none':`brightness(${edits.brightness??100}%) contrast(${edits.contrast??100}%) saturate(${edits.saturation??100}%)`}}
+                className="w-full h-full pointer-events-none" draggable={false}/>
+              {activeTab!=='erase'&&<WatermarkOverlay
+                config={{ ...watermarkConfig, positionPreset: 'custom' }}
+                draggable
+                containerRef={imageRectRef}
+                onDragPositionChange={onUpdateWatermarkPos}/>} 
+            </div>}
           {activeTab==='erase'&&eraseRect&&(
             <div className="absolute pointer-events-none border-2 border-dashed border-[#FBD35B] bg-[#FBD35B]/15"
               style={{left:previewBox.left+eraseRect.x*previewBox.width,
@@ -247,14 +272,6 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
               />
             </div>
           )}
-
-          {/* Draggable Watermark */}
-          {activeTab!=='erase'&&<WatermarkOverlay
-            config={{ ...watermarkConfig, positionPreset: 'custom' }}
-            draggable
-            containerRef={canvasRef}
-            onDragPositionChange={onUpdateWatermarkPos}
-          />}
 
           {/* Subtle drag hint */}
           <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-md bg-black/60 text-[11px] text-[#E2B74B] flex items-center gap-1 pointer-events-none">

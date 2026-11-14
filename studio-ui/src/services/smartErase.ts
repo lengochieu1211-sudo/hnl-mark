@@ -94,9 +94,9 @@ function sourceBitmap(bitmap:ImageBitmap,edits:ImageEdits,maxEdge:number,onlyEra
 export function createEditedCanvas(bitmap:ImageBitmap,edits:ImageEdits,maxEdge=Infinity,onlyErase=false){
  return sourceBitmap(bitmap,edits,maxEdge,onlyErase);
 }
-export async function createEditorPreview(blob:Blob,edits:ImageEdits,onlyErase=false):Promise<Blob>{
+export async function createEditorPreview(blob:Blob,edits:ImageEdits,onlyErase=false,maxEdge=1440):Promise<Blob>{
  const bitmap=await createImageBitmap(blob);
- try{const canvas=createEditedCanvas(bitmap,edits,1440,onlyErase);
+ try{const canvas=createEditedCanvas(bitmap,edits,maxEdge,onlyErase);
   return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không tạo được ảnh xem trước')),'image/jpeg',.88));
  }finally{bitmap.close();}
 }

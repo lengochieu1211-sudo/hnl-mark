@@ -36,7 +36,7 @@ assert 'if(videoSaveTask)' in video
 assert 'if(outputBlob===blob)outputSaved=true' in video
 assert 'const saveBlob=(blob,name)=>enqueueTransfer(blob,name,false);' in bridge
 assert 'transferQueue=next.catch(()=>{})' in bridge
-assert "versionCode 2529" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2529'" in read('android/app/build.gradle')
-assert "HNLMark STUDIO 29" in read('android/app/build.gradle')
+assert "versionCode 2530" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2530'" in read('android/app/build.gradle')
+assert "HNLMark STUDIO 30" in read('android/app/build.gradle')
 print('PASS: TEST10 source paths and automatic camera photo/video public media saves')

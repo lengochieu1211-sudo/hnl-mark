@@ -57,6 +57,7 @@ jobs:
           python3 tests/test_studio21_simple_stamp_storage.py
           python3 tests/test_studio22_timemark_catalog.py
           python3 tests/test_studio23_rotation.py
+          python3 tests/test_studio30_preview_sync.py
           node --experimental-strip-types tests/test_studio23_orientation_matrix.mjs
       - name: AI Studio React TypeScript + Vite build
         run: |

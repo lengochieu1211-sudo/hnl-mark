@@ -1,3 +1,5 @@
+import {PhotoPreview} from '../watermark/PhotoPreview';
+import {DEFAULT_WATERMARK_CONFIG} from '../../data/templates';
 import React, {useEffect, useRef, useState} from 'react';
 import {ArrowLeft, ChevronLeft, ChevronRight, Images, Pencil, Share2} from 'lucide-react';
 import type {MediaItem} from '../../types/hnl';
@@ -67,8 +69,8 @@ export const CameraRollScreen:React.FC<Props>=({items,initialId,onBackToCamera,o
       onTouchStart={handleStart} onTouchMove={handleMove} onTouchEnd={handleEnd}
       onClick={()=>setViewerTools(old=>!old)}>
       {active?.kind==='video'? <video key={active.id} src={active.url} playsInline controls preload="metadata" className="max-w-full max-h-full w-auto h-auto object-contain" />
-      : active ? <img key={active.id} src={active.url} alt={active.title} draggable={false}
-          className="w-full h-full object-contain select-none" style={{transform:`scale(${zoom})`,transition:pinchDist.current?'none':'transform 120ms ease'}} />
+      : active ? <div className="w-full h-full" style={{transform:`scale(${zoom})`,transition:pinchDist.current?'none':'transform 120ms ease'}}>
+           <PhotoPreview key={active.id} media={active} config={active.captureWatermark||DEFAULT_WATERMARK_CONFIG}/></div>
       : <div className="flex flex-col items-center gap-3 p-5 text-center text-[#94A3B8]"><Images className="w-11 h-11"/><p>Chưa có ảnh hoặc video đã chụp.</p><button type="button" onClick={onBackToCamera} className="px-4 py-2 rounded-xl bg-[#E2B74B] text-[#071121] font-semibold">Chụp ảnh</button></div>}
       {active&&viewerTools&&ordered.length>1&&<>
         <button type="button" onClick={e=>{e.stopPropagation();step(-1);}} disabled={activeIndex===0} aria-label="Ảnh trước" className="absolute left-1 top-1/2 -translate-y-1/2 p-2 bg-black/35 rounded-full disabled:opacity-20"><ChevronLeft className="w-6 h-6"/></button>
@@ -80,7 +82,7 @@ export const CameraRollScreen:React.FC<Props>=({items,initialId,onBackToCamera,o
         {ordered.map((item,index)=><button key={item.id} type="button" onClick={()=>select(index)} aria-label={`Xem ảnh ${index+1}`}
           className={`relative w-14 h-14 shrink-0 overflow-hidden rounded-lg border-2 ${index===activeIndex?'border-[#E2B74B]':'border-white/10'}`}>
           {item.kind==='video'? <div className="w-full h-full bg-[#1C2A40] flex items-center justify-center text-[10px]">VIDEO</div>:
-            <img src={item.url} alt="" className="w-full h-full object-cover"/>}
+            <PhotoPreview compact media={item} config={item.captureWatermark||DEFAULT_WATERMARK_CONFIG}/>}
         </button>)}
       </div>}
       {active&&<div className="flex items-center justify-between gap-3 px-4 py-2">

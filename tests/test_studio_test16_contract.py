@@ -18,7 +18,7 @@ assert 'recorder.pause()' in cam and 'recorder.resume()' in cam
 assert "aria-label={isPaused?'Tiếp tục quay video':'Tạm dừng quay video'}" in cam
 assert 'track.applyConstraints' in cam and 'pointsOfInterest' in cam
 assert 'Bù sáng tại điểm chạm' in cam and 'brightness(${exposureFactor})' in cam
-assert 'orientationDeg:watermarkTurn, captureWatermark:' in cam
+assert 'orientationDeg:0, captureWatermark:' in cam
 assert 'createTimemarkPhoto(newPhoto.rawBlob' in app
 assert 'saveToDevice(item.stampedBlob' in app
 assert 'await storeMedia(newPhoto)' in app  # Commit original first.
@@ -29,6 +29,6 @@ assert 'Tệp gốc và sao lưu · Tùy chọn nâng cao' in exp
 assert 'stampedBlob:item.stampedBlob' in storage
 assert 'stampedName' in backup and "zip.file(stampedName,stampedBlob" in backup
 assert 'LEGACY_RATIO = 0.98' in icon and 'BACKGROUND_RGB' not in icon
-assert 'versionCode 2529' in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2529'" in read('android/app/build.gradle')
+assert 'versionCode 2530' in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2530'" in read('android/app/build.gradle')
 print('PASS: TEST21 stamped photo/video, protected originals, pause/resume, spot metering and icon')

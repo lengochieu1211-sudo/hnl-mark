@@ -1,7 +1,7 @@
 import React from 'react';
 import { FileArchive, Share2 } from 'lucide-react';
 import { MediaItem, WatermarkConfig } from '../../types/hnl';
-import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
+import {PhotoPreview} from '../watermark/PhotoPreview';
 
 interface ExportScreenProps {
   activeMedia: MediaItem;
@@ -30,8 +30,8 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
         <div className="relative aspect-[4/3] max-h-[340px] w-full bg-black">
           {activeMedia.kind==='video'
             ? <video src={activeMedia.url} controls playsInline preload="metadata" className="w-full h-full object-contain" aria-label="Phát xem trước video" />
-            : <img src={activeMedia.url} alt={activeMedia.title} className="w-full h-full object-contain" />}
-          {!(activeMedia.kind==='video'&&activeMedia.isStamped)&&<WatermarkOverlay config={watermarkConfig} />}
+            : <PhotoPreview media={activeMedia} config={watermarkConfig}/>}
+          {activeMedia.kind==='video'&&!activeMedia.isStamped&&<span className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">Dấu sẽ được chèn khi xuất video</span>}
         </div>
 
         <div className="p-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.08]">

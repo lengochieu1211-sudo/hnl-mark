@@ -9,8 +9,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { MediaItem, WatermarkConfig } from '../../types/hnl';
-import { WATERMARK_TEMPLATES } from '../../data/templates';
-import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
+import { WATERMARK_TEMPLATES, TEMPLATE_CATALOG_GROUPS } from '../../data/templates';
+import { PhotoPreview } from '../watermark/PhotoPreview';
 import { AccordionSection } from '../common/AccordionSection';
 
 interface HomeScreenProps {
@@ -114,19 +114,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             style={{ height: `${previewHeightPx}px` }}
             className="relative w-full overflow-hidden bg-[#040811] flex items-center justify-center"
           >
-            <img
-              src={activeMedia.url}
-              alt={activeMedia.title}
-              referrerPolicy="no-referrer"
-              style={{
-                filter: `brightness(${activeMedia.edits.brightness}%) contrast(${activeMedia.edits.contrast}%) saturate(${activeMedia.edits.saturation}%)`,
-                transform: `rotate(${activeMedia.edits.rotationDeg}deg) scaleX(${
-                  activeMedia.edits.flipHorizontal ? -1 : 1
-                })`,
-              }}
-              className="w-full h-full object-cover transition-transform duration-200"
-            />
-            <WatermarkOverlay config={watermarkConfig} />
+            {activeMedia.kind==='photo'?<PhotoPreview media={activeMedia} config={watermarkConfig} />:
+              <video src={activeMedia.url} controls playsInline className="w-full h-full object-contain"/>}
           </div>
 
           {/* Interactive drag bar to resize preview */}
@@ -228,7 +217,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       <section aria-label="Chức năng phụ thu gọn" className="pt-1">
         <AccordionSection
           title="Chọn nhanh mẫu dấu thời gian"
-          subtitle={`Đang chọn: ${activeTemplate.name} · 22 mẫu sẵn sàng`}
+          subtitle={`Đang chọn: ${activeTemplate.name} · ${TEMPLATE_CATALOG_GROUPS.filter(group=>group.category!=='none').reduce((sum,group)=>sum+group.templateIds.length,0)} mẫu có dấu`}
           isOpen={openSecondary === 'quick-stamps'}
           onToggle={() =>
             setOpenSecondary((s) => (s === 'quick-stamps' ? 'none' : 'quick-stamps'))
@@ -260,7 +249,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               className="min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 bg-white/[0.06] text-[#F8FAFC] hover:bg-white/10 flex items-center gap-1"
             >
               <Sparkles className="w-3.5 h-3.5 text-[#E2B74B]" />
-              Xem cả 22 mẫu
+              Xem tất cả mẫu
             </button>
           </div>
         </AccordionSection>

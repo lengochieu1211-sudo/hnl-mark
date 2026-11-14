@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { LibraryStateMode, MediaItem, WatermarkConfig } from '../../types/hnl';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
+import {PhotoPreview} from '../watermark/PhotoPreview';
 
 interface LibraryScreenProps {
   items: MediaItem[];
@@ -473,12 +474,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   )}
 
                   <div className="relative w-16 h-12 rounded-lg overflow-hidden bg-[#060B14] shrink-0">
-                    {item.kind==='video' ? <div className="w-full h-full grid place-items-center text-xs text-[#E2B74B] bg-[#17253D]"><Film className="w-5 h-5"/>VIDEO</div> : <img
-                      src={item.url}
-                      alt={item.title}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />}
+                    {item.kind==='video' ? <div className="w-full h-full grid place-items-center text-xs text-[#E2B74B] bg-[#17253D]"><Film className="w-5 h-5"/>VIDEO</div> : <PhotoPreview compact media={item} config={watermarkConfig}/>}
                     {item.kind === 'video' && (
                       <span className="absolute inset-0 bg-black/35 flex items-center justify-center">
                         <Play className="w-4 h-4 text-white fill-white" />
@@ -515,12 +511,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                 }`}
               >
                 <div className="relative aspect-[4/3] bg-[#060B14] overflow-hidden">
-                  {item.kind==='video' ? <div className="w-full h-full flex flex-col gap-2 items-center justify-center text-[#E2B74B] bg-[#16233B]"><Film className="w-9 h-9"/><span className="text-xs">Nhấn để phát video</span></div> : <img
-                    src={item.url}
-                    alt={item.title}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-200"
-                  />}
+                  {item.kind==='video' ? <div className="w-full h-full flex flex-col gap-2 items-center justify-center text-[#E2B74B] bg-[#16233B]"><Film className="w-9 h-9"/><span className="text-xs">Nhấn để phát video</span></div> : <PhotoPreview compact media={item} config={watermarkConfig}/>}
 
                   {item.kind === 'video' && (
                     <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-mono-tabular flex items-center gap-1">
@@ -604,18 +595,8 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
               {lightboxItem.kind==='video' ? <video key={lightboxItem.id} src={lightboxItem.url}
                 controls playsInline preload="metadata" className="w-full h-full object-contain"
                 onError={()=>setVideoPlaybackError('Không phát được video này. Hãy thử MP4 H.264/AAC hoặc WebM VP8. Tệp gốc vẫn còn.')}
-              /> : <img src={lightboxItem.url} alt={lightboxItem.title}
-                referrerPolicy="no-referrer" className="w-full h-full object-contain" />}
-              {!(lightboxItem.kind==='video'&&lightboxItem.isStamped)&&<WatermarkOverlay
-                config={{
-                  ...watermarkConfig,
-                  templateId: lightboxItem.templateId,
-                  dateTimeIso: lightboxItem.createdAt,
-                  locationText: lightboxItem.location,
-                  coordinates: lightboxItem.coordinates,
-                  customNote: lightboxItem.customNote,
-                }}
-              />}
+              /> : <PhotoPreview media={items.find(it=>it.id===lightboxItem.id)||lightboxItem} config={watermarkConfig} />}
+              {lightboxItem.kind==='video'&&!lightboxItem.isStamped&&<WatermarkOverlay config={watermarkConfig} />}
               {videoPlaybackError&&<p role="alert" className="absolute bottom-2 left-2 right-2 rounded-lg bg-red-950/90 p-2 text-xs text-red-100 pointer-events-none">{videoPlaybackError}</p>}
             </div>
 
