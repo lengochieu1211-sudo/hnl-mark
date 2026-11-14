@@ -46,3 +46,9 @@ jobs:
           python3 tests/test_device_media_save_v2510.py
           python3 tests/test_launcher_color_fidelity_v2511.py
           python3 tests/test_studio_ui_port.py
+          python3 tests/test_ai_studio_primary.py
+      - name: AI Studio React TypeScript + Vite build
+        run: |
+          npm install --prefix studio-ui --no-audit --no-fund
+          npm run lint --prefix studio-ui
+          npm run build --prefix studio-ui

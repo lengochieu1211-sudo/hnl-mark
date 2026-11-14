@@ -2,6 +2,7 @@
 """Bundle the exact repository web core into the local Android APK."""
 from pathlib import Path
 import shutil
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "android" / "app" / "src" / "main"
@@ -46,6 +47,19 @@ index = index.replace(
     1,
 )
 (WWW / "index.html").write_text(index, encoding="utf-8")
+
+# AI Studio React is the PRIMARY UI in TEST13. The real legacy HNL processing
+# core stays at assets/www/index.html as a reversible advanced workspace.
+STUDIO = ROOT / "studio-ui"
+subprocess.run(["npm", "install", "--no-audit", "--no-fund", "--prefix", str(STUDIO)], check=True)
+subprocess.run(["npm", "run", "build", "--prefix", str(STUDIO)], check=True)
+DIST=STUDIO/"dist"
+if not (DIST/"index.html").is_file():raise SystemExit("Studio Vite build missing")
+STUDIO_WWW=WWW/"studio"
+if STUDIO_WWW.exists():shutil.rmtree(STUDIO_WWW)
+shutil.copytree(DIST,STUDIO_WWW)
+for name in ("hnl-logo-192.png","hnl-logo-512.png"):
+    shutil.copy2(ROOT/name,STUDIO_WWW/name)
 
 drawable = APP / "res" / "drawable"
 drawable.mkdir(parents=True, exist_ok=True)

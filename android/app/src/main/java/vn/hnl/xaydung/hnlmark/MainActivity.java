@@ -61,7 +61,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
-    private static final String ENTRY = "https://" + HOST + "/assets/www/index.html";
+    private static final String ENTRY = "https://" + HOST + "/assets/www/studio/index.html";
     private static final int REQ_FILES = 400;
     private static final int REQ_NATIVE_GALLERY = 402;
     private static final int REQ_MEDIA_PERMISSIONS = 401;
@@ -139,8 +139,8 @@ public final class MainActivity extends Activity {
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         // No native dark title bar: system status remains visible and blends with the page.
-        getWindow().setStatusBarColor(Color.rgb(241, 244, 248));
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().setStatusBarColor(Color.rgb(9, 17, 30));
+        getWindow().getDecorView().setSystemUiVisibility(0);
         getWindow().setNavigationBarColor(Color.BLACK);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
@@ -164,6 +164,8 @@ public final class MainActivity extends Activity {
         addTab("Thư viện máy", android.R.drawable.ic_menu_gallery, "library");
         addTab("Cài dấu", android.R.drawable.ic_menu_edit, "stamp");
         addTab("Xuất", android.R.drawable.ic_menu_save, "export");
+        // React AI Studio has its own fixed navigation. Avoid duplicate bottom bars.
+        chromeTabs.setVisibility(View.GONE);
 
         setContentView(root);
         tidyShares();
@@ -545,7 +547,7 @@ public final class MainActivity extends Activity {
     }
 
     private void setChromeVisible(boolean visible) {
-        chromeTabs.setVisibility(visible ? View.VISIBLE : View.GONE);
+        chromeTabs.setVisibility(View.GONE);
     }
 
     private void hideFullscreen() {
@@ -569,20 +571,20 @@ public final class MainActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (fullscreenView != null) { hideFullscreen(); return; }
-        if (cameraImmersive) {
-            web.evaluateJavascript(
-                "(function(){if(document.body.classList.contains('hnl-video-live'))" +
-                "document.getElementById('videoClose')?.click();" +
-                "else document.getElementById('closeCamera')?.click();})()", null);
-            return;
-        }
+        // React Studio handles the Back action. Legacy engine remains available
+        // in an iframe, and retains its own close handlers.
+        if (web == null) { moveTaskToBack(true); return; }
         web.evaluateJavascript(
-            "(function(){const m=document.getElementById('libraryModal');" +
-            "if(m&&!m.hidden){document.getElementById('closeLibrary')?.click();return true;}" +
+            "(function(){if(window.HNLAndroidApp?.handleBack)" +
+            "return window.HNLAndroidApp.handleBack()===true;" +
+            "if(document.body.classList.contains('hnl-video-live'))" +
+            "{document.getElementById('videoClose')?.click();return true;}" +
+            "if(document.body.classList.contains('hnl-camera-live'))" +
+            "{document.getElementById('closeCamera')?.click();return true;}" +
+            "const modal=document.getElementById('libraryModal');" +
+            "if(modal&&!modal.hidden){document.getElementById('closeLibrary')?.click();return true;}" +
             "return false;})()",
-            value -> {
-                if (!"true".equals(value)) moveTaskToBack(true);
-            });
+            value->{if(!"true".equals(value))moveTaskToBack(true);});
     }
 
     @Override protected void onResume() {

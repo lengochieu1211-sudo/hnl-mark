@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"portrait\"" in manifest
-assert "versionCode 2513" in gradle and "versionName '2.5.13-icon-test'" in gradle
+assert "versionCode 2514" in gradle and "versionName '2.5.14-studio-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -77,7 +77,8 @@ assert 'TextView offline' not in java
 assert 'setChromeVisible(!active)' in java
 assert 'app.addView(chromeTabs, new LinearLayout.LayoutParams(-1, dp(61)))' in java
 assert 'app.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f))' in java
-assert 'View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR' in java
+assert 'getWindow().setStatusBarColor(Color.rgb(9, 17, 30))' in java
+assert 'chromeTabs.setVisibility(View.GONE);' in java
 
 # Photo preview must remain above scrolling editing form, except live camera.
 assert 'workspace > .viewer' in ui
@@ -88,7 +89,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.13-icon-test'" in bridge
+assert "version:'2.5.14-studio-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -155,10 +156,10 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial2513'" in gradle
-assert "HNLMark TEST 13" in gradle
+assert "applicationIdSuffix '.trial2514'" in gradle
+assert "HNLMark STUDIO 14" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.13" in ux
+assert "TEST v2.5.14" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 

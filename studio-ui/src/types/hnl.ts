@@ -1,0 +1,114 @@
+export type AppRoute = 'camera' | 'home' | 'library' | 'stamps' | 'editor' | 'export';
+
+export type CameraMode = 'photo' | 'video';
+export type OrientationDeg = 0 | 90 | -90 | 180;
+export type AspectRatioMode = '4:3' | '16:9' | '1:1' | 'full';
+export type CameraLens = 'rear' | 'front';
+
+export type VideoResolution = '720p' | '1080p' | '4K';
+export type VideoFps = 24 | 30 | 60;
+export type VideoQualityLevel = 'Chuẩn' | 'Cao' | 'Tối đa';
+
+export interface VideoSettings {
+  resolution: VideoResolution;
+  fps: VideoFps;
+  quality: VideoQualityLevel;
+}
+
+export type WatermarkGroup = 'timemark-legacy' | 'hnl-independent';
+
+export type WatermarkPositionPreset =
+  | 'bottom-left'
+  | 'bottom-right'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-center'
+  | 'custom';
+
+export type WatermarkFontKey = 'be-vietnam' | 'jakarta' | 'jetbrains' | 'serif';
+
+export interface WatermarkTemplate {
+  id: string;
+  code: string;
+  name: string;
+  group: WatermarkGroup;
+  isPlaceholder?: boolean;
+  summary: string;
+  accentHex: string;
+  surfaceMode: 'glass-dark' | 'stripe-gold' | 'minimal-text' | 'badge-card' | 'led-digital' | 'strip-footer';
+}
+
+export interface WatermarkConfig {
+  templateId: string;
+  dateTimeIso: string;
+  autoTime: boolean;
+  dateFormat: 'DD/MM/YYYY HH:mm:ss' | 'YYYY-MM-DD HH:mm' | 'HH:mm · DD/MM/YYYY';
+  locationText: string;
+  coordinates: string;
+  showCoordinates: boolean;
+  customTitle: string;
+  customNote: string;
+  inspectorName: string;
+  fontKey: WatermarkFontKey;
+  fontSizePx: number;
+  textColor: string;
+  accentColor: string;
+  bgOpacity: number;
+  showLogo: boolean;
+  logoSide: 'left' | 'right';
+  positionPreset: WatermarkPositionPreset;
+  customPos: { xPct: number; yPct: number };
+  photoCodePrefix: string;
+  photoCodeSeq: number;
+  showPhotoCode: boolean;
+  perPhotoOverrideEnabled: boolean;
+  defaultAspectRatio: AspectRatioMode;
+  jpegQuality: number;
+}
+
+export type MediaOrigin = 'saved-project' | 'newly-picked';
+export type MediaKind = 'photo' | 'video';
+
+export type CropRatio = 'free' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16';
+
+export interface ImageEdits {
+  cropRatio: CropRatio;
+  centeredFrame: boolean;
+  rotationDeg: number;
+  flipHorizontal: boolean;
+  brightness: number; // 50..150 (100 default)
+  contrast: number;   // 50..150 (100 default)
+  saturation: number; // 0..180 (100 default)
+}
+
+export interface MediaItem {
+  /** Original bytes for new media; persisted separately in IndexedDB. */
+  rawBlob?: Blob;
+  id: string;
+  title: string;
+  kind: MediaKind;
+  origin: MediaOrigin;
+  url: string;
+  createdAt: string;
+  durationSec?: number;
+  resolutionLabel: string;
+  sizeLabel: string;
+  location: string;
+  coordinates: string;
+  photoCode: string;
+  customNote: string;
+  templateId: string;
+  edits: ImageEdits;
+  watermarkOverride?: Partial<WatermarkConfig>;
+}
+
+export type LibraryStateMode = 'populated' | 'empty' | 'loading' | 'error';
+export type ExportSimStatus = 'idle' | 'exporting' | 'success' | 'error';
+
+export interface ViewportPreset {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  category: 'mobile-portrait' | 'mobile-landscape' | 'tablet' | 'desktop' | 'fluid';
+}

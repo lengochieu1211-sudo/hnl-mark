@@ -1,10 +1,21 @@
+# HNL Mark TEST 2.5.14 — AI Studio Primary React UI
+
+- APK uses original AI Studio React UI at `assets/www/studio/index.html`.
+- Original HNL legacy HTML engine remains at `assets/www/index.html` for exact Timemark export and media regression-safe fallback.
+- New debug application id `vn.hnl.xaydung.hnlmark.trial2514`, independent offline data. Never uninstall existing versions without backup.
+- Prototype image/camera simulation removed; React camera real getUserMedia and MediaRecorder with supported WebM fallback.
+- Separate IndexedDB and ZIP actual-media backup/restore; no implicit migration or clearing old local library.
+- No Production or main changes. Do not claim Runtime Golden before real Android tests.
+
+# HNLMark DEV TEST v2.5.12 — AI Studio navy/gold UI (parallel TEST)
+
 # HNLMark TEST 13 v2.5.13 — MIUI adaptive launcher safe area (isolated debug APK)
 
 - TEST 12 AI Studio UI, Video, Timemark, library and MediaStore from existing DEV kept unchanged.
 - TEST 11/12 original logo filled the whole 432px adaptive canvas. Android/MIUI displays roughly the center 288px and clipped HNL letters and the gold flourishes.
 - TEST 13 centers a **220px source-color logo** inside a transparent 432px adaptive foreground. Source RGB gold, navy, silver and white is preserved using geometric crop and resize only (no chroma-key).
 - Pixel tests render MIUI squircle and circular masks and assert no blue/gold pixels clipped. Legacy mipmap sources have matched neutral backing and safe insets.
-- TEST 13 appId `vn.hnl.xaydung.hnlmark.trial2513`; TEST 12 and prior apps remain untouched with their own offline data. No Production deployment.
+- TEST 13 appId `vn.hnl.xaydung.hnlmark.trial2514`; TEST 12 and prior apps remain untouched with their own offline data. No Production deployment.
 - Real Xiaomi/MIUI runtime launcher appearance remains pending; CI/build PASS cannot be called Runtime Golden.
 
 # HNLMark DEV TEST v2.5.12 — AI Studio navy/gold UI (parallel TEST)
