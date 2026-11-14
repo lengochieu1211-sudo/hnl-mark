@@ -19,7 +19,7 @@ for marker in ['Chụp quét','Chọn nhiều ảnh','Làm phẳng & lưu bản 
                'Hai ảnh cạnh nhau','Xuất PDF','Lưu ảnh / ZIP','Sao lưu ZIP','Khôi phục ZIP',
                'onPointerMove={handlePointerMove}','putScan(p)','await putScan(next)']:
     assert marker in ui, marker
-assert "const generatedPhotoCode = photoCode ||" in mark
+assert "const generatedPhotoCode = timemarkCode ||" in mark and "photoCode: timemarkCode" in mark
 assert "const photoCode = `${config.photoCodePrefix}" not in mark
 assert not any(s in app for s in ['cloudinary','document-scan.googleapis.com'])
 print('PASS: offline scanner routes, perspective/filters, four-corner UI, PDF, folder/ZIP, safe source persistence')
