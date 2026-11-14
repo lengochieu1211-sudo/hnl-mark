@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TEST21 source contracts: video preview & stamped export without destroying originals.
+"""TEST22 source contracts: video preview & stamped export without destroying originals.
 Static only: real Android decoder / MediaRecorder still requires runtime evidence.
 """
 from pathlib import Path
@@ -43,6 +43,6 @@ assert 'const orientation:OrientationDeg=watermarkTurn;' in cam
 assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn}' in cam
 assert 'drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, orientation,' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert '<video key={active.id} src={active.url} playsInline controls' in roll
-assert "versionCode 2521" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2521'" in read('android/app/build.gradle')
+assert "versionCode 2522" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2522'" in read('android/app/build.gradle')
 print('PASS: TEST21 imported video player / stamping / audio / unknown WebM duration / backup / rotation')

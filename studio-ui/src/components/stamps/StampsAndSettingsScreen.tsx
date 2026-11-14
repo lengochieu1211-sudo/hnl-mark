@@ -8,7 +8,7 @@ import {
   WatermarkFontKey,
   WatermarkPositionPreset,
 } from '../../types/hnl';
-import { WATERMARK_TEMPLATES } from '../../data/templates';
+import { TEMPLATE_CATALOG_GROUPS, WATERMARK_TEMPLATES, type TemplateCatalogCategory } from '../../data/templates';
 import { DEMO_IMAGES } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import { AccordionSection } from '../common/AccordionSection';
@@ -37,7 +37,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
   onUpdateEdits,
 }) => {
   const [subTab, setSubTab] = useState<'templates' | 'customize' | 'editor'>(initialSubTab);
-  const [templateFilter, setTemplateFilter] = useState<'all' | 'timemark-legacy' | 'hnl-independent' | 'simple'>('all');
+  const [templateFilter, setTemplateFilter] = useState<'all' | TemplateCatalogCategory>('all');
   const [openAccordion, setOpenAccordion] = useState<string>('datetime');
   const [logoBusy,setLogoBusy]=useState(false);
   const [logoError,setLogoError]=useState('');
@@ -58,13 +58,17 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
     finally{setLogoBusy(false);}
   };
 
-  const filteredTemplates = useMemo(() => {
-    if (templateFilter === 'all') return WATERMARK_TEMPLATES;
-    return WATERMARK_TEMPLATES.filter((t) => t.group === templateFilter);
-  }, [templateFilter]);
+  const visibleCatalog = useMemo(() =>
+    templateFilter === 'all'
+      ? TEMPLATE_CATALOG_GROUPS
+      : TEMPLATE_CATALOG_GROUPS.filter(group => group.category === templateFilter),
+  [templateFilter]);
 
   const activeTemplate =
-    WATERMARK_TEMPLATES.find((t) => t.id === config.templateId) ?? WATERMARK_TEMPLATES[10];
+    WATERMARK_TEMPLATES.find((t) => t.id === config.templateId) ??
+    WATERMARK_TEMPLATES.find((t) => t.id === 'timemark')!;
+  const isLegacyTimemark = activeTemplate.group === 'timemark-legacy' &&
+    activeTemplate.id !== 'timemark' && activeTemplate.id !== 'none';
 
   const toggleAcc = (id: string) => {
     setOpenAccordion((cur) => (cur === id ? '' : id));
@@ -80,7 +84,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
               onClick={() => setSubTab('templates')}
               className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#94A3B8] hover:text-white"
             >
-              {WATERMARK_TEMPLATES.length} Mẫu dấu
+              {TEMPLATE_CATALOG_GROUPS.length} Kiểu dấu
             </button>
             <button
               type="button"
@@ -124,7 +128,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                 : 'text-[#94A3B8] hover:text-white'
             }`}
           >
-            {WATERMARK_TEMPLATES.length} Mẫu dấu
+            {TEMPLATE_CATALOG_GROUPS.length} Kiểu dấu
           </button>
           <button
             type="button"
@@ -176,16 +180,16 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
           </div>}
       </div>
 
-      {/* TAB 1: independent presets; existing IDs retained for old project metadata */}
+      {/* Choose ONE original Timemark; group duplicate HNL layouts as variants. */}
       {subTab === 'templates' && (
         <div className="space-y-3">
-          {/* Group Filter */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 hnl-scroll">
             {[
+              { id: 'all', label: `Tất cả (${TEMPLATE_CATALOG_GROUPS.length})` },
+              { id: 'timemark', label: 'Timemark gốc (1)' },
               { id: 'simple', label: 'Chỉ ngày / giờ (3)' },
-              { id: 'all', label: `Tất cả (${WATERMARK_TEMPLATES.length})` },
-              { id: 'hnl-independent', label: '12 Mẫu độc lập' },
-              { id: 'timemark-legacy', label: '10 Mẫu Timemark' },
+              { id: 'independent', label: '6 Kiểu HNL' },
+              { id: 'none', label: 'Không dấu' },
             ].map((grp) => (
               <button
                 key={grp.id}
@@ -201,72 +205,67 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
               </button>
             ))}
           </div>
-
-          <p className="text-[11px] text-[#94A3B8]">Một số mẫu cũ sử dụng cùng bố cục, chỉ khác tiêu đề và màu. Mẫu Chỉ ngày / giờ không có mã dọc hay khung nền lớn.</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {filteredTemplates.map((tpl, idx) => {
-              const isSelected = tpl.id === config.templateId;
-              const thumbBg =
-                idx % 4 === 0
-                  ? DEMO_IMAGES.rearConstruction
-                  : idx % 4 === 1
-                    ? DEMO_IMAGES.surveyGreen
-                    : idx % 4 === 2
-                      ? DEMO_IMAGES.nightInspection
-                      : DEMO_IMAGES.coastalTravel;
-
+          {isLegacyTimemark && (
+            <p role="status" className="rounded-xl bg-[#17253D] px-3 py-2 text-xs text-[#CBD5E1]">
+              Ảnh cũ đang dùng “{activeTemplate.name}”. Dữ liệu mẫu cũ được giữ nguyên;
+              các ảnh mới chỉ có một mẫu Timemark gốc để chọn.
+            </p>
+          )}
+          <p className="text-[11px] text-[#94A3B8]">
+            Chỉ giữ TM-01 Timemark Verified. Các mẫu HNL dùng chung bố cục được gom thành
+            nhóm; chọn tên biến thể bên dưới nếu cần. Mã mẫu cũ vẫn đọc được khi khôi phục ZIP.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 items-start">
+            {visibleCatalog.map((group, idx) => {
+              const variants = group.templateIds.map(id =>
+                WATERMARK_TEMPLATES.find(template => template.id === id)!);
+              const selected = group.templateIds.includes(config.templateId);
+              const preview = selected
+                ? variants.find(template => template.id === config.templateId)!
+                : variants[0];
+              const thumbBg = [DEMO_IMAGES.rearConstruction, DEMO_IMAGES.surveyGreen,
+                DEMO_IMAGES.nightInspection, DEMO_IMAGES.coastalTravel][idx % 4];
+              const selectTemplate = (tpl: typeof preview) => onChangeConfig({
+                templateId: tpl.id,
+                accentColor: tpl.accentHex,
+                ...(group.category === 'simple' ? {showLogo:false} : {}),
+              });
               return (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() =>
-                    onChangeConfig({
-                      templateId: tpl.id,
-                      accentColor: tpl.accentHex,
-                      ...(tpl.group==='simple'?{showLogo:false}:{}),
-                    })
-                  }
-                  className={`text-left rounded-2xl overflow-hidden bg-[#111C30] border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E2B74B] ${
-                    isSelected
-                      ? 'border-[#E2B74B] ring-1 ring-[#E2B74B]/60'
-                      : 'border-white/[0.08] hover:border-white/25'
-                  }`}
-                >
-                  {/* Simulated photo thumbnail with actual template preview */}
-                  <div className="relative aspect-[4/3] bg-[#060B14] overflow-hidden">
-                    <img
-                      src={thumbBg}
-                      alt={tpl.name}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                    />
-                    <WatermarkOverlay
-                      compact
-                      config={{
-                        ...effectiveConfig,
-                        templateId: tpl.id,
-                        accentColor: tpl.accentHex,
-                        positionPreset: 'bottom-left',
-                      }}
-                    />
-                    {isSelected && (
-                      <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#E2B74B] text-[#060B14] flex items-center justify-center shadow">
+                <div key={group.id} className={`rounded-2xl overflow-hidden bg-[#111C30] border ${
+                  selected ? 'border-[#E2B74B] ring-1 ring-[#E2B74B]/60' : 'border-white/[0.08]'
+                }`}>
+                  <button type="button" onClick={() => selectTemplate(variants[0])}
+                    aria-label={`Chọn kiểu ${group.title}`}
+                    className="text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E2B74B]">
+                    <div className="relative aspect-[4/3] bg-[#060B14] overflow-hidden">
+                      <img src={thumbBg} alt={group.title} referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover" />
+                      <WatermarkOverlay compact config={{...effectiveConfig,
+                        templateId:preview.id, accentColor:preview.accentHex,
+                        positionPreset:'bottom-left'}} />
+                      {selected && <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#E2B74B] text-[#060B14] flex items-center justify-center shadow">
                         <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="p-2.5 space-y-0.5">
-                    <div className="text-[13px] font-semibold text-[#F8FAFC] truncate">
-                      {tpl.name}
+                      </span>}
                     </div>
-                    <div className="text-[11px] text-[#94A3B8] truncate">
-                      {tpl.isPlaceholder
-                        ? `Mã ${tpl.code} · Bảo toàn slot cũ`
-                        : tpl.summary}
+                    <div className="p-2.5 space-y-0.5">
+                      <div className="text-[13px] font-semibold text-[#F8FAFC]">{group.title}</div>
+                      <div className="text-[11px] text-[#94A3B8]">{group.description}</div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  {variants.length > 1 && (
+                    <div className="flex flex-wrap gap-1 px-2.5 pb-2.5" aria-label={`Biến thể ${group.title}`}>
+                      {variants.map(variant => (
+                        <button key={variant.id} type="button" onClick={() => selectTemplate(variant)}
+                          aria-pressed={config.templateId===variant.id}
+                          className={`rounded-lg border px-2 py-1.5 text-[11px] min-h-8 ${
+                            config.templateId === variant.id
+                              ? 'border-[#E2B74B] text-[#E2B74B] bg-[#17253D]'
+                              : 'border-white/10 text-[#CBD5E1] hover:border-white/30'
+                          }`}>{variant.name}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

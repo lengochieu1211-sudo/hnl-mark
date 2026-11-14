@@ -204,6 +204,37 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
   }
 ];
 
+/**
+ * Public template catalog: exactly one original Timemark. Older TM-02..TM-09
+ * definitions stay above for reading previously saved projects, but are NOT
+ * offered for new selection. No-stamp is a standalone option, not Timemark.
+ *
+ * The HNL catalog groups templates that share a layout into named variants.
+ * Every legacy ID remains stable for IndexedDB and ZIP round trips.
+ */
+export type TemplateCatalogCategory = 'timemark' | 'simple' | 'independent' | 'none';
+export interface TemplateCatalogGroup {
+  id: string;
+  title: string;
+  description: string;
+  category: TemplateCatalogCategory;
+  templateIds: string[];
+}
+
+export const TEMPLATE_CATALOG_GROUPS: TemplateCatalogGroup[] = [
+  {id:'original-timemark',title:'Timemark Verified',description:'Mẫu Timemark gốc duy nhất · giữ nguyên',category:'timemark',templateIds:['timemark']},
+  {id:'date-time',title:'Ngày + giờ',description:'Chỉ ngày và giờ, không khung',category:'simple',templateIds:['simple-datetime']},
+  {id:'date-only',title:'Chỉ ngày',description:'Dấu ngày tối giản',category:'simple',templateIds:['simple-date']},
+  {id:'time-only',title:'Chỉ giờ',description:'Dấu giờ tối giản',category:'simple',templateIds:['simple-time']},
+  {id:'gold-stripe',title:'Thanh vàng hiện trường',description:'Dải vàng nổi bật cho nhật ký công trường',category:'independent',templateIds:['site-log']},
+  {id:'detail-card',title:'Thẻ thông tin',description:'Nghiệm thu · Địa điểm · Kỷ niệm',category:'independent',templateIds:['inspection','geo','memory']},
+  {id:'dark-glass',title:'Bảng kính',description:'Ca làm việc · Khảo sát · Kỹ thuật',category:'independent',templateIds:['shift','survey','blueprint']},
+  {id:'lower-footer',title:'Dải thông tin dưới',description:'Dải chân ảnh · Du lịch · Metadata',category:'independent',templateIds:['bottom-strip','journey','metadata']},
+  {id:'digital-clock',title:'Đồng hồ LED',description:'Ngày giờ theo kiểu đồng hồ điện tử',category:'independent',templateIds:['led']},
+  {id:'corner-label',title:'Chữ ở góc',description:'Chữ nhỏ, không có thẻ nền',category:'independent',templateIds:['corner']},
+  {id:'original-media',title:'Không đóng dấu',description:'Giữ nguyên ảnh/video',category:'none',templateIds:['none']},
+];
+
 export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   templateId: 'timemark',
   dateTimeIso: '2026-11-13T16:42:18',

@@ -23,7 +23,7 @@ assert 'drawOriginalTimemark(ctx,canvas.width,canvas.height,cfg,0,code,logo)' in
 assert 'hnlmark-watermark-settings-v1' in read('studio-ui/src/App.tsx')
 assert 'logoSrc(config)' in ui and 'logoEnabled(config)' in logo
 assert 'logoPosition?: WatermarkPositionPreset' in config
-assert "applicationIdSuffix '.trial2521'" in read('android/app/build.gradle')
-assert 'HNLMark STUDIO 21' in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2522'" in read('android/app/build.gradle')
+assert 'HNLMark STUDIO 22' in read('android/app/build.gradle')
 assert 'make_launcher_icon.py' not in ''.join(str(p) for p in r.glob('studio-ui/src/services/watermark*.ts'))
 print('PASS: TEST21 13 fonts, movable custom logo, timemark opt-in, preview + image/video stamping, settings persistence')

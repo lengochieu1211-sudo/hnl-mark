@@ -61,6 +61,7 @@ jobs:
           python3 tests/test_studio19_ui_video_guard.py
           python3 tests/test_logo_fonts_test20.py
           python3 tests/test_document_scanner_source.py
+          python3 tests/test_studio22_timemark_catalog.py
           python3 tests/test_launcher_color_fidelity_v2511.py
           node --check android/android-app.js
           python3 tests/test_android_picker_source.py
