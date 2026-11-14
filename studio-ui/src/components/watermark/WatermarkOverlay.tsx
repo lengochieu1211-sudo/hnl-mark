@@ -58,7 +58,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
     WATERMARK_TEMPLATES.find((t) => t.id === config.templateId) ?? WATERMARK_TEMPLATES[10];
 
   const { dateStr, timeStr, fullStr } = formatWatermarkDate(config.dateTimeIso, config.dateFormat);
-  const photoCode = `${config.photoCodePrefix}-${String(config.photoCodeSeq).padStart(4, '0')}`;
+  const generatedPhotoCode = photoCode || `${config.photoCodePrefix}-${String(config.photoCodeSeq).padStart(4, '0')}`;
 
   const fontFamilyStyle =
     config.fontKey === 'jetbrains'
@@ -174,7 +174,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
             className="text-[11px] tabular-nums opacity-95 mt-0.5"
             style={{ color: config.textColor, fontSize: `${Math.max(9, baseFontSize - 2)}px` }}
           >
-            {dateStr} {config.showPhotoCode ? `· ${photoCode}` : ''}
+            {dateStr} {config.showPhotoCode ? `· ${generatedPhotoCode}` : ''}
           </div>
           {!compact && (
             <div className="text-[11px] text-slate-200/90 truncate mt-0.5">
@@ -218,7 +218,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
               </div>
               {config.showPhotoCode && (
                 <div style={{ fontSize: `${Math.max(9, baseFontSize - 3)}px` }} className="text-slate-300">
-                  {photoCode}
+                  {generatedPhotoCode}
                 </div>
               )}
             </div>
@@ -277,7 +277,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
             <span className="truncate">
               {template.isPlaceholder ? `${template.code} · Slot mẫu cũ` : template.name}
             </span>
-            {config.showPhotoCode && <span className="font-mono-tabular shrink-0">{photoCode}</span>}
+            {config.showPhotoCode && <span className="font-mono-tabular shrink-0">{generatedPhotoCode}</span>}
           </div>
           <div className="px-2.5 py-1.5 space-y-0.5" style={{ color: config.textColor }}>
             <div className="flex items-center gap-1.5">
@@ -332,7 +332,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
                 className="font-mono-tabular text-slate-300"
                 style={{ fontSize: `${Math.max(9, baseFontSize - 3)}px` }}
               >
-                {photoCode}
+                {generatedPhotoCode}
               </span>
             )}
             {config.logoSide === 'right' && logoNode}

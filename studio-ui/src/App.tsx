@@ -17,6 +17,7 @@ import { DEFAULT_WATERMARK_CONFIG, VIEWPORT_PRESETS } from './data/templates';
 import { DEFAULT_IMAGE_EDITS, INITIAL_MEDIA_ITEMS } from './data/mockMedia';
 import { HnlLogoPlaceholder } from './components/common/HnlBrandMark';
 import { CameraApkScreen } from './components/camera/CameraApkScreen';
+import { DocumentScannerScreen } from './components/scanner/DocumentScannerScreen';
 import { HomeScreen } from './components/home/HomeScreen';
 import { LibraryScreen } from './components/library/LibraryScreen';
 import { CameraRollScreen } from './components/library/CameraRollScreen';
@@ -125,6 +126,7 @@ export default function App() {
     if(qaModalOpen){setQaModalOpen(false);return true;}
     if((window as any).__hnlStudioRecording===true){alert('Hãy dừng quay và lưu video trước khi thoát camera.');return true;}
     if(route==='review'){setRoute('camera');return true;}
+    if(route==='scanner'){setRoute('library');return true;}
     if(route!=='home'){setRoute('home');return true;}
     return false;
   };
@@ -281,6 +283,8 @@ export default function App() {
           {route==='library' && <div className="px-4 py-2 flex flex-wrap gap-2 items-center bg-[#0B1424] border-b border-white/10">
             <button type="button" onClick={()=>pickDeviceGallery()}
               className="min-h-9 px-3 rounded-xl bg-[#E2B74B] text-[#06101E] text-xs font-semibold">Chọn ảnh / video từ máy</button>
+            <button type="button" onClick={()=>setRoute('scanner')}
+              className="min-h-9 px-3 rounded-xl bg-[#17253D] text-[#E2B74B] text-xs font-semibold border border-[#E2B74B]/30">Quét tài liệu / CCCD</button>
             <input ref={restoreInput} type="file" accept=".zip,application/zip" hidden
               onChange={e=>{const file=e.target.files?.[0];if(file)restoreProjectZip(file).then(restored=>{
                 setMediaItems(old=>[...restored,...old]);if(restored[0])setActiveMediaId(restored[0].id);
@@ -291,6 +295,7 @@ export default function App() {
             <span className="text-[11px] text-[#94A3B8]">Không ghi đè thư viện cũ. Thư viện TEST14 được lưu riêng để bảo vệ dữ liệu.</span>
           </div>}
           <main className="flex-1 min-h-0 overflow-y-auto hnl-scroll pb-4">
+            {route === 'scanner' && <DocumentScannerScreen onBack={()=>setRoute('library')} />}
             {route === 'home' && (
               <HomeScreen
                 activeMedia={activeMedia ?? emptyPreview}
@@ -388,7 +393,7 @@ export default function App() {
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive =
-                route === tab.id || (route === 'editor' && tab.id === 'stamps');
+                route === tab.id || (route === 'editor' && tab.id === 'stamps') || (route === 'scanner' && tab.id === 'library');
               return (
                 <button
                   key={tab.id}
