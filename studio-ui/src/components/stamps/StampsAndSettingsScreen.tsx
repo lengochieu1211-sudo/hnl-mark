@@ -13,6 +13,8 @@ import { DEMO_IMAGES } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import { AccordionSection } from '../common/AccordionSection';
 import { HnlLogoPlaceholder } from '../common/HnlBrandMark';
+import {FONT_OPTIONS,watermarkFontFamily} from '../../services/watermarkFonts';
+import {normalizeWatermarkLogo,logoSrc} from '../../services/watermarkLogo';
 import { ImageEditorScreen } from '../editor/ImageEditorScreen';
 
 interface StampsAndSettingsScreenProps {
@@ -35,6 +37,14 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
   const [subTab, setSubTab] = useState<'templates' | 'customize' | 'editor'>(initialSubTab);
   const [templateFilter, setTemplateFilter] = useState<'all' | 'timemark-legacy' | 'hnl-independent'>('all');
   const [openAccordion, setOpenAccordion] = useState<string>('datetime');
+  const [logoBusy,setLogoBusy]=useState(false);
+  const [logoError,setLogoError]=useState('');
+  const changeLogoFile=async(file?:File)=>{
+    if(!file)return;setLogoBusy(true);setLogoError('');
+    try{const data=await normalizeWatermarkLogo(file);onChangeConfig({logoImageDataUrl:data,showLogo:true,timemarkLogoEnabled:true});}
+    catch(e){setLogoError(e instanceof Error?e.message:String(e));}
+    finally{setLogoBusy(false);}
+  };
 
   const filteredTemplates = useMemo(() => {
     if (templateFilter === 'all') return WATERMARK_TEMPLATES;
@@ -139,6 +149,19 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
           className="w-full h-full object-cover"
         />
         <WatermarkOverlay config={config} />
+        {subTab==='customize'&&config.logoPosition==='custom'&&
+          (config.templateId==='timemark'?config.timemarkLogoEnabled:config.showLogo)&&
+          <div aria-label="Kéo để đổi vị trí logo" role="slider" aria-valuenow={config.logoCustomPos?.xPct??85}
+            tabIndex={0} className="absolute inset-0 z-30 cursor-crosshair touch-none"
+            onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);const b=e.currentTarget.getBoundingClientRect();
+              onChangeConfig({logoCustomPos:{xPct:Math.min(100,Math.max(0,Math.round((e.clientX-b.left)/b.width*100))),yPct:Math.min(100,Math.max(0,Math.round((e.clientY-b.top)/b.height*100)))}});}}
+            onPointerMove={e=>{if(!e.currentTarget.hasPointerCapture(e.pointerId))return;const b=e.currentTarget.getBoundingClientRect();
+              onChangeConfig({logoCustomPos:{xPct:Math.min(100,Math.max(0,Math.round((e.clientX-b.left)/b.width*100))),yPct:Math.min(100,Math.max(0,Math.round((e.clientY-b.top)/b.height*100)))}});}}
+            onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}}
+            onKeyDown={e=>{const p=config.logoCustomPos||{xPct:85,yPct:15};if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))return;
+              e.preventDefault();onChangeConfig({logoCustomPos:{xPct:Math.max(0,Math.min(100,p.xPct+(e.key==='ArrowLeft'?-1:e.key==='ArrowRight'?1:0))),yPct:Math.max(0,Math.min(100,p.yPct+(e.key==='ArrowUp'?-1:e.key==='ArrowDown'?1:0)))}});}}>
+            <span className="absolute left-2 top-2 rounded bg-[#081426]/75 px-2 py-1 text-[11px] text-[#E2B74B]">Kéo để đặt logo</span>
+          </div>}
       </div>
 
       {/* TAB 1: 22 WATERMARK TEMPLATES */}
@@ -362,11 +385,12 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
               aria-label="Chọn font chữ dấu thời gian"
               className="w-full h-9 px-2.5 rounded-lg bg-[#111C30] border border-white/[0.07] text-[13.5px] text-[#F8FAFC]"
             >
-              <option value="be-vietnam">Be Vietnam Pro (Chuẩn tiếng Việt)</option>
-              <option value="jakarta">Plus Jakarta Sans (Kỹ thuật hiện đại)</option>
-              <option value="jetbrains">JetBrains Mono (Số đơn cách)</option>
-              <option value="serif">Serif cổ điển (Biên bản / Kỷ niệm)</option>
+              {FONT_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            <p className="mt-2 text-[12px] text-[#CBD5E1]" style={{fontFamily:watermarkFontFamily(config.fontKey)}}>
+              12:30 · 14/11/2026 · Tiếng Việt có dấu · Timemark
+            </p>
+            <p className="mt-1 text-[11px] text-[#94A3B8]">Font HNL được đóng gói offline; các font hệ thống hiển thị theo thiết bị.</p>
           </AccordionSection>
 
           {/* 5. Kích thước chữ */}
@@ -432,41 +456,68 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
             </div>
           </AccordionSection>
 
-          {/* Logo is available only on non-Timemark templates. */}
-          {config.templateId!=='timemark'&&<AccordionSection
-            title="7. Logo HNL"
-            subtitle={config.showLogo ? 'Đang bật (logo HNL gốc)' : 'Đang ẩn'}
+          {/* Optional Timemark logo is OFF by default; other templates preserve original toggle. */}
+          <AccordionSection
+            title="7. Logo dấu thời gian"
+            subtitle={(config.templateId==='timemark' ? config.timemarkLogoEnabled : config.showLogo) ? 'Đang hiển thị · Có thể thay ảnh, đổi vị trí' : 'Đang ẩn'}
             isOpen={openAccordion === 'logo'}
             onToggle={() => toggleAcc('logo')}
           >
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-[#111C30] border border-white/[0.07]">
-                <HnlLogoPlaceholder size="sm" showPlaceholderNote />
-                <input
-                  type="checkbox"
-                  checked={config.showLogo}
-                  onChange={(e) => onChangeConfig({ showLogo: e.target.checked })}
-                  className="accent-[#E2B74B] w-4 h-4"
-                />
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 rounded-lg px-3 py-2 bg-[#111C30] border border-white/[0.07]">
+                <input type="checkbox"
+                  checked={config.templateId==='timemark' ? !!config.timemarkLogoEnabled : config.showLogo}
+                  onChange={e => onChangeConfig(config.templateId==='timemark' ? {timemarkLogoEnabled:e.target.checked} : {showLogo:e.target.checked})}
+                  className="accent-[#E2B74B] w-4 h-4" />
+                <span className="text-[13px]">Hiển thị logo trên ảnh / video</span>
+              </label>
+              <div className="flex items-center gap-3 rounded-lg px-3 py-2 bg-[#111C30] border border-white/[0.07]">
+                {config.logoImageDataUrl
+                  ? <img src={logoSrc(config)} alt="Logo tùy chỉnh" className="w-12 h-12 object-contain rounded-md" />
+                  : <HnlLogoPlaceholder size="md" />}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <span className="block text-[12px] text-[#CBD5E1]">{config.logoImageDataUrl?'Logo ảnh đã chọn':'Logo HNL mặc định (tùy chọn)'}</span>
+                  <label className="inline-flex min-h-9 px-3 items-center rounded-lg border border-[#E2B74B]/40 text-[#E2B74B] text-xs cursor-pointer">
+                    {logoBusy?'Đang xử lý logo…':'Thay logo từ máy'}
+                    <input type="file" accept="image/png,image/jpeg,image/webp" disabled={logoBusy}
+                      className="hidden" onChange={e=>{void changeLogoFile(e.target.files?.[0]);e.currentTarget.value='';}} />
+                  </label>
+                  {config.logoImageDataUrl&&<button type="button" onClick={()=>onChangeConfig({logoImageDataUrl:undefined})}
+                    className="ml-2 text-xs text-[#94A3B8] underline">Dùng logo HNL</button>}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {(['left', 'right'] as const).map((side) => (
-                  <button
-                    key={side}
-                    type="button"
-                    onClick={() => onChangeConfig({ logoSide: side })}
-                    className={`h-9 rounded-lg text-xs font-medium border ${
-                      config.logoSide === side
-                        ? 'bg-[#E2B74B]/18 border-[#E2B74B] text-[#E2B74B]'
-                        : 'bg-[#111C30] border-white/[0.07] text-[#94A3B8]'
-                    }`}
-                  >
-                    {side === 'left' ? 'Logo bên trái' : 'Logo bên phải'}
-                  </button>
-                ))}
-              </div>
+              {logoError&&<p role="alert" className="text-xs text-[#FDA4AF]">{logoError}</p>}
+              <label className="block space-y-1">
+                <span className="text-xs text-[#94A3B8]">Vị trí logo</span>
+                <select value={config.logoPosition||'top-right'}
+                  onChange={e=>onChangeConfig({logoPosition:e.target.value as WatermarkPositionPreset})}
+                  className="w-full h-9 rounded-lg bg-[#111C30] text-[13px] border border-white/[0.07] px-2">
+                  <option value="top-left">Trên trái</option>
+                  <option value="top-right">Trên phải</option>
+                  <option value="bottom-left">Dưới trái</option>
+                  <option value="bottom-right">Dưới phải</option>
+                  <option value="bottom-center">Dưới giữa</option>
+                  <option value="custom">Tùy chỉnh tọa độ X/Y</option>
+                </select>
+              </label>
+              {config.logoPosition==='custom'&&<div className="space-y-2">
+                {(['xPct','yPct'] as const).map(axis=><label key={axis} className="flex items-center gap-2">
+                  <span className="w-8 text-xs text-[#94A3B8]">{axis==='xPct'?'X':'Y'}</span>
+                  <input type="range" min={0} max={100} step={1} className="flex-1 accent-[#E2B74B]"
+                    value={config.logoCustomPos?.[axis]??(axis==='xPct'?85:15)}
+                    onChange={e=>onChangeConfig({logoCustomPos:{xPct:config.logoCustomPos?.xPct??85,yPct:config.logoCustomPos?.yPct??15,[axis]:Number(e.target.value)}})} />
+                  <span className="w-10 text-right text-xs text-[#E2B74B]">{config.logoCustomPos?.[axis]??(axis==='xPct'?85:15)}%</span>
+                </label>)}
+              </div>}
+              <label className="flex items-center gap-2">
+                <span className="text-xs text-[#94A3B8] whitespace-nowrap">Cỡ logo</span>
+                <input type="range" min={4} max={30} step={1} className="flex-1 accent-[#E2B74B]"
+                  value={config.logoSizePct??12} onChange={e=>onChangeConfig({logoSizePct:Number(e.target.value)})}/>
+                <span className="w-10 text-right text-xs text-[#E2B74B]">{config.logoSizePct??12}%</span>
+              </label>
+              <p className="text-[11px] text-[#94A3B8]">Logo Timemark được ẩn mặc định. File gốc không bị sửa; logo được đóng vào bản ảnh/video xuất mới.</p>
             </div>
-          </AccordionSection>}
+          </AccordionSection>
 
           {/* 8. Vị trí watermark */}
           <AccordionSection

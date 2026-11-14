@@ -5,6 +5,7 @@
  */
 import type { OrientationDeg, WatermarkConfig } from '../types/hnl';
 import { drawOriginalTimemark,prepareTimemarkFont } from './timemarkRenderer';
+import {loadWatermarkLogo} from './watermarkLogo';
 
 type StampedCapture = {
   stream: MediaStream;
@@ -37,6 +38,7 @@ export async function createStampedVideoCapture(
     throw new Error('WebView không hỗ trợ quay video có dấu trực tiếp (CanvasCapture).');
   }
   await prepareTimemarkFont(config.fontKey);
+  const logo=await loadWatermarkLogo(config);
   const fps = Math.min(30, Math.max(15, desiredFps));
   let active = true;
   let frameId = 0;
@@ -58,7 +60,7 @@ export async function createStampedVideoCapture(
       const timestamp = config.autoTime ? {
         ...config, dateTimeIso: toLocalTime(new Date()),
       } : config;
-      drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, orientation, photoCode);
+      drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, orientation, photoCode,logo);
     }
   };
   const stream = canvas.captureStream(fps);

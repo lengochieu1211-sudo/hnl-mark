@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""HNL Mark scanner TEST19: source/contract regression, not device runtime PASS."""
+"""HNL Mark scanner TEST20: source/contract regression, not device runtime PASS."""
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 read=lambda p:(root/p).read_text(encoding='utf-8')

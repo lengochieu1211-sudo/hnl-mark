@@ -25,7 +25,7 @@ export type WatermarkPositionPreset =
   | 'bottom-center'
   | 'custom';
 
-export type WatermarkFontKey = 'be-vietnam' | 'jakarta' | 'jetbrains' | 'serif';
+export type WatermarkFontKey = 'be-vietnam' | 'jakarta' | 'jetbrains' | 'serif' | 'roboto' | 'condensed' | 'rounded' | 'light' | 'bold' | 'sans' | 'times' | 'courier' | 'handwriting';
 
 export interface WatermarkTemplate {
   id: string;
@@ -56,6 +56,13 @@ export interface WatermarkConfig {
   bgOpacity: number;
   showLogo: boolean;
   logoSide: 'left' | 'right';
+  /** Timemark stays logo-free unless explicitly enabled. */
+  timemarkLogoEnabled?: boolean;
+  /** Small sanitized data URL so a custom logo survives offline/export/ZIP backup. */
+  logoImageDataUrl?: string;
+  logoPosition?: WatermarkPositionPreset;
+  logoCustomPos?: { xPct:number; yPct:number };
+  logoSizePct?: number;
   positionPreset: WatermarkPositionPreset;
   customPos: { xPct: number; yPct: number };
   photoCodePrefix: string;

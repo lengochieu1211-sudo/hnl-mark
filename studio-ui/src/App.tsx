@@ -50,9 +50,12 @@ export default function App() {
 
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(INITIAL_MEDIA_ITEMS);
   const [activeMediaId, setActiveMediaId] = useState<string>('');
-  const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>({
-    ...DEFAULT_WATERMARK_CONFIG,
-    dateTimeIso: formatLocalIsoNow(),
+  const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(()=>{
+    let saved:Partial<WatermarkConfig>={};
+    try { saved=JSON.parse(localStorage.getItem('hnlmark-watermark-settings-v1')||'{}') as Partial<WatermarkConfig>; }
+    catch { /* Never block camera if WebView storage is unavailable. */ }
+    return {...DEFAULT_WATERMARK_CONFIG,...saved,dateTimeIso:saved.autoTime===false&&saved.dateTimeIso?saved.dateTimeIso:formatLocalIsoNow(),
+      timemarkLogoEnabled: saved.timemarkLogoEnabled===true};
   });
 
   // Action Sheet state
@@ -138,8 +141,14 @@ export default function App() {
   const effectiveViewportH = activePreset.height > 0 ? activePreset.height : windowSize.h;
   const isLandscapeViewport = effectiveViewportW > effectiveViewportH * 1.2;
 
+  // Persist only user-driven changes; never write the live clock once per second.
   const updateWatermarkConfig = (patch: Partial<WatermarkConfig>) => {
-    setWatermarkConfig((prev) => ({ ...prev, ...patch }));
+    setWatermarkConfig(prev=>{
+      const next={...prev,...patch};
+      try{localStorage.setItem('hnlmark-watermark-settings-v1',JSON.stringify({...next,dateTimeIso:next.autoTime?'':next.dateTimeIso}));}
+      catch(e){ console.warn('Không lưu được cấu hình dấu offline:',e); }
+      return next;
+    });
   };
 
   // Never show a captured original as safely saved before IndexedDB commits.

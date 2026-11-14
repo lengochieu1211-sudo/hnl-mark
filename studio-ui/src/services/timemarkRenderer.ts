@@ -6,18 +6,14 @@
  * Never modifies source photo pixels unless explicitly exporting a copy.
  */
 import type { OrientationDeg, WatermarkConfig, WatermarkFontKey } from '../types/hnl';
+import {watermarkFontFamily} from './watermarkFonts';
+import {drawWatermarkLogo,loadWatermarkLogo} from './watermarkLogo';
 
 const clamp = (v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
 const pad = (n:number)=>String(n).padStart(2,'0');
 const weekdays=['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'];
-const FONT_FAMILIES:Record<WatermarkFontKey,string>={
- 'be-vietnam':'"Be Vietnam Pro",Arial,sans-serif',
- 'jakarta':'"Plus Jakarta Sans",Arial,sans-serif',
- 'jetbrains':'"JetBrains Mono",monospace',
- 'serif':'Georgia,"Times New Roman",serif',
-};
 const font=(size:number,weight=400,key:WatermarkFontKey='be-vietnam')=>
- `${weight} ${Math.max(6,Math.round(size))}px ${FONT_FAMILIES[key]}`;
+ `${weight} ${Math.max(6,Math.round(size))}px ${watermarkFontFamily(key)}`;
 /** Keep preview and new-file output on the same loaded font, including Vietnamese glyphs. */
 export async function prepareTimemarkFont(key:WatermarkFontKey):Promise<void>{
  if(typeof document==='undefined'||!document.fonts)return;
@@ -125,6 +121,7 @@ export function drawOriginalTimemark(
  g.fillStyle='#ffffff';g.fillText(text,0,0);
  g.translate(-len*.5-f*.84,0);shield(g,f*.68,'#ffffff');g.restore();
  }
+ drawWatermarkLogo(g,W,H,config,logo);
  g.restore();
 }
 
@@ -145,7 +142,8 @@ export async function createTimemarkPhoto(source:Blob,config:WatermarkConfig,pho
    await prepareTimemarkFont(config.fontKey);
    ctx.drawImage(bitmap,0,0);
    if(config.templateId!=='none'){
-     drawOriginalTimemark(ctx,canvas.width,canvas.height,config,orientation,photoCode);
+     const logo=await loadWatermarkLogo(config);
+     drawOriginalTimemark(ctx,canvas.width,canvas.height,config,orientation,photoCode,logo);
    }
    return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Không kết xuất được JPEG')),'image/jpeg',clamp(config.jpegQuality/100,.5,1)));
  }finally{bitmap.close();}

@@ -5,6 +5,7 @@
  */
 import type {WatermarkConfig} from '../types/hnl';
 import {drawOriginalTimemark,prepareTimemarkFont} from './timemarkRenderer';
+import {loadWatermarkLogo} from './watermarkLogo';
 
 const MAX_DURATION_SECONDS=300; // Guard against exhausting a mobile device's RAM.
 const LOAD_TIMEOUT_MS=15000;
@@ -66,13 +67,14 @@ export async function stampImportedVideo(
    if(!canvas.width||!canvas.height)throw Error('Video không có khung hình hợp lệ.');
    const ctx=canvas.getContext('2d',{alpha:false});
    if(!ctx)throw Error('Không tạo được bộ xử lý khung hình.');
+   const logo=await loadWatermarkLogo(config);
    const render=()=>{
      if(video.readyState<2)return;
      ctx.drawImage(video,0,0,canvas.width,canvas.height);
      if(config.templateId==='timemark'){
        // Imported video keeps its selected time and chosen Timemark configuration.
        const stampedTime=config.dateTimeIso || localDate(new Date());
-       drawOriginalTimemark(ctx,canvas.width,canvas.height,{...config,dateTimeIso:stampedTime},0,code);
+       drawOriginalTimemark(ctx,canvas.width,canvas.height,{...config,dateTimeIso:stampedTime},0,code,logo);
      }
    };
    await prepareTimemarkFont(config.fontKey);

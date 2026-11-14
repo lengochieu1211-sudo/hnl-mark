@@ -4,6 +4,8 @@ import { OrientationDeg, WatermarkConfig } from '../../types/hnl';
 import { WATERMARK_TEMPLATES } from '../../data/templates';
 import { HnlLogoPlaceholder } from '../common/HnlBrandMark';
 import { OriginalTimemarkOverlay } from './OriginalTimemarkOverlay';
+import {watermarkFontFamily} from '../../services/watermarkFonts';
+import {loadWatermarkLogo,drawWatermarkLogo} from '../../services/watermarkLogo';
 
 interface WatermarkOverlayProps {
   config: WatermarkConfig;
@@ -45,13 +47,13 @@ export function formatWatermarkDate(iso: string, format: WatermarkConfig['dateFo
 export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   config,
   orientationDeg = 0,
-  photoCode,
+  photoCode: timemarkCode,
   compact = false,
   draggable = false,
   onDragPositionChange,
   containerRef,
 }) => {
-  if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} photoCode={photoCode} />;
+  if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode} />;
   if(config.templateId === 'none') return null;
 
   const template =
@@ -60,15 +62,8 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   const { dateStr, timeStr, fullStr } = formatWatermarkDate(config.dateTimeIso, config.dateFormat);
   const generatedPhotoCode = photoCode || `${config.photoCodePrefix}-${String(config.photoCodeSeq).padStart(4, '0')}`;
 
-  const fontFamilyStyle =
-    config.fontKey === 'jetbrains'
-      ? 'var(--hnl-font-mono)'
-      : config.fontKey === 'jakarta'
-        ? 'var(--hnl-font-display)'
-        : config.fontKey === 'serif'
-          ? 'Georgia, "Times New Roman", serif'
-          : 'var(--hnl-font-sans)';
-
+  const fontFamilyStyle=watermarkFontFamily(config.fontKey);
+  const useFloatingLogo=!!(config.showLogo&&(config.logoPosition||config.logoImageDataUrl));
   const scaleFactor = compact ? 0.62 : 1;
   const baseFontSize = Math.max(9, Math.round(config.fontSizePx * scaleFactor));
   const accent = config.accentColor || template.accentHex;
@@ -147,7 +142,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
 
   // Visual variations across the 22 templates
   const renderCardContent = () => {
-    const logoNode = config.showLogo ? (
+    const logoNode = config.showLogo && !useFloatingLogo ? (
       <HnlLogoPlaceholder size={compact ? 'xs' : 'sm'} variant="navy-gold" />
     ) : null;
 
@@ -368,6 +363,7 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   };
 
   return (
+    <>
     <div
       onPointerDown={handlePointerDown}
       style={{
@@ -383,5 +379,24 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
     >
       {renderCardContent()}
     </div>
+    {useFloatingLogo&&<FloatingLogoCanvas config={config}/>}
+    </>
   );
+};
+
+/** Same canvas logo geometry for camera preview and exported Timemark. */
+const FloatingLogoCanvas:React.FC<{config:WatermarkConfig}>=({config})=>{
+ const ref=React.useRef<HTMLCanvasElement>(null);
+ React.useEffect(()=>{
+   const canvas=ref.current,parent=canvas?.parentElement;if(!canvas||!parent)return;
+   let alive=true;let logo:HTMLImageElement|undefined;
+   const paint=()=>{if(!alive)return;const w=parent.clientWidth,h=parent.clientHeight;if(!w||!h)return;
+     const dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+     const ctx=canvas.getContext('2d');if(!ctx)return;ctx.setTransform(dpr,0,0,dpr,0,0);drawWatermarkLogo(ctx,w,h,config,logo);
+   };
+   paint();void loadWatermarkLogo(config).then(x=>{if(alive){logo=x;paint();}});
+   const ro=typeof ResizeObserver!=='undefined'?new ResizeObserver(paint):null;ro?.observe(parent);
+   return()=>{alive=false;ro?.disconnect();};
+ },[config]);
+ return <canvas ref={ref} aria-label="Logo dấu thời gian" className="absolute inset-0 w-full h-full z-20 pointer-events-none"/>;
 };
