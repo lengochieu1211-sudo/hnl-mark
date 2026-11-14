@@ -68,6 +68,27 @@ jobs:
             adb exec-out screencap -p > android-smoke-evidence/camera-roll-review-attempt.png
             adb shell input keyevent 4
             sleep 3
+            # Capture a second real fake-camera frame, then swipe to older media.
+            adb shell input tap 540 2200
+            sleep 5
+            adb shell input tap 215 2200
+            sleep 3
+            adb exec-out screencap -p > android-smoke-evidence/camera-roll-two-photos.png
+            adb shell input swipe 790 1250 220 1250 350
+            sleep 2
+            adb exec-out screencap -p > android-smoke-evidence/camera-roll-swipe-older.png
+            adb shell input keyevent 4
+            sleep 3
+            # Force-stop simulates closing the APK; IndexedDB must survive relaunch.
+            adb shell am force-stop vn.hnl.xaydung.hnlmark.trial2515
+            adb shell am start -W -n vn.hnl.xaydung.hnlmark.trial2515/vn.hnl.xaydung.hnlmark.MainActivity
+            sleep 10
+            adb exec-out screencap -p > android-smoke-evidence/camera-after-relaunch.png
+            adb shell input tap 215 2200
+            sleep 3
+            adb exec-out screencap -p > android-smoke-evidence/camera-roll-after-relaunch.png
+            adb shell input keyevent 4
+            sleep 3
             adb shell ls -lah /sdcard/Pictures/HNLMark > android-smoke-evidence/pictures-media.txt
             grep -E '\.(jpg|jpeg|png)' android-smoke-evidence/pictures-media.txt
             echo 'PASS: HNL camera photo written to Android Pictures/HNLMark' > android-smoke-evidence/photo-save-RESULT.txt
