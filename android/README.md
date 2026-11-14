@@ -198,3 +198,5 @@
 - Chưa được coi là Runtime Golden nếu chỉ CI PASS.
 - APK Debug ký bằng debug key; có thể không thể cài đè build cũ, phải sao lưu ZIP trước khi gỡ.
 
+
+UI Studio TEST12 final regression: hnl-studio-ui.js keeps original video editing panel visible on tab switching; tests/test_studio_ui_port.py protects real Timemark template IDs and parallel Android package. GitHub build must run at exact HEAD.
