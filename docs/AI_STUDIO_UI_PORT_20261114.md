@@ -7,3 +7,5 @@ New preview and library CSS surface use navy. Responsive stamp thumbnails: 2 col
 Review: CI syntax and source checkpoint PASS on first UI commit 8ae28fc. Browser UI smoke 4 viewports web+APK-sim 8/8 PASS; real physical Android camera, video recording/reopen, gallery, save, share, both landscape sides and offline data not runtime tested. Subsequent version-isolation build and CI must be verified independently.
 
 Source-only UI files: hnl-studio-ui.js, hnl-studio-ui.css; index.html, package_web.py and sw.js linking. No change to main/Production.
+
+Regression guard: when videoPanel is visible, all navigation modes retain the real video editor/result/save UI rather than hiding its parent import panel. Source-level + WebView interaction tests required; physical-device testing remains pending.

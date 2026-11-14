@@ -66,6 +66,16 @@ if(modal)new MutationObserver(()=>{
  const button=nav.querySelector('[data-hnl-studio-tab="library"]');
  if(button)button.classList.toggle('is-active',!modal.hidden);
 }).observe(modal,{attributes:true,attributeFilter:['hidden']});
+/* Keep the original video editor and Save/Share visible when navigating between UI tabs. */
+const videoPanel=document.getElementById('videoPanel');
+function syncVideoPanel(){
+ const shown=Boolean(videoPanel&&!videoPanel.hidden);
+ body.dataset.hnlStudioVideo=shown?'on':'off';
+ if(shown&&body.dataset.hnlStudioView!=='home'&&window.HNLAndroidSections?.fold)
+  window.HNLAndroidSections.fold(panels[0],true);
+}
+if(videoPanel)new MutationObserver(syncVideoPanel).observe(videoPanel,{attributes:true,attributeFilter:['hidden']});
+syncVideoPanel();
 window.HNLStudioUI={navigate,home:()=>mode('home')};
 mode('home');
 })();

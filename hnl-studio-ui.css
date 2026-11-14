@@ -127,3 +127,10 @@ body.hnl-studio-ui .library-cards button{min-width:0!important;max-width:100%!im
  body.hnl-studio-ui .preset-art{height:80px!important}
  body.hnl-studio-ui .preset>strong{font-size:11px!important}
 }
+
+
+/* Video mode must NEVER disappear when selecting Stamp, Edit or Export.
+   Show the real import/video panel, no mock output. */
+body.hnl-studio-ui[data-hnl-studio-video="on"][data-hnl-studio-view] .editor > .panel[data-hnl-studio-panel="import"]{
+ display:block!important;
+}
