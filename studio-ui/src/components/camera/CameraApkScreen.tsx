@@ -710,7 +710,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           )}
 
           {/* Mode Toggle */}
-          <div className="flex items-center bg-[#111C30] p-0.5 rounded-xl border border-white/[0.07]">
+          <div className={`flex items-center bg-[#111C30] p-0.5 rounded-xl border border-white/[0.07] ${isLandscapeViewport ? 'flex-col w-full' : 'flex-row'}`}>
             <button
               type="button"
               disabled={isRecording || isRecordingStarting || isFinalizing}
@@ -718,7 +718,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
                 setMode('photo');
                 setShowVideoQualityPopup(false);
               }}
-              className={`min-h-[34px] px-3.5 rounded-[10px] text-xs font-semibold tracking-wide transition ${
+              className={`min-h-[34px] ${isLandscapeViewport ? 'w-full px-1' : 'px-3.5'} rounded-[10px] text-xs font-semibold tracking-wide transition ${
                 mode === 'photo'
                   ? 'bg-[#E2B74B] text-[#060B14]'
                   : 'text-[#94A3B8] hover:text-white'
@@ -730,7 +730,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
               type="button"
               disabled={isRecording || isRecordingStarting || isFinalizing}
               onClick={() => {if(!isRecording)setMode('video');}}
-              className={`min-h-[34px] px-3.5 rounded-[10px] text-xs font-semibold tracking-wide transition ${
+              className={`min-h-[34px] ${isLandscapeViewport ? 'w-full px-1' : 'px-3.5'} rounded-[10px] text-xs font-semibold tracking-wide transition ${
                 mode === 'video'
                   ? 'bg-[#E2B74B] text-[#060B14]'
                   : 'text-[#94A3B8] hover:text-white'

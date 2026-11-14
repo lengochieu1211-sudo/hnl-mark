@@ -17,6 +17,8 @@ for marker in ('getUserMedia({video,audio:false})','getUserMedia({audio:true,vid
 assert "versionCode 2515" in gradle and "applicationIdSuffix '.trial2515'" in gradle
 assert 'RECORD_AUDIO ignore' in emu and 'mic-denied-video-attempt.png' in emu
 assert 'camera-roll-review-attempt.png' in emu
+assert "isLandscapeViewport ? 'flex-col w-full' : 'flex-row'" in cam
+assert cam.count("isLandscapeViewport ? 'w-full px-1' : 'px-3.5'") == 2
 assert 'camera-roll-two-photos.png' in emu and 'camera-roll-swipe-older.png' in emu
 assert 'camera-roll-after-relaunch.png' in emu and 'am force-stop vn.hnl.xaydung.hnlmark.trial2515' in emu
 assert "const latestThumb = latestItem?.kind === 'photo' ? latestItem.url : null;" in cam
