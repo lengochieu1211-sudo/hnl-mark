@@ -39,6 +39,7 @@ export default function App() {
   // Mở thẳng Camera APK toàn màn hình theo thiết lập đã xác nhận
   const [route, setRoute] = useState<AppRoute>('camera');
   const [legacyOpen,setLegacyOpen]=useState(false);
+  const backRef=useRef<()=>boolean>(()=>false);
   const [legacyLoadKey,setLegacyLoadKey]=useState(0);
   const [libraryReady,setLibraryReady]=useState(false);
   const savedIds=useRef(new Set<string>());
@@ -110,7 +111,16 @@ export default function App() {
   useEffect(()=>{setupAndroidBridge(files=>pickerRef.current(files),(tab)=>{
     if(tab==='capture')setRoute('camera');if(tab==='library')setRoute('library');
     if(tab==='stamp')setRoute('stamps');if(tab==='export')setRoute('export');
-  },()=>{setLegacyOpen(false);setRoute('home');return true;});},[]);
+  },()=>backRef.current());},[]);
+  // Real Android system Back. Recording/finalization must be finished before navigation.
+  backRef.current=()=>{
+    if(legacyOpen){setLegacyOpen(false);return true;}
+    if(exportSheetOpen){setExportSheetOpen(false);return true;}
+    if(qaModalOpen){setQaModalOpen(false);return true;}
+    if((window as any).__hnlStudioRecording===true){alert('Hãy dừng quay và lưu video trước khi thoát camera.');return true;}
+    if(route!=='home'){setRoute('home');return true;}
+    return false;
+  };
   const activeMedia = useMemo(() => {
     return mediaItems.find((m) => m.id === activeMediaId) ?? mediaItems[0];
   }, [mediaItems, activeMediaId]);
@@ -123,21 +133,27 @@ export default function App() {
     setWatermarkConfig((prev) => ({ ...prev, ...patch }));
   };
 
-  const handleCapturePhoto = (newPhoto: MediaItem) => {
-    setMediaItems((prev) => [newPhoto, ...prev]);
-    storeMedia(newPhoto).catch(e=>alert('Không lưu được ảnh gốc: '+String(e)));
-    if(isAndroidApk()&&newPhoto.rawBlob)saveToDevice(newPhoto.rawBlob,`HNLMark_Original_${Date.now()}.jpg`).catch(e=>alert('Ảnh đã lưu trong thư viện ứng dụng nhưng chưa lưu vào máy: '+String(e)));
+  // Never show a captured original as safely saved before IndexedDB commits.
+  const handleCapturePhoto = async(newPhoto:MediaItem):Promise<void>=>{
+    await storeMedia(newPhoto);
+    setMediaItems(prev=>[newPhoto,...prev]);
     setActiveMediaId(newPhoto.id);
-    setWatermarkConfig((prev) => ({ ...prev, photoCodeSeq: prev.photoCodeSeq + 1 }));
+    setWatermarkConfig(prev=>({...prev,photoCodeSeq:prev.photoCodeSeq+1}));
+    if(isAndroidApk()&&newPhoto.rawBlob){
+      try{await saveToDevice(newPhoto.rawBlob,`HNLMark_Original_${Date.now()}.jpg`);}
+      catch(e){alert('Ảnh gốc vẫn lưu trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
+    }
   };
-
-  const handleSaveVideo = (newVideo: MediaItem) => {
+  const handleSaveVideo = async(newVideo:MediaItem):Promise<void>=>{
     if(savedIds.current.has(newVideo.id))return;
+    await storeMedia(newVideo);
     savedIds.current.add(newVideo.id);
-    setMediaItems((prev) => [newVideo, ...prev]);
-    storeMedia(newVideo).catch(e=>alert('Không lưu được video gốc: '+String(e)));
-    if(isAndroidApk()&&newVideo.rawBlob)saveToDevice(newVideo.rawBlob,`HNLMark_Original_${Date.now()}.webm`).catch(e=>alert('Video vẫn lưu trong ứng dụng nhưng chưa lưu vào máy: '+String(e)));
+    setMediaItems(prev=>[newVideo,...prev]);
     setActiveMediaId(newVideo.id);
+    if(isAndroidApk()&&newVideo.rawBlob){
+      try{await saveToDevice(newVideo.rawBlob,`HNLMark_Original_${Date.now()}.${newVideo.rawBlob.type.includes('mp4')?'mp4':'webm'}`);}
+      catch(e){alert('Video gốc vẫn lưu trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
+    }
   };
 
   const handlePickLocalMedia = (files: FileList | null) => {
@@ -164,15 +180,12 @@ export default function App() {
     }));
   };
 
-  const handleDeleteItems = (ids: string[]) => {
-    setMediaItems((prev) => {
-      const remaining = prev.filter((m) => !ids.includes(m.id));
-      if (remaining.length > 0 && ids.includes(activeMediaId)) {
-        setActiveMediaId(remaining[0].id);
-      }
-      removeMedia(ids).catch(e=>alert('Không xóa được bản lưu: '+String(e)));
-      return remaining;
-    });
+  const handleDeleteItems = async(ids:string[])=>{
+    try{
+      await removeMedia(ids);
+      setMediaItems(prev=>prev.filter(m=>!ids.includes(m.id)));
+      if(ids.includes(activeMediaId))setActiveMediaId(mediaItems.find(m=>!ids.includes(m.id))?.id||'');
+    }catch(e){alert('Không xóa được ảnh/video; thư viện đang được giữ nguyên: '+String(e));}
   };
 
   const openExportSheet = (targets: MediaItem[]) => {

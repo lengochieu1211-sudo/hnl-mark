@@ -34,7 +34,7 @@ assert "android:usesCleartextTraffic=\"false\"" in manifest
 assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
-assert "android:screenOrientation=\"portrait\"" in manifest
+assert "android:screenOrientation=\"fullUser\"" in manifest
 assert "versionCode 2514" in gradle and "versionName '2.5.14-studio-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
@@ -104,7 +104,7 @@ assert 'cameraOrientationListener.enable()' in java
 assert 'cameraOrientationListener.disable()' in java
 assert 'android:icon="@mipmap/ic_launcher"' in manifest
 assert '@mipmap/ic_launcher' in manifest
-assert 'android:screenOrientation="portrait"' in manifest
+assert 'android:screenOrientation="fullUser"' in manifest
 assert 'original_full_color_image(root)' in launcher and '_cut_out_neutral_plate' not in launcher
 assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
 assert (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()

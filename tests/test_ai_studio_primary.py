@@ -26,3 +26,10 @@ app=rd('studio-ui/src/App.tsx')
 assert "{route === 'stamps' && (" in app
 assert 'activeMedia={activeMedia ?? emptyPreview}' in app
 assert "{route === 'stamps' && activeMedia && (" not in app
+
+# Camera recording/back and saved originals must be safe under React UI.
+assert 'handleBack:onBack' in rd('studio-ui/src/services/deviceBridge.ts')
+assert 'await storeMedia(newPhoto)' in rd('studio-ui/src/App.tsx')
+assert 'await onCapturePhoto(item)' in rd('studio-ui/src/components/camera/CameraApkScreen.tsx')
+assert 'await onSaveVideo(item)' in rd('studio-ui/src/components/camera/CameraApkScreen.tsx')
+assert 'android:screenOrientation="fullUser"' in rd('android/app/src/main/AndroidManifest.xml')

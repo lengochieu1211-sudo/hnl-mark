@@ -26,7 +26,7 @@ export function pickDeviceGallery():void{if(native()?.openDeviceGallery)native()
 export function setAndroidCameraActive(active:boolean){try{native()?.cameraState?.(active);}catch{}}
 export function setupAndroidBridge(onPicked:MediaCallback,onTab:TabCallback,onBack:()=>boolean):void{
  selectedCallback=onPicked;tabCallback=onTab;
- (window as any).HNLAndroidApp={chooseTab:(tab:string)=>tabCallback?.(tab),openGallery:pickDeviceGallery,
+ (window as any).HNLAndroidApp={handleBack:onBack,chooseTab:(tab:string)=>tabCallback?.(tab),openGallery:pickDeviceGallery,
  receivePickedMedia:async (items:Array<{url:string,name:string,type:string}>)=>{
  if(!Array.isArray(items))return;
  for(const item of items.slice(0,30)){

@@ -34,8 +34,8 @@ interface CameraApkScreenProps {
   recentMedia: MediaItem[];
   onCloseCamera: () => void;
   onOpenLibrary: () => void;
-  onCapturePhoto: (item: MediaItem) => void;
-  onSaveVideo: (item: MediaItem) => void;
+  onCapturePhoto: (item: MediaItem) => Promise<void>;
+  onSaveVideo: (item: MediaItem) => Promise<void>;
   onShareMedia: (item: MediaItem) => void;
   onOpenLegacyCamera?: () => void;
   isLandscapeViewport?: boolean;
@@ -64,6 +64,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
 
   // Video state
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isFinalizing, setIsFinalizing] = useState<boolean>(false);
   const [recordSeconds, setRecordSeconds] = useState<number>(0);
   const [showVideoQualityPopup, setShowVideoQualityPopup] = useState<boolean>(false);
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
@@ -130,6 +131,13 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   },[lens,mode,videoSettings.resolution]);
 
 
+  // A hardware Back/close during recording or commit must not silently lose video.
+  useEffect(()=>{(window as any).__hnlStudioRecording=isRecording||isFinalizing;
+    return ()=>{(window as any).__hnlStudioRecording=false};},[isRecording,isFinalizing]);
+  // Stop and preserve what was recorded when the app becomes hidden/locked.
+  useEffect(()=>{const hide=()=>{if(document.hidden&&recorderRef.current?.state==='recording')recorderRef.current.stop();};
+    document.addEventListener('visibilitychange',hide);
+    return ()=>document.removeEventListener('visibilitychange',hide);},[]);
   // Recording timer
   useEffect(() => {
     if (!isRecording) return;
@@ -237,7 +245,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,
           coordinates:watermarkConfig.coordinates,photoCode:`HNL-${Date.now()}-${i}`,
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,edits:{...DEFAULT_IMAGE_EDITS}};
-        onCapturePhoto(item);
+        await onCapturePhoto(item);
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
       }
       triggerTransientToast(`Đã lưu ${count} ảnh gốc vào thư viện HNL`);
@@ -252,16 +260,20 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       recorderRef.current=rec;chunksRef.current=[];
       rec.ondataavailable=e=>{if(e.data?.size)chunksRef.current.push(e.data);};
       rec.onerror=()=>triggerTransientToast('Lỗi ghi video; vui lòng kiểm tra lại.');
-      rec.onstop=()=>{
+      rec.onstop=async()=>{
+        setIsFinalizing(true);
         const chunks=chunksRef.current.splice(0);const blob=new Blob(chunks,{type:rec.mimeType||'video/webm'});
         setIsRecording(false);
-        if(!blob.size){triggerTransientToast('Không ghi được video.');return;}
+        if(!blob.size){triggerTransientToast('Không ghi được video.');setIsFinalizing(false);return;}
         const date=new Date(),item:MediaItem={id:`video-${Date.now()}`,title:`Video HNL ${date.toLocaleString('vi-VN')}`,
           kind:'video',origin:'newly-picked',rawBlob:blob,url:URL.createObjectURL(blob),createdAt:date.toISOString(),
           durationSec:Math.max(1,recordSeconds),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
           photoCode:`HNL-V${Date.now()}`,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,edits:{...DEFAULT_IMAGE_EDITS}};
-        onSaveVideo(item);setLastRecordedVideo(item);setShowVideoReview(true);setIsReviewPlaying(false);
+        try{await onSaveVideo(item);setLastRecordedVideo(item);setShowVideoReview(true);setIsReviewPlaying(false);}
+        catch(e){triggerTransientToast('Không lưu được video gốc: '+String(e));}
+        finally{setIsFinalizing(false);}
+
       };
       rec.start(1000);setRecordSeconds(0);setIsRecording(true);setShowVideoQualityPopup(false);
     }else if(recorderRef.current?.state==='recording')recorderRef.current.stop();
@@ -283,7 +295,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   };
 
   const iconRotationStyle: React.CSSProperties = {
-    transform: `rotate(${orientationDeg}deg)`,
+    transform: isLandscapeViewport ? 'none' : `rotate(${orientationDeg}deg)`,
     transition: 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)',
   };
 
@@ -748,7 +760,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {/* Center: Commercial Shutter / Record Button */}
           <button
             type="button"
-            onClick={handleShutterPress}
+            onClick={()=>{handleShutterPress().catch(e=>triggerTransientToast('Lỗi chụp/quay: '+String(e)));}}
             aria-label={
               mode === 'photo'
                 ? 'Chụp ảnh'
