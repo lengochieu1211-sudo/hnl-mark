@@ -95,6 +95,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const chunksRef = useRef<Blob[]>([]);
   const [cameraError,setCameraError] = useState<string>('');
   const [cameraReady,setCameraReady] = useState(false);
+  const [audioUnavailable,setAudioUnavailable] = useState(false);
   useEffect(()=>{
     const changed=(ev:Event)=>{const angle=(ev as CustomEvent<{angle:number}>).detail?.angle;
       if(angle===0)setOrientationDeg(0);else if(angle===90)setOrientationDeg(90);
@@ -104,17 +105,23 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     return ()=>window.removeEventListener('hnl-studio:orientation',changed);
   },[]);
   useEffect(()=>{
-    let closed=false;setCameraReady(false);setCameraError('');
+    let closed=false;setCameraReady(false);setCameraError('');setAudioUnavailable(false);
     const start=async()=>{
       try{
         if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera WebView không khả dụng. Dùng Camera HNL gốc.');
-        const stream=await navigator.mediaDevices.getUserMedia({
-          video:{facingMode:{ideal:lens==='rear'?'environment':'user'},
-            width:{ideal:videoSettings.resolution==='4K'?3840:videoSettings.resolution==='1080p'?1920:1280},
-            height:{ideal:videoSettings.resolution==='4K'?2160:videoSettings.resolution==='1080p'?1080:720},
-            frameRate:{ideal:videoSettings.fps}},
-          audio:mode==='video'
-        });
+        const video={facingMode:{ideal:lens==='rear'?'environment':'user'},
+          width:{ideal:videoSettings.resolution==='4K'?3840:videoSettings.resolution==='1080p'?1920:1280},
+          height:{ideal:videoSettings.resolution==='4K'?2160:videoSettings.resolution==='1080p'?1080:720},
+          frameRate:{ideal:videoSettings.fps}};
+        let stream:MediaStream;
+        try{stream=await navigator.mediaDevices.getUserMedia({video,audio:mode==='video'});}
+        catch(initialError){
+          if(mode!=='video')throw initialError;
+          // Some devices/emulators reject the microphone even though video works.
+          // Keep real video capture available but never claim it includes audio.
+          stream=await navigator.mediaDevices.getUserMedia({video,audio:false});
+          if(!closed)setAudioUnavailable(true);
+        }
         if(closed){stream.getTracks().forEach(t=>t.stop());return;}
         streamRef.current=stream;
         if(liveRef.current){liveRef.current.srcObject=stream;await liveRef.current.play().catch(()=>{});}
@@ -584,6 +591,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             aria-label="Khung ngắm camera trực tiếp"
             style={{transform:`scale(${zoomLevel}) ${lens==='front'?'scaleX(-1)':''}`,transition:'transform 110ms ease-out'}}
             className="w-full h-full object-cover select-none pointer-events-none" />
+          {cameraReady && mode==='video' && audioUnavailable && <div role="status" className="absolute top-2 left-2 right-2 z-20 rounded-lg bg-[#7F1D1D]/85 px-3 py-2 text-center text-xs text-white pointer-events-none">Không ghi được âm thanh từ micro. Video sẽ chỉ có hình.</div>}
           {!cameraReady && <div className="absolute inset-0 z-10 flex flex-col gap-3 items-center justify-center p-6 bg-[#071121] text-center">
             <p className="text-sm text-[#F8FAFC]">{cameraError||'Đang mở camera thực tế…'}</p>
             {onOpenLegacyCamera && <button type="button" onClick={onOpenLegacyCamera} className="rounded-xl bg-[#E2B74B] px-4 py-2 text-[#071121] font-bold text-sm">Mở Camera HNL gốc</button>}
