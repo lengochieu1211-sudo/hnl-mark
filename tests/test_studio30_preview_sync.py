@@ -14,6 +14,7 @@ assert 'structureKey=JSON.stringify' in editor
 assert '[media.id,media.rawBlob,structureKey]' in editor
 assert "filter:activeTab==='erase'?'none'" in editor
 assert 'containerRef={imageRectRef}' in editor
+assert 'onLoad={e=>{const w=e.currentTarget.naturalWidth' in editor
 for path in ['components/home/HomeScreen.tsx','components/stamps/StampsAndSettingsScreen.tsx','components/library/LibraryScreen.tsx','components/library/CameraRollScreen.tsx','components/export/ExportScreen.tsx']:
  assert '<PhotoPreview' in read('studio-ui/src/'+path),path
 orientation=read('studio-ui/src/services/capturedPhotoOrientation.ts')

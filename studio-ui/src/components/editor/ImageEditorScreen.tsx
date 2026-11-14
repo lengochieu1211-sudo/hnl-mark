@@ -246,8 +246,8 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
             }}>
               <img src={(activeTab==='erase'?erasePreviewUrl:previewUrl)||media.url}
                 alt={media.title}
-                onLoad={e=>setImageSize(old=>{const w=e.currentTarget.naturalWidth||4,h=e.currentTarget.naturalHeight||3;
-                 return old.w===w&&old.h===h?old:{w,h};})}
+                onLoad={e=>{const w=e.currentTarget.naturalWidth||4,h=e.currentTarget.naturalHeight||3;
+                 setImageSize(old=>old.w===w&&old.h===h?old:{w,h});}}
                 referrerPolicy="no-referrer"
                 style={{filter:activeTab==='erase'?'none':`brightness(${edits.brightness??100}%) contrast(${edits.contrast??100}%) saturate(${edits.saturation??100}%)`}}
                 className="w-full h-full pointer-events-none" draggable={false}/>
