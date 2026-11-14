@@ -1,14 +1,16 @@
-import React,{useRef,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {Download,Share2,Files,FolderArchive,CheckCircle2,AlertCircle,Loader2,X,Upload} from 'lucide-react';
 import type {MediaItem,WatermarkConfig} from '../../types/hnl';
 import {createTimemarkPhoto} from '../../services/timemarkRenderer';
+import {stampImportedVideo} from '../../services/importedVideoStamp';
 import {saveToDevice,shareFromDevice} from '../../services/deviceBridge';
 import {createProjectZip} from '../../services/projectBackup';
-interface Props {isOpen:boolean;targetItems:MediaItem[];onClose:()=>void;watermarkConfig:WatermarkConfig;onRestoreBackup?:(file:File)=>Promise<void>}
-export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,watermarkConfig,onRestoreBackup})=>{
+interface Props {isOpen:boolean;targetItems:MediaItem[];onClose:()=>void;watermarkConfig:WatermarkConfig;onRestoreBackup?:(file:File)=>Promise<void>;onStampedMedia?:(item:MediaItem,stamped:Blob,config:WatermarkConfig)=>Promise<void>}
+export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,watermarkConfig,onRestoreBackup,onStampedMedia})=>{
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(false);
  const [advanced,setAdvanced]=useState(false);
  const picker=useRef<HTMLInputElement>(null);
+ useEffect(()=>{(window as any).__hnlStudioExporting=busy;return()=>{(window as any).__hnlStudioExporting=false};},[busy]);
  if(!isOpen)return null;
  const close=()=>{if(!busy){setMessage('');setError(false);onClose();}};
  const run=async(task:()=>Promise<void>,success:string)=>{
@@ -24,15 +26,24 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
  },'Đã lưu bản gốc vào máy; dữ liệu ảnh/video gốc không thay đổi.');
  const share=()=>run(async()=>{
  if(targetItems.length!==1)throw Error('Chia sẻ một tệp mỗi lần');const it=targetItems[0],blob=await getBlob(it);
- await shareFromDevice(blob,`HNLMark_Original_${Date.now()}.${it.kind==='video'?'webm':'jpg'}`);
+ await shareFromDevice(blob,`HNLMark_Original_${Date.now()}.${it.kind==='video'?(blob.type.includes('mp4')?'mp4':'webm'):(blob.type.includes('png')?'png':'jpg')}`);
  },'Đã gửi yêu cầu mở trình chia sẻ (xác nhận gửi ở ứng dụng đích).');
  const saveStamped=(sharing:boolean)=>run(async()=>{
    if(targetItems.length!==1)throw Error('Vui lòng chọn một ảnh hoặc video.');
    const it=targetItems[0];
    let blob:Blob;
    if(it.kind==='video'){
-     if(!it.isStamped)throw Error('Video cũ này không có dấu trong khung hình; không thể chia sẻ giả là video có dấu.');
-     blob=await getBlob(it);
+     const cfg={...watermarkConfig,...it.watermarkOverride};
+     if(it.isStamped&&!it.stampedBlob){ // Camera source frames were stamped while recording.
+       blob=await getBlob(it);
+     }else if(it.stampedBlob&&it.stampedConfig&&JSON.stringify({...it.stampedConfig,dateTimeIso:it.stampedConfig.autoTime?'':it.stampedConfig.dateTimeIso})===JSON.stringify({...cfg,dateTimeIso:cfg.autoTime?'':cfg.dateTimeIso})){
+       blob=it.stampedBlob;
+     }else{
+       // Imported video: decode, play and re-encode stamped frames, never modify the source.
+       setMessage('Đang phát và chèn Timemark vào video… 0%');
+       blob=await stampImportedVideo(await getBlob(it),cfg,it.photoCode,pct=>setMessage(`Đang chèn dấu video… ${pct}%`));
+       await onStampedMedia?.(it,blob,cfg);
+     }
    }else{
      const cfg={...watermarkConfig,...it.captureWatermark,...it.watermarkOverride};
      if(!['timemark','none'].includes(cfg.templateId))throw Error('Mẫu dấu đang chọn chưa hỗ trợ kết xuất. Vui lòng chọn Timemark.');
@@ -55,22 +66,22 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
    </div>
    {message&&<p role="status" className={'mb-3 rounded-xl px-3 py-2 text-xs '+(error?'bg-red-900/30 text-red-200':'bg-[#183326] text-[#A7F3D0]')}>{message}</p>}
     <div className="space-y-2">
-     <button disabled={busy||targetItems.length!==1||targetItems[0]?.kind==='video'&&!targetItems[0]?.isStamped}
+     <button disabled={busy||targetItems.length!==1}
        onClick={()=>saveStamped(false)} className="w-full min-h-[52px] flex gap-3 items-center rounded-xl bg-[#E2B74B] text-[#071121] font-semibold text-sm px-4 text-left disabled:opacity-40"><Download size={19}/>Lưu ảnh / video có dấu vào máy</button>
-     <button disabled={busy||targetItems.length!==1||targetItems[0]?.kind==='video'&&!targetItems[0]?.isStamped}
+     <button disabled={busy||targetItems.length!==1}
        onClick={()=>saveStamped(true)} className="w-full min-h-[50px] flex gap-3 items-center rounded-xl bg-[#17253D] text-[#E2B74B] font-semibold text-sm px-4 text-left disabled:opacity-40"><Share2 size={19}/>Chia sẻ ảnh / video có dấu</button>
-     {targetItems[0]?.kind==='video'&&!targetItems[0]?.isStamped&&<p className="text-xs text-[#FCA5A5]">Video này được quay từ bản cũ, chưa có dấu trong video.</p>}
+     {targetItems[0]?.kind==='video'&&!targetItems[0]?.isStamped&&<p className="text-xs text-[#94A3B8]">Video nhập từ máy sẽ được phát và xuất lại với dấu Timemark; bản gốc không thay đổi.</p>}
      <button type="button" disabled={busy} aria-expanded={advanced} onClick={()=>setAdvanced(v=>!v)}
        className="w-full min-h-[40px] px-3 text-left rounded-xl border border-white/10 text-[#AEBBD0] text-xs">{advanced?'Ẩn tùy chọn nâng cao':'Tệp gốc và sao lưu · Tùy chọn nâng cao'}</button>
      {advanced&&<div className="space-y-2">
-       <button disabled={busy||targetItems.length!==1||targetItems[0]?.kind==='video'&&targetItems[0]?.isStamped} onClick={saveSelected} className="w-full min-h-[44px] flex gap-3 items-center rounded-xl bg-[#17253D] text-white text-sm px-4 text-left disabled:opacity-40"><Download size={19}/>Lưu ảnh/video gốc</button>
-       <button disabled={busy||targetItems.length!==1||targetItems[0]?.kind==='video'&&targetItems[0]?.isStamped} onClick={share} className="w-full min-h-[44px] flex gap-3 items-center rounded-xl bg-[#17253D] text-white text-sm px-4 text-left disabled:opacity-40"><Share2 size={19}/>Chia sẻ tệp gốc</button>
+       <button disabled={busy||targetItems.length!==1} onClick={saveSelected} className="w-full min-h-[44px] flex gap-3 items-center rounded-xl bg-[#17253D] text-white text-sm px-4 text-left disabled:opacity-40"><Download size={19}/>Lưu ảnh/video gốc</button>
+       <button disabled={busy||targetItems.length!==1} onClick={share} className="w-full min-h-[44px] flex gap-3 items-center rounded-xl bg-[#17253D] text-white text-sm px-4 text-left disabled:opacity-40"><Share2 size={19}/>Chia sẻ tệp gốc</button>
        <button disabled={busy||!targetItems.length} onClick={backup} className="w-full min-h-[44px] flex gap-3 items-center rounded-xl bg-[#17253D] text-white text-sm px-4 text-left disabled:opacity-40"><FolderArchive size={19}/>Sao lưu dự án ZIP ({targetItems.length})</button>
      </div>}
 {onRestoreBackup&&<><input ref={picker} type="file" accept=".zip,application/zip" hidden onChange={e=>{const f=e.target.files?.[0];if(f)run(()=>onRestoreBackup(f),'Đã khôi phục dự án ZIP vào thư viện mới, không xóa dữ liệu cũ.');e.currentTarget.value='';}}/>
       <button disabled={busy} className="w-full min-h-[44px] flex gap-3 items-center px-4 text-sm text-[#94A3B8]" onClick={()=>picker.current?.click()}><Upload size={17}/>Khôi phục dự án ZIP</button></>}
    </div>
-   <p className="pt-3 text-[11px] text-[#94A3B8]">Bản gốc luôn được giữ riêng. Xuất Timemark dùng đúng bố cục chữ giờ, ngày và mã dọc HNL; các mẫu khác cần xác minh kết xuất riêng.</p>
+   <p className="pt-3 text-[11px] text-[#94A3B8]">Bản gốc luôn được giữ riêng. Xuất Timemark dùng đúng bố cục chữ giờ, ngày và mã dọc; các mẫu khác cần xác minh kết xuất riêng.</p>
    {busy&&<p className="text-xs text-[#E2B74B] flex items-center gap-2 mt-2"><Loader2 size={16} className="animate-spin"/>Đang xử lý, không đóng ứng dụng</p>}
   </div>
  </div>;

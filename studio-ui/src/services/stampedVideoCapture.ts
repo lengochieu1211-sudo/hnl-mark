@@ -4,7 +4,7 @@
  * No silent unmarked-video fallback is allowed.
  */
 import type { OrientationDeg, WatermarkConfig } from '../types/hnl';
-import { drawOriginalTimemark, loadTimemarkLogo } from './timemarkRenderer';
+import { drawOriginalTimemark } from './timemarkRenderer';
 
 type StampedCapture = {
   stream: MediaStream;
@@ -36,7 +36,6 @@ export async function createStampedVideoCapture(
   if (!ctx || typeof canvas.captureStream !== 'function') {
     throw new Error('WebView không hỗ trợ quay video có dấu trực tiếp (CanvasCapture).');
   }
-  const logo = config.showLogo ? await loadTimemarkLogo() : undefined;
   const fps = Math.min(30, Math.max(15, desiredFps));
   let active = true;
   let frameId = 0;
@@ -58,7 +57,7 @@ export async function createStampedVideoCapture(
       const timestamp = config.autoTime ? {
         ...config, dateTimeIso: toLocalTime(new Date()),
       } : config;
-      drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, orientation, photoCode, logo);
+      drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, 0, photoCode);
     }
   };
   const stream = canvas.captureStream(fps);

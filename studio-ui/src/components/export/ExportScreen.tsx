@@ -29,20 +29,17 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
       {/* Preview Card */}
       <div className="rounded-2xl overflow-hidden bg-[#0D1626] border border-white/[0.09]">
         <div className="relative aspect-[4/3] max-h-[340px] w-full bg-black">
-          <img
-            src={activeMedia.url}
-            alt={activeMedia.title}
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover"
-          />
-          <WatermarkOverlay config={watermarkConfig} />
+          {activeMedia.kind==='video'
+            ? <video src={activeMedia.url} controls playsInline preload="metadata" className="w-full h-full object-contain" aria-label="Phát xem trước video" />
+            : <img src={activeMedia.url} alt={activeMedia.title} className="w-full h-full object-contain" />}
+          {!(activeMedia.kind==='video'&&activeMedia.isStamped)&&<WatermarkOverlay config={watermarkConfig} />}
         </div>
 
         <div className="p-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.08]">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-[#F8FAFC] truncate">{activeMedia.title}</div>
             <div className="text-xs text-[#94A3B8] font-mono-tabular mt-0.5">
-              {activeMedia.photoCode} · {activeMedia.resolutionLabel} · JPEG {watermarkConfig.jpegQuality}%
+              {activeMedia.photoCode} · {activeMedia.resolutionLabel} · {activeMedia.kind==='video'?'Video gốc được giữ lại':`JPEG ${watermarkConfig.jpegQuality}%`}
             </div>
           </div>
           <div className="text-xs text-[#94A3B8] font-mono-tabular">

@@ -432,8 +432,8 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
             </div>
           </AccordionSection>
 
-          {/* 7. Logo HNL */}
-          <AccordionSection
+          {/* Logo is available only on non-Timemark templates. */}
+          {config.templateId!=='timemark'&&<AccordionSection
             title="7. Logo HNL"
             subtitle={config.showLogo ? 'Đang bật (logo HNL gốc)' : 'Đang ẩn'}
             isOpen={openAccordion === 'logo'}
@@ -466,7 +466,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                 ))}
               </div>
             </div>
-          </AccordionSection>
+          </AccordionSection>}
 
           {/* 8. Vị trí watermark */}
           <AccordionSection

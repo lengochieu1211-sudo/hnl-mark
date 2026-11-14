@@ -57,6 +57,7 @@ jobs:
           python3 tests/test_ai_studio_primary.py
           python3 tests/test_video_micro_preview_test15.py
           python3 tests/test_studio_test16_contract.py
+          python3 tests/test_studio18_video_import.py
           python3 tests/test_launcher_color_fidelity_v2511.py
           node --check android/android-app.js
           python3 tests/test_android_picker_source.py

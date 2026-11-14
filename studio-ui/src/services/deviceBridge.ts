@@ -3,7 +3,7 @@ type MediaCallback=(files:File[])=>Promise<void>;
 type TabCallback=(tab:string)=>void;
 let selectedCallback:MediaCallback|undefined, tabCallback:TabCallback|undefined;
 const native=()=> (window as any).HNLAndroidBridge as any;
-const base64=(blob:Blob):Promise<string>=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
+const base64=(blob:Blob):Promise<string>=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).slice(String(reader.result).lastIndexOf(',')+1)||'');reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
 let queue:Promise<unknown>=Promise.resolve();
 async function nativeTransfer(blob:Blob,name:string,sharing:boolean):Promise<void>{
  const b=native();if(!b)throw Error('Native bridge chưa được cấp');

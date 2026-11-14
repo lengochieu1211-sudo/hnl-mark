@@ -86,6 +86,8 @@ export interface MediaItem {
   rawBlob?: Blob;
   /** Pre-rendered export kept apart from the original, for photo/video playback. */
   stampedBlob?: Blob;
+  /** Configuration used to render a separately stored imported-video stamp. */
+  stampedConfig?: WatermarkConfig;
   /** True only when video frames were actually encoded with the watermark. */
   isStamped?: boolean;
   captureWatermark?: WatermarkConfig;

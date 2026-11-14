@@ -301,7 +301,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,
           coordinates:watermarkConfig.coordinates,photoCode:`HNL-${Date.now()}-${i}`,
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:isLandscapeViewport?0:orientationDeg, captureWatermark:{...watermarkConfig},edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:0, captureWatermark:{...watermarkConfig},edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
       }
@@ -329,7 +329,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;
       }
       const photoCode='HNL-V'+Date.now();
-      const orientation=isLandscapeViewport?0:orientationDeg;
+      // Time stamp follows the actual exported frame (0°), not phone sensor rotation.
+      const orientation:OrientationDeg=0;
       const stampConfig={...watermarkConfig};
       const capture=await createStampedVideoCapture(live,stampConfig,orientation,photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps);
       stampedCaptureRef.current=capture;
@@ -697,7 +698,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           )}
 
           {/* Watermark sits cleanly ON preview without control occlusion */}
-          <WatermarkOverlay config={watermarkConfig} orientationDeg={isLandscapeViewport?0:orientationDeg} />
+          <WatermarkOverlay config={watermarkConfig} orientationDeg={0} />
 
           {/* Recording live timer */}
           {isRecording && (

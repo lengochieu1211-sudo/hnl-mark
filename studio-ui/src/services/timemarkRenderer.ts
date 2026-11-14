@@ -80,14 +80,11 @@ export function drawOriginalTimemark(
  const margin=Math.max(7,W*.020),allowed=Math.min(W*.42,Math.max(base*9.2,W*.28));
  const brandFont=base*1.20,captionFont=base*.80,footerH=brandFont+captionFont*1.46;
  const cx=clamp(.875*W,margin+allowed/2,W-margin-allowed/2);
- const cy=clamp(.966*H,margin+footerH/2,H-margin-footerH/2);
- const fx=cx-allowed/2,fy=cy-footerH/2,right=fx+allowed;
+ // Both footer columns share the same bottom baseline in portrait and landscape.
+ const baseline=clamp(y+firstH*.90,margin+footerH,H-margin);
+ const fx=cx-allowed/2,fy=baseline-brandFont-captionFont*1.12,right=fx+allowed;
  g.save();g.textAlign='right';g.textBaseline='alphabetic';g.shadowColor='rgba(0,0,0,.76)';g.shadowBlur=base*.16;
- if(config.showLogo&&logo&&logo.width>0&&logo.height>0){
-   const side=footerH*.68,scale=Math.min(side/logo.width,side/logo.height);
-   const dw=logo.width*scale,dh=logo.height*scale;
-   g.drawImage(logo,fx+(side-dw)/2,fy+base*.12+(side-dh)/2,dw,dh);
- }
+ // Timemark never includes the HNL logo; independent templates remain unchanged.
  g.font=font(brandFont,700);
  const markWidth=g.measureText('mark').width;
  g.fillStyle='#ffffff';g.fillText('mark',right,fy+brandFont*.96);
@@ -97,7 +94,9 @@ export function drawOriginalTimemark(
  g.restore();
  // Original separate vertical code, in bounds even after 90°/180° rotation.
  if(config.showPhotoCode){
- const label=`${codeOverride||`${config.photoCodePrefix}-${String(config.photoCodeSeq).padStart(4,'0')}`}  |  Timemark Verified`;
+ const rawCode=codeOverride||`${config.photoCodePrefix}-${String(config.photoCodeSeq).padStart(4,'0')}`;
+ const cleanCode=rawCode.replace(/^HNL(?:[-_: ]+)/i,'');
+ const label=`${cleanCode}  |  Timemark Verified`;
  const f=base*.58;
  g.save();g.textBaseline='middle';g.textAlign='center';g.font=font(f);
  const text=ellipsis(g,label,Math.max(10,H*.76)),len=g.measureText(text).width;
@@ -126,8 +125,7 @@ export async function createTimemarkPhoto(source:Blob,config:WatermarkConfig,pho
    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Không thể tạo ảnh dấu');
    ctx.drawImage(bitmap,0,0);
    if(config.templateId!=='none'){
-     const logo=config.showLogo?await loadTimemarkLogo():undefined;
-     drawOriginalTimemark(ctx,canvas.width,canvas.height,config,orientation,photoCode,logo);
+     drawOriginalTimemark(ctx,canvas.width,canvas.height,config,orientation,photoCode);
    }
    return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Không kết xuất được JPEG')),'image/jpeg',clamp(config.jpegQuality/100,.5,1)));
  }finally{bitmap.close();}

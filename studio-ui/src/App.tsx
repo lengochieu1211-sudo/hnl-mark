@@ -96,12 +96,16 @@ export default function App() {
     if(!files.length)return;
     const all:MediaItem[]=[];
     for(const [i,file] of files.entries()){
-      if(!file.type.startsWith('image/')&&!file.type.startsWith('video/'))continue;
+      const detectedType=file.type.startsWith('image/')||file.type.startsWith('video/')?file.type:
+        /\.(mp4|m4v|mov)$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':
+        /\.(jpg|jpeg)$/i.test(file.name)?'image/jpeg':/\.png$/i.test(file.name)?'image/png':'';
+      if(!detectedType)continue;
+      const mediaFile=file.type===detectedType?file:new File([file],file.name,{type:detectedType,lastModified:file.lastModified});
       const now=new Date();
       const item:MediaItem={id:`import-${Date.now()}-${i}-${Math.random().toString(36).slice(2,6)}`,
-      title:file.name.replace(/\.[^/.]+$/,'')||'Tệp mới chọn',kind:file.type.startsWith('video/')?'video':'photo',
-      origin:'newly-picked',url:URL.createObjectURL(file),rawBlob:file,createdAt:now.toISOString(),
-      resolutionLabel:file.type.startsWith('video/')?'Video thiết bị':'Ảnh thiết bị',
+      title:file.name.replace(/\.[^/.]+$/,'')||'Tệp mới chọn',kind:detectedType.startsWith('video/')?'video':'photo',
+      origin:'newly-picked',url:URL.createObjectURL(mediaFile),rawBlob:mediaFile,createdAt:now.toISOString(),
+      resolutionLabel:detectedType.startsWith('video/')?'Video thiết bị':'Ảnh thiết bị',
       sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:'',photoCode:`HNL-${Date.now()}-${i}`,
       customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
       // Persist EACH original before adding to UI; native picker processes sequentially.
@@ -117,7 +121,7 @@ export default function App() {
   },()=>backRef.current());},[]);
   // Real Android system Back. Recording/finalization must be finished before navigation.
   backRef.current=()=>{
-    if(exportSheetOpen){setExportSheetOpen(false);return true;}
+    if(exportSheetOpen){if((window as any).__hnlStudioExporting){alert('Đang xuất video, hãy hoàn tất trước khi rời ứng dụng.');return true;}setExportSheetOpen(false);return true;}
     if(qaModalOpen){setQaModalOpen(false);return true;}
     if((window as any).__hnlStudioRecording===true){alert('Hãy dừng quay và lưu video trước khi thoát camera.');return true;}
     if(route==='review'){setRoute('camera');return true;}
@@ -414,6 +418,11 @@ export default function App() {
         isOpen={exportSheetOpen}
         targetItems={exportTargetItems}
         watermarkConfig={watermarkConfig}
+        onStampedMedia={async(item,stamped,stampConfig)=>{
+          const updated={...item,stampedBlob:stamped,isStamped:true,stampedConfig:stampConfig,url:URL.createObjectURL(stamped)};
+          await storeMedia(updated);
+          setMediaItems(old=>old.map(m=>m.id===item.id?updated:m));
+        }}
         onClose={() => setExportSheetOpen(false)}
       />
 

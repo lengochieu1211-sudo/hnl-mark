@@ -71,6 +71,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   const [draftNote, setDraftNote] = useState<string>('');
   const [draftCode, setDraftCode] = useState<string>('');
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [videoPlaybackError,setVideoPlaybackError] = useState('');
 
   const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -104,6 +105,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   const openLightbox = (item: MediaItem) => {
     onSelectActiveMedia(item);
     setLightboxItem(item);
+    setVideoPlaybackError('');
     setEditingMetadata(false);
     setDraftDate(item.createdAt.slice(0, 16));
     setDraftLocation(item.location);
@@ -471,12 +473,12 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   )}
 
                   <div className="relative w-16 h-12 rounded-lg overflow-hidden bg-[#060B14] shrink-0">
-                    <img
+                    {item.kind==='video' ? <div className="w-full h-full grid place-items-center text-xs text-[#E2B74B] bg-[#17253D]"><Film className="w-5 h-5"/>VIDEO</div> : <img
                       src={item.url}
                       alt={item.title}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
-                    />
+                    />}
                     {item.kind === 'video' && (
                       <span className="absolute inset-0 bg-black/35 flex items-center justify-center">
                         <Play className="w-4 h-4 text-white fill-white" />
@@ -513,12 +515,12 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                 }`}
               >
                 <div className="relative aspect-[4/3] bg-[#060B14] overflow-hidden">
-                  <img
+                  {item.kind==='video' ? <div className="w-full h-full flex flex-col gap-2 items-center justify-center text-[#E2B74B] bg-[#16233B]"><Film className="w-9 h-9"/><span className="text-xs">Nhấn để phát video</span></div> : <img
                     src={item.url}
                     alt={item.title}
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-200"
-                  />
+                  />}
 
                   {item.kind === 'video' && (
                     <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-mono-tabular flex items-center gap-1">
@@ -599,13 +601,12 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
 
           <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col lg:flex-row gap-4 items-center justify-center">
             <div className="relative w-full max-w-2xl aspect-[4/3] rounded-2xl overflow-hidden bg-black border border-white/10 shrink-0">
-              <img
-                src={lightboxItem.url}
-                alt={lightboxItem.title}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover"
-              />
-              <WatermarkOverlay
+              {lightboxItem.kind==='video' ? <video key={lightboxItem.id} src={lightboxItem.url}
+                controls playsInline preload="metadata" className="w-full h-full object-contain"
+                onError={()=>setVideoPlaybackError('Không phát được video này. Hãy thử MP4 H.264/AAC hoặc WebM VP8. Tệp gốc vẫn còn.')}
+              /> : <img src={lightboxItem.url} alt={lightboxItem.title}
+                referrerPolicy="no-referrer" className="w-full h-full object-contain" />}
+              {!(lightboxItem.kind==='video'&&lightboxItem.isStamped)&&<WatermarkOverlay
                 config={{
                   ...watermarkConfig,
                   templateId: lightboxItem.templateId,
@@ -614,7 +615,8 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                   coordinates: lightboxItem.coordinates,
                   customNote: lightboxItem.customNote,
                 }}
-              />
+              />}
+              {videoPlaybackError&&<p role="alert" className="absolute bottom-2 left-2 right-2 rounded-lg bg-red-950/90 p-2 text-xs text-red-100 pointer-events-none">{videoPlaybackError}</p>}
             </div>
 
             {editingMetadata && (
@@ -703,7 +705,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
               className="min-h-[44px] px-4 rounded-xl bg-[#111C30] border border-white/10 text-xs font-semibold text-[#F8FAFC] flex items-center gap-1.5"
             >
               <Sliders className="w-4 h-4 text-[#E2B74B]" />
-              Chỉnh sửa ảnh
+              Chỉnh sửa dấu
             </button>
             <button
               type="button"

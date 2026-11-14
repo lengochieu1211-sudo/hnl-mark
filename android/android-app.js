@@ -29,7 +29,7 @@ function setDeviceOrientation(angle){
 async function saveSlice(blob){
  return new Promise((resolve,reject)=>{
   const reader=new FileReader();
-  reader.onload=()=>resolve(String(reader.result).split(',')[1]||'');
+  reader.onload=()=>resolve(String(reader.result).slice(String(reader.result).lastIndexOf(',')+1)||'');
   reader.onerror=()=>reject(reader.error||Error('Không đọc được file'));
   reader.readAsDataURL(blob);
  });
@@ -151,5 +151,5 @@ const cameraState=()=>{
 new MutationObserver(cameraState).observe(document.body,{attributes:true,attributeFilter:['class']});
 cameraState();
 setDeviceOrientation(matchMedia('(orientation:landscape)').matches?90:0);
-window.HNLAndroidApp={chooseTab,openGallery:gallery,receivePickedMedia,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.17-studio-test'};
+window.HNLAndroidApp={chooseTab,openGallery:gallery,receivePickedMedia,saveBlob,shareBlob,setDeviceOrientation,getDeviceAngle:()=>physicalAngle,version:'2.5.18-studio-test'};
 })();

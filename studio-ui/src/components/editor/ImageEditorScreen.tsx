@@ -153,9 +153,9 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
             setZoom(Number(next.toFixed(2)));
           }}
           style={{ height: `${previewHeightPx}px` }}
-          className="relative w-full overflow-hidden bg-[#04070E] flex items-center justify-center touch-none"
+          className={`relative w-full overflow-hidden bg-[#04070E] flex items-center justify-center ${media.kind==='video'?'touch-auto':'touch-none'}`}
         >
-          <img
+          {media.kind==='video' ? <video src={media.url} controls playsInline preload="metadata" className="w-full h-full object-contain" /> : <img
             src={media.url}
             alt={media.title}
             referrerPolicy="no-referrer"
@@ -169,7 +169,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
             className={`w-full h-full object-cover pointer-events-none ${
               edits.centeredFrame ? 'p-4 bg-[#0B1424] object-contain' : ''
             }`}
-          />
+          />}
 
           {/* Visual Crop Ratio Guide Overlay */}
           {(edits.cropRatio !== 'free' || showCropMenu) && (
