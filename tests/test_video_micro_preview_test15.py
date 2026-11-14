@@ -21,7 +21,7 @@ assert "isLandscapeViewport ? 'flex-col w-full' : 'flex-row'" in cam
 assert cam.count("isLandscapeViewport ? 'w-full px-1' : 'px-3.5'") == 2
 assert 'camera-roll-two-photos.png' in emu and 'camera-roll-swipe-older.png' in emu
 assert 'camera-roll-after-relaunch.png' in emu and 'am force-stop vn.hnl.xaydung.hnlmark.trial2530' in emu
-assert "const latestThumb = latestItem?.kind === 'photo' ? latestItem.url : null;" in cam
+assert '<PhotoPreview compact media={latestItem}' in cam
 assert 'latestItem?.kind === \'video\' ? <Film' in cam
 assert "cameraReady && mode==='video' && isRecording && audioUnavailable" in cam
 print('PASS: TEST21 micro fallback, preview, duration, thumbnail and standalone appId')

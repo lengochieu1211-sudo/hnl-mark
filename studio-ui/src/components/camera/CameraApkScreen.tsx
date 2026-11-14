@@ -27,6 +27,7 @@ import {
 } from '../../types/hnl';
 import { DEMO_IMAGES, DEFAULT_IMAGE_EDITS } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
+import {PhotoPreview} from '../watermark/PhotoPreview';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
@@ -412,7 +413,6 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   };
 
   const latestItem = recentMedia[0];
-  const latestThumb = latestItem?.kind === 'photo' ? latestItem.url : null;
 
   const previewAspectStyle = (): React.CSSProperties => {
     if (aspectRatio === '1:1') return { aspectRatio: '1 / 1', maxHeight: '100%' };
@@ -897,12 +897,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             aria-label="Xem ảnh, video đã chụp"
             title="Xem lại ảnh và video đã chụp"
           >
-            {latestThumb ? <img
-              src={latestThumb}
-              alt="Ảnh gần nhất trong thư viện HNL Mark"
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover"
-            /> : latestItem?.kind === 'video' ? <Film className="w-6 h-6 text-[#E2B74B]" aria-label="Video đã quay" /> : <Images className="w-6 h-6 text-[#E2B74B]" />}
+            {latestItem?.kind==='photo' ? <PhotoPreview compact media={latestItem} config={latestItem.captureWatermark||watermarkConfig}/>
+              : latestItem?.kind === 'video' ? <Film className="w-6 h-6 text-[#E2B74B]" aria-label="Video đã quay" /> : <Images className="w-6 h-6 text-[#E2B74B]" />}
             <span className="absolute inset-0 bg-black/20 flex items-end justify-end p-1">
               <Images className="w-3.5 h-3.5 text-white drop-shadow" />
             </span>

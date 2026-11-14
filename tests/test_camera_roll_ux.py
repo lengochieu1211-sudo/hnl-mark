@@ -14,7 +14,7 @@ assert 'ordered.map((item,index)' in review
 assert 'onClick={onOpenLibrary}' in camera
 assert 'pickDeviceGallery();' not in camera
 assert 'Đã lưu ${count} ảnh gốc vào thư viện HNL' not in camera
-assert 'src={latestThumb}' in camera and 'DEMO_IMAGES.rearConstruction' not in camera.split('const latestThumb =',1)[1].split('const previewAspectStyle',1)[0]
+assert '<PhotoPreview compact media={latestItem}' in camera and 'src={latestThumb}' not in camera
 assert 'Chọn ảnh / video từ máy' in app and 'onClick={()=>pickDeviceGallery()}' in app
 assert "if(route==='review'){setRoute('camera');return true;}" in app
 assert 'onOpenLegacyCamera' not in camera
