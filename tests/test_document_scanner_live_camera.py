@@ -13,7 +13,7 @@ assert 'facingMode:{ideal:cameraFacing}' in scan and 'video.srcObject=stream' in
 assert 'await video.play()' in scan
 assert 'scanCaptureLock.current' in scan
 assert "'image/jpeg',.94" in scan
-assert scan.index('await putScan(page)') < scan.index('suggestDocumentEdges(blob)', scan.index('const captureScanFrame'))
+assert scan.index('await putScan(page)') < scan.index('suggestDocumentEdges(blob,scanDocumentType)', scan.index('const captureScanFrame'))
 assert "scanMode==='single'" in scan
 assert "setScanMode('continuous')" in scan
 assert 'Chụp trang tài liệu' in scan and 'Liên tục' in scan and 'Một trang' in scan
@@ -24,5 +24,5 @@ assert 'Dùng camera hệ thống (dự phòng)' in scan
 assert 'cameraInput.current?.click()' in scan
 assert 'Manifest.permission.CAMERA' in native and 'RESOURCE_VIDEO_CAPTURE' in native
 assert 'trusted(request.getOrigin())' in native
-assert "applicationIdSuffix '.trial2527'" in (R/'android/app/build.gradle').read_text('utf-8')
+assert "applicationIdSuffix '.trial2528'" in (R/'android/app/build.gradle').read_text('utf-8')
 print('PASS: TEST27 scanner real camera single/continuous, saved originals, no forced picker, track teardown and fallback')

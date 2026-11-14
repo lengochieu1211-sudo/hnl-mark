@@ -3,13 +3,16 @@ export type ScanPoint = {x:number;y:number};
 export type ScanCorners = [ScanPoint,ScanPoint,ScanPoint,ScanPoint]; // TL, TR, BR, BL
 export type ScanFilter = 'color'|'enhance'|'gray'|'bw'|'paper';
 export type ScanPaper = 'A4'|'A5'|'Letter'|'custom';
+export type ScanDocumentType='auto'|'id-card'|'paper';
 export type ScanPage = {
   id:string; folderId:string; name:string; original:Blob; processed?:Blob;
   corners:ScanCorners; filter:ScanFilter; order:number; createdAt:number;
+  detectionConfidence?:ScanDetection['confidence']; documentType?:ScanDocumentType;
 };
 export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
-export const DEFAULT_CORNERS:ScanCorners=[{x:.06,y:.06},{x:.94,y:.06},{x:.94,y:.94},{x:.06,y:.94}];
+// 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
+export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
 export const newScanId=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 const clamp=(v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
 function database():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{
@@ -48,39 +51,163 @@ async function sourcePixels(blob:Blob,maxEdge:number):Promise<ImageData>{
  }finally{bmp.close();}
 }
 export type ScanDetection={corners:ScanCorners;confidence:'estimated'|'manual'};
-/** Conservative background/foreground contrast detection; noisy scenes require manual corners. */
-export function detectDocumentEdges(image:ImageData):ScanDetection{
- const {width:w,height:h,data}=image;
- if(w<50||h<50)return {corners:DEFAULT_CORNERS.map(p=>({...p})) as ScanCorners,confidence:'manual'};
- const radius=Math.max(2,Math.floor(Math.min(w,h)*.025));
- const samples:number[][]=[];
- for(const [cx,cy] of [[radius,radius],[w-radius-1,radius],[w-radius-1,h-radius-1],[radius,h-radius-1]]){
-  let r=0,g=0,b=0,n=0;
-  for(let y=Math.max(0,cy-radius);y<Math.min(h,cy+radius);y+=2)for(let x=Math.max(0,cx-radius);x<Math.min(w,cx+radius);x+=2){const k=(y*w+x)*4;r+=data[k];g+=data[k+1];b+=data[k+2];n++;}
-  samples.push([r/Math.max(1,n),g/Math.max(1,n),b/Math.max(1,n)]);
- }
- const bg=samples.reduce((s,v)=>[s[0]+v[0]/4,s[1]+v[1]/4,s[2]+v[2]/4],[0,0,0]);
- const extremes=[{x:w,y:h,v:Infinity},{x:0,y:h,v:-Infinity},{x:0,y:0,v:-Infinity},{x:w,y:0,v:-Infinity}];
- let count=0,minX=w,maxX=0,minY=h,maxY=0;
- const threshold=54;
- for(let y=Math.round(h*.025);y<h*.975;y+=2)for(let x=Math.round(w*.025);x<w*.975;x+=2){
-  const k=(y*w+x)*4;
-  const distance=Math.abs(data[k]-bg[0])+Math.abs(data[k+1]-bg[1])+Math.abs(data[k+2]-bg[2]);
-  if(distance<threshold)continue;
-  count++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
-  const vals=[x+y,x-y,x+y,y-x];
-  if(vals[0]<extremes[0].v)extremes[0]={x,y,v:vals[0]};
-  if(vals[1]>extremes[1].v)extremes[1]={x,y,v:vals[1]};
-  if(vals[2]>extremes[2].v)extremes[2]={x,y,v:vals[2]};
-  if(vals[3]>extremes[3].v)extremes[3]={x,y,v:vals[3]};
- }
- const coverage=count/((w*.95/2)*(h*.95/2));
- const corners=extremes.map(p=>({x:clamp(p.x/(w-1),0,1),y:clamp(p.y/(h-1),0,1)})) as ScanCorners;
- if(coverage<.08||coverage>.91||(maxX-minX)<w*.28||(maxY-minY)<h*.2||!validCorners(corners))
-   return {corners:DEFAULT_CORNERS.map(p=>({...p})) as ScanCorners,confidence:'manual'};
- return {corners,confidence:'estimated'};
+/** Robust on-device quadrilateral detector (no OpenCV/CDN dependency).
+ * Inspired by contour + polygon approximation workflows common to offline scanners:
+ * 1) robust border color model; 2) morphological closing; 3) connected components;
+ * 4) convex hull / 4-vertex simplification; 5) geometry and edge validation.
+ * Never silently crop when confidence is low: return a near-full-image manual frame.
+ */
+function defaultDetection():ScanDetection{
+ return {corners:DEFAULT_CORNERS.map(p=>({...p})) as ScanCorners,confidence:'manual'};
 }
-export async function suggestDocumentEdges(blob:Blob):Promise<ScanDetection>{return detectDocumentEdges(await sourcePixels(blob,360));}
+type PixelPoint={x:number;y:number};
+function convexHull(points:PixelPoint[]):PixelPoint[]{
+ const sorted=[...points].sort((a,b)=>a.x-b.x||a.y-b.y);
+ if(sorted.length<4)return sorted;
+ const cross=(a:PixelPoint,b:PixelPoint,c:PixelPoint)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+ const lower:PixelPoint[]=[],upper:PixelPoint[]=[];
+ for(const p of sorted){while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();lower.push(p);}
+ for(let i=sorted.length-1;i>=0;i--){const p=sorted[i];while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();upper.push(p);}
+ lower.pop();upper.pop();return lower.concat(upper);
+}
+function hullToQuadrilateral(hull:PixelPoint[]):PixelPoint[]|null{
+ if(hull.length<4)return null;
+ const quad=[...hull];
+ // Remove the smallest corner contribution until only four dominant vertices
+ // remain. This avoids picking random text/shadow extrema as document corners.
+ while(quad.length>4){
+  let least=Infinity,remove=-1;
+  for(let i=0;i<quad.length;i++){
+   const p=quad[(i+quad.length-1)%quad.length],q=quad[i],r=quad[(i+1)%quad.length];
+   const contribution=Math.abs((q.x-p.x)*(r.y-p.y)-(q.y-p.y)*(r.x-p.x));
+   if(contribution<least){least=contribution;remove=i;}
+  }
+  quad.splice(remove,1);
+ }
+ return quad;
+}
+function orderQuad(pts:PixelPoint[]):[PixelPoint,PixelPoint,PixelPoint,PixelPoint]|null{
+ if(pts.length!==4)return null;
+ const sum=(p:PixelPoint)=>p.x+p.y,diff=(p:PixelPoint)=>p.x-p.y;
+ const tl=pts.reduce((a,b)=>sum(a)<sum(b)?a:b);
+ const br=pts.reduce((a,b)=>sum(a)>sum(b)?a:b);
+ const tr=pts.reduce((a,b)=>diff(a)>diff(b)?a:b);
+ const bl=pts.reduce((a,b)=>diff(a)<diff(b)?a:b);
+ if(new Set([tl,tr,br,bl]).size!==4)return null;
+ return [tl,tr,br,bl];
+}
+function morphClose(src:Uint8Array,w:number,h:number):Uint8Array{
+ const d=new Uint8Array(src.length),out=new Uint8Array(src.length);
+ // 3×3 closing twice fills holes from text, signatures and thin shadow breaks.
+ let mask=src;
+ for(let pass=0;pass<2;pass++){
+  d.fill(0);out.fill(0);
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+   const k=y*w+x;
+   if(mask[k]||mask[k-1]||mask[k+1]||mask[k-w]||mask[k+w]||mask[k-w-1]||mask[k-w+1]||mask[k+w-1]||mask[k+w+1])d[k]=1;
+  }
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+   const k=y*w+x;
+   if(d[k]&&d[k-1]&&d[k+1]&&d[k-w]&&d[k+w]&&d[k-w-1]&&d[k-w+1]&&d[k+w-1]&&d[k+w+1])out[k]=1;
+  }
+  mask=new Uint8Array(out);
+ }
+ return mask;
+}
+function quadPolygonArea(p:PixelPoint[]):number{
+ let a=0;for(let i=0;i<4;i++)a+=p[i].x*p[(i+1)%4].y-p[(i+1)%4].x*p[i].y;
+ return Math.abs(a)*.5;
+}
+export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+ const {width:w,height:h,data}=image;
+ if(w<70||h<70||data.length<w*h*4)return defaultDetection();
+ const cornersRgb:number[][]=[];
+ const radius=Math.max(3,Math.round(Math.min(w,h)*.035));
+ for(const [cx,cy] of [[radius,radius],[w-radius-1,radius],[w-radius-1,h-radius-1],[radius,h-radius-1]]){
+  const channel=[0,0,0];let count=0;
+  for(let y=cy-radius;y<=cy+radius;y+=2)for(let x=cx-radius;x<=cx+radius;x+=2){
+   if(x<0||x>=w||y<0||y>=h)continue;
+   const k=(y*w+x)*4;for(let c=0;c<3;c++)channel[c]+=data[k+c];count++;
+  }
+  cornersRgb.push(channel.map(v=>v/Math.max(1,count)));
+ }
+ const distance=(a:number[],b:number[])=>Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1])+Math.abs(a[2]-b[2]);
+ // Medoid: shadows in one image corner must not drag the background model.
+ const model=cornersRgb.reduce((best,c)=>{
+  const support=cornersRgb.reduce((n,other)=>n+(distance(c,other)<58?1:0),0);
+  return support>best.support?{rgb:c,support}:best;
+ },{rgb:cornersRgb[0],support:0});
+ if(model.support<2)return defaultDetection();
+ const near=cornersRgb.filter(c=>distance(c,model.rgb)<58);
+ const bg=[0,1,2].map(c=>near.reduce((v,p)=>v+p[c],0)/near.length);
+ // Border texture drives a noise-aware threshold; don't mistake patterned
+ // desk/grain for the ID-card foreground.
+ const borderDifferences:number[]=[];
+ for(let i=0;i<64;i++){
+  const u=Math.round(i*(w-1)/63),v=Math.round(i*(h-1)/63);
+  for(const [x,y] of [[u,1],[u,h-2],[1,v],[w-2,v]]){
+   const k=(y*w+x)*4;
+   borderDifferences.push(distance([data[k],data[k+1],data[k+2]],bg));
+  }
+ }
+ borderDifferences.sort((a,b)=>a-b);
+ const noise=borderDifferences[Math.floor(borderDifferences.length*.66)];
+ const threshold=Math.max(45,Math.min(115,noise*1.45+22));
+ const mask=new Uint8Array(w*h);
+ for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+  const k=(y*w+x)*4;
+  const dr=Math.abs(data[k]-bg[0]),dg=Math.abs(data[k+1]-bg[1]),db=Math.abs(data[k+2]-bg[2]);
+  if(dr+dg+db>threshold)mask[y*w+x]=1;
+ }
+ const smooth=morphClose(mask,w,h);
+ const visited=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ let best:ScanDetection|undefined,bestScore=-Infinity;
+ for(let sy=3;sy<h-3;sy+=2)for(let sx=3;sx<w-3;sx+=2){
+  const seed=sy*w+sx;if(!smooth[seed]||visited[seed])continue;
+  let head=0,tail=1;queue[0]=seed;visited[seed]=1;
+  let minX=w,maxX=0,minY=h,maxY=0,borderTouch=0;
+  const boundary:PixelPoint[]=[];
+  while(head<tail){
+   const idx=queue[head++],x=idx%w,y=(idx/w)|0;
+   minX=Math.min(x,minX);maxX=Math.max(x,maxX);minY=Math.min(y,minY);maxY=Math.max(y,maxY);
+   if(x<=3||x>=w-4||y<=3||y>=h-4)borderTouch++;
+   let isBoundary=false;
+   for(const n of [idx-1,idx+1,idx-w,idx+w]){
+    if(n<0||n>=w*h||Math.abs((n%w)-x)>1){isBoundary=true;continue;}
+    if(!smooth[n]){isBoundary=true;continue;}
+    if(!visited[n]){visited[n]=1;queue[tail++]=n;}
+   }
+   if(isBoundary&&(head%2===0))boundary.push({x,y});
+  }
+  const componentArea=tail,coverage=componentArea/(w*h),bw=maxX-minX,bh=maxY-minY;
+  if(coverage<.075||coverage>.88||bw<w*.24||bh<h*.2||minX<=4||minY<=4||maxX>=w-5||maxY>=h-5||borderTouch>componentArea*.018||boundary.length<12)continue;
+  const fill=componentArea/Math.max(1,bw*bh);
+  if(fill<.49)continue;
+  const quad=hullToQuadrilateral(convexHull(boundary));
+  const ordered=quad&&orderQuad(quad);
+  if(!ordered)continue;
+  const area=quadPolygonArea(ordered),ratio=area/Math.max(1,bw*bh);
+  if(area<w*h*.07||ratio<.46)continue;
+  const edgeLen=(a:PixelPoint,b:PixelPoint)=>Math.hypot(a.x-b.x,a.y-b.y);
+  const wd=(edgeLen(ordered[0],ordered[1])+edgeLen(ordered[3],ordered[2]))/2;
+  const ht=(edgeLen(ordered[0],ordered[3])+edgeLen(ordered[1],ordered[2]))/2;
+  if(wd/ht<.35||wd/ht>3.6)continue;
+  // Leave a thin external rim so scanning never nicks a rounded CCCD corner.
+  const center={x:ordered.reduce((n,p)=>n+p.x,0)/4,y:ordered.reduce((n,p)=>n+p.y,0)/4};
+  const points=ordered.map(p=>({x:clamp((p.x+(p.x-center.x)*.013)/(w-1),0,1),
+    y:clamp((p.y+(p.y-center.y)*.013)/(h-1),0,1)})) as ScanCorners;
+  if(!validCorners(points))continue;
+  const centrality=1-Math.hypot(center.x/w-.5,center.y/h-.5);
+  const aspect=wd/ht;
+  const expected=kind==='id-card'?1.585:kind==='paper'?Math.SQRT2:0;
+  const aspectError=expected?Math.min(Math.abs(Math.log(aspect/expected)),Math.abs(Math.log(aspect*expected))):0;
+  const aspectBonus=expected?.08*Math.exp(-2*aspectError):0;
+  const score=coverage*.7+fill*.25+ratio*.25+centrality*.15+aspectBonus-borderTouch*.001;
+  if(score>bestScore){best={corners:points,confidence:'estimated'};bestScore=score;}
+ }
+ return best??defaultDetection();
+}
+export async function suggestDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):Promise<ScanDetection>{return detectDocumentEdges(await sourcePixels(blob,360),kind);}
 export function validCorners(points:ScanCorners):boolean{
  if(points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return false;
  let sign=0,area=0;

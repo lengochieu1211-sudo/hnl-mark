@@ -38,7 +38,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run Android TEST27 APK in clean API 35 emulator
+      - name: Run Android TEST28 APK in clean API 35 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -53,11 +53,11 @@ jobs:
             python3 android/scripts/audit_android.py
             (cd android && gradle :app:assembleDebug --no-daemon)
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell pm grant vn.hnl.xaydung.hnlmark.trial2527 android.permission.CAMERA
-            adb shell pm grant vn.hnl.xaydung.hnlmark.trial2527 android.permission.RECORD_AUDIO
-            adb shell am start -W -n vn.hnl.xaydung.hnlmark.trial2527/vn.hnl.xaydung.hnlmark.MainActivity
+            adb shell pm grant vn.hnl.xaydung.hnlmark.trial2528 android.permission.CAMERA
+            adb shell pm grant vn.hnl.xaydung.hnlmark.trial2528 android.permission.RECORD_AUDIO
+            adb shell am start -W -n vn.hnl.xaydung.hnlmark.trial2528/vn.hnl.xaydung.hnlmark.MainActivity
             sleep 12
-            adb shell pidof vn.hnl.xaydung.hnlmark.trial2527 | tee android-smoke-evidence/pid.txt
+            adb shell pidof vn.hnl.xaydung.hnlmark.trial2528 | tee android-smoke-evidence/pid.txt
             adb exec-out screencap -p > android-smoke-evidence/studio-camera-emulator.png
             # Actual Android WebView camera shutter — verify MediaStore publication.
             adb shell input tap 540 2200
@@ -80,8 +80,8 @@ jobs:
             adb shell input keyevent 4
             sleep 3
             # Force-stop simulates closing the APK; IndexedDB must survive relaunch.
-            adb shell am force-stop vn.hnl.xaydung.hnlmark.trial2527
-            adb shell am start -W -n vn.hnl.xaydung.hnlmark.trial2527/vn.hnl.xaydung.hnlmark.MainActivity
+            adb shell am force-stop vn.hnl.xaydung.hnlmark.trial2528
+            adb shell am start -W -n vn.hnl.xaydung.hnlmark.trial2528/vn.hnl.xaydung.hnlmark.MainActivity
             sleep 10
             adb exec-out screencap -p > android-smoke-evidence/camera-after-relaunch.png
             adb shell input tap 215 2200
@@ -103,13 +103,13 @@ jobs:
             adb shell ls -lah /sdcard/Movies/HNLMark > android-smoke-evidence/video-media.txt 2>&1 || true
             adb exec-out screencap -p > android-smoke-evidence/after-video-attempt.png
             # Block mic with AppOps; do not revoke camera.
-            adb shell appops set vn.hnl.xaydung.hnlmark.trial2527 RECORD_AUDIO ignore
+            adb shell appops set vn.hnl.xaydung.hnlmark.trial2528 RECORD_AUDIO ignore
             adb shell input tap 540 2200
             sleep 3
             adb exec-out screencap -p > android-smoke-evidence/mic-denied-video-attempt.png
             adb shell input tap 540 2200
             sleep 5
-            adb shell appops set vn.hnl.xaydung.hnlmark.trial2527 RECORD_AUDIO allow
+            adb shell appops set vn.hnl.xaydung.hnlmark.trial2528 RECORD_AUDIO allow
             adb exec-out screencap -p > android-smoke-evidence/after-mic-denied-stop.png
             # Screenshot evidence is not a physical-device pass.
             # Validate the portrait screen and both landscape directions in the emulator.
@@ -125,7 +125,7 @@ jobs:
             adb logcat -d -t 1200 > android-smoke-evidence/logcat.txt
             adb shell dumpsys window windows > android-smoke-evidence/windows.txt
             python3 -c "from PIL import Image; im=Image.open('android-smoke-evidence/studio-camera-emulator.png').convert('RGB'); assert im.width>=320 and im.height>=480; print('PASS: emulator screenshot',im.size)"
-            if grep -q 'Process: vn.hnl.xaydung.hnlmark.trial2527' android-smoke-evidence/logcat.txt && grep -q 'FATAL EXCEPTION' android-smoke-evidence/logcat.txt; then echo 'FAIL: app crash detected'; exit 1; fi
+            if grep -q 'Process: vn.hnl.xaydung.hnlmark.trial2528' android-smoke-evidence/logcat.txt && grep -q 'FATAL EXCEPTION' android-smoke-evidence/logcat.txt; then echo 'FAIL: app crash detected'; exit 1; fi
             echo 'Emulator boot, photo saved into public Pictures/HNLMark, orientation/video screenshots captured; rotation correctness and real Xiaomi runtime are still PENDING.' > android-smoke-evidence/RESULT.txt
       - name: Upload emulator screen and runtime logs
         if: always()

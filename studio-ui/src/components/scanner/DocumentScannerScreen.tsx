@@ -6,7 +6,7 @@ import {saveToDevice} from '../../services/deviceBridge';
 import {
  DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,newScanId,putScan,putScanFolder,
  removeScan,removeScanFolder,suggestDocumentEdges,validCorners,
- type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions
+ type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';
 
 type Props={onBack:()=>void};
@@ -27,6 +27,8 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [editingId,setEditingId]=useState<string|null>(null),[showResult,setShowResult]=useState(false);
  const [cornerDraft,setCornerDraft]=useState<ScanCorners>(emptyCorners());
  const [filterDraft,setFilterDraft]=useState<ScanFilter>('enhance');
+ const [scanDocumentType,setScanDocumentType]=useState<ScanDocumentType>('auto');
+ const [dragFocus,setDragFocus]=useState<ScanPoint|null>(null);
  const [working,setWorking]=useState(false),[notice,setNotice]=useState(''),[problem,setProblem]=useState('');
  const [paper,setPaper]=useState<ScanPaper>('A4'),[landscape,setLandscape]=useState(false);
  const [twoPerPage,setTwoPerPage]=useState(false),[margin,setMargin]=useState(10);
@@ -92,11 +94,16 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   await task('Đang nhập ảnh gốc…',async()=>{
    const created:ScanPage[]=[];
    for(const file of list){if(!file.type.startsWith('image/'))continue;if(file.size>35*1024*1024)throw Error('Ảnh '+file.name+' vượt giới hạn 35 MB');
-    const detection=await suggestDocumentEdges(file);
     const p:ScanPage={id:newScanId(),folderId:currentFolder==='*'?'':currentFolder,name:fileStem(file.name),original:file,
-      corners:detection.corners,filter:'enhance',createdAt:Date.now(),order:Date.now()+created.length};
-    // Keep source bytes safe before any destructive rendering.
-    await putScan(p);created.push(p);
+      corners:emptyCorners(),filter:'enhance',documentType:scanDocumentType,detectionConfidence:'manual',createdAt:Date.now(),order:Date.now()+created.length};
+    // Commit unmodified source FIRST; a slow or failed detector cannot lose a picked photo.
+    await putScan(p);
+    let updated=p;
+    try{const detection=await suggestDocumentEdges(file,scanDocumentType);
+     updated={...p,corners:detection.corners,detectionConfidence:detection.confidence};
+     await putScan(updated);
+    }catch(e){console.warn('Tự nhận diện mép thất bại, giữ ảnh gốc:',e);}
+    created.push(updated);
    }
    if(!created.length)throw Error('Không có ảnh JPEG/PNG/WebP hợp lệ để quét');
    setPages(prev=>[...prev,...created]);setSelection(created.map(p=>p.id));setEditingId(created[0].id);
@@ -123,16 +130,16 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    const id=newScanId(),date=Date.now();
    const page:ScanPage={id,folderId:currentFolder==='*'?'':currentFolder,
     name:`Scan_${new Date(date).toISOString().replace(/[:.]/g,'-')}_${scanSessionIdsRef.current.length+1}`,
-    original:blob,corners:emptyCorners(),filter:'enhance',createdAt:date,order:date+scanSessionIdsRef.current.length};
+    original:blob,corners:emptyCorners(),filter:'enhance',documentType:scanDocumentType,detectionConfidence:'manual',createdAt:date,order:date+scanSessionIdsRef.current.length};
    await putScan(page); // Mandatory transaction completion before showing success.
    scanSessionIdsRef.current.push(id);setScanSessionIds([...scanSessionIdsRef.current]);
    setPages(prev=>[...prev,page]);setScanCameraNotice(`Đã lưu ${scanSessionIdsRef.current.length} trang gốc`);
    // Estimate corners after persistence. Edge-detection failure is nonfatal.
    let saved=page;
    try{
-    const detected=await suggestDocumentEdges(blob);
+    const detected=await suggestDocumentEdges(blob,scanDocumentType);
     if(validCorners(detected.corners)){
-     saved={...page,corners:detected.corners};await putScan(saved);
+     saved={...page,corners:detected.corners,detectionConfidence:detected.confidence};await putScan(saved);
      setPages(prev=>prev.map(p=>p.id===id?saved:p));
     }
    }catch(error){console.warn('Không nhận diện được mép; giữ bản gốc:',error);}
@@ -187,16 +194,16 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setFolders(prev=>prev.filter(p=>p.id!==f.id));setCurrentFolder('');setNotice('Đã xóa thư mục, giữ nguyên tất cả ảnh');
   });
  };
- const editPage=(page:ScanPage)=>{setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setFilterDraft(page.filter);setShowResult(false);setProblem('');};
- const handleDragCorner=(e:React.PointerEvent<SVGCircleElement>,i:number)=>{e.preventDefault();e.stopPropagation();dragPoint.current=i;e.currentTarget.setPointerCapture(e.pointerId);};
+ const editPage=(page:ScanPage)=>{setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setFilterDraft(page.filter);setShowResult(false);setProblem('');};
+ const handleDragCorner=(e:React.PointerEvent<SVGCircleElement>,i:number)=>{e.preventDefault();e.stopPropagation();dragPoint.current=i;setDragFocus(cornerDraft[i]);e.currentTarget.setPointerCapture(e.pointerId);};
  const handlePointerMove=(e:React.PointerEvent<SVGSVGElement>)=>{if(dragPoint.current===null||!stageRef.current)return;
   const r=stageRef.current.getBoundingClientRect();const x=clamp((e.clientX-r.left)/r.width),y=clamp((e.clientY-r.top)/r.height),idx=dragPoint.current;
-  setCornerDraft(old=>old.map((p,i)=>i===idx?{x,y}:p) as ScanCorners);setShowResult(false);
+  setCornerDraft(old=>old.map((p,i)=>i===idx?{x,y}:p) as ScanCorners);setDragFocus({x,y});setShowResult(false);
  };
  const applyEdit=async()=>{if(!editing)return;if(!validCorners(cornerDraft)){setProblem('Bốn góc đang giao nhau hoặc quá sát nhau. Hãy kéo lại.');return;}
   await task('Đang làm phẳng và lọc ảnh…',async()=>{const controller=new AbortController();abortProcessing.current=controller;
    try{const blob=await flattenDocument(editing.original,cornerDraft,filterDraft,controller.signal);
-    const next:ScanPage={...editing,processed:blob,corners:cornerDraft,filter:filterDraft};await putScan(next);
+    const next:ScanPage={...editing,processed:blob,corners:cornerDraft,filter:filterDraft,detectionConfidence:'estimated'};await putScan(next);
     setPages(prev=>prev.map(p=>p.id===next.id?next:p));setShowResult(true);setNotice('Đã làm phẳng ảnh và lưu bản scan; ảnh gốc giữ nguyên.');
    }finally{abortProcessing.current=null;}
   });
@@ -287,6 +294,14 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         <button type="button" disabled={scanCameraBusy} aria-label="Đổi camera trước sau" onClick={()=>setCameraFacing(f=>f==='environment'?'user':'environment')}
           className="min-w-10 min-h-10 grid place-items-center rounded-xl bg-[#17253D] disabled:opacity-50"><RotateCcw size={19}/></button>
       </div>
+      <div className="shrink-0 px-3 pb-2 flex justify-center items-center gap-2">
+        <label className="text-[12px] text-[#AFC0D6] flex items-center gap-2">Nhận diện
+         <select aria-label="Loại tài liệu nhận diện" value={scanDocumentType} onChange={e=>setScanDocumentType(e.target.value as ScanDocumentType)}
+          className="min-h-9 bg-[#14243B] border border-white/15 px-2 rounded-lg text-xs text-white">
+          <option value="auto">Tự động</option><option value="id-card">CCCD / thẻ</option><option value="paper">Giấy A4 / tài liệu</option>
+         </select>
+        </label>
+      </div>
       <div className="shrink-0 px-3 pb-3 flex items-center justify-center gap-2">
         <button type="button" disabled={scanCameraBusy} onClick={()=>setScanMode('single')} aria-pressed={scanMode==='single'}
           className={`min-h-10 rounded-lg px-4 text-xs font-semibold border disabled:opacity-50 ${scanMode==='single'?'bg-[#E2B74B] text-[#06101E] border-[#E2B74B]':'bg-[#14243B] text-white border-white/15'}`}>Một trang</button>
@@ -296,7 +311,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       <div className="relative flex-1 min-h-0 mx-3 rounded-2xl border border-white/15 bg-black overflow-hidden flex items-center justify-center">
         <video ref={scanVideoRef} autoPlay muted playsInline aria-label="Khung camera quét trực tiếp"
           className="w-full h-full object-contain"/>
-        <div aria-hidden="true" className="pointer-events-none absolute inset-[8%] rounded-xl border border-[#E2B74B]/65"/>
+        <div aria-hidden="true" className={`pointer-events-none absolute border border-dashed border-[#E2B74B]/65 ${scanDocumentType==='id-card'?'w-[86%] max-h-[80%] aspect-[1.585] rounded-2xl':scanDocumentType==='paper'?'h-[80%] max-w-[80%] aspect-[0.707] rounded-lg':'inset-[8%] rounded-xl'}`}/>
         {!scanCameraReady&&!scanCameraError&&<span className="absolute text-sm text-white bg-black/70 rounded-lg px-3 py-2">Đang mở camera…</span>}
         {scanCameraError&&<div role="alert" className="absolute inset-x-3 bottom-3 rounded-xl bg-[#531A21]/95 p-3 text-sm">
           <p>{scanCameraError}</p>
@@ -353,19 +368,32 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    </div>
    {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true">
      <div className="flex items-center justify-between gap-2"><h2 className="font-semibold text-sm">Chỉnh 4 góc · {editing.name}</h2><button onClick={()=>setEditingId(null)} className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng chỉnh góc"><X size={18}/></button></div>
-     <p className="text-xs text-[#94A3B8]">Chạm kéo 4 chấm vàng sát mép giấy/thẻ. Nhận diện tự động chỉ là gợi ý, có thể chỉnh lại bất kỳ lúc nào.</p>
+     <p className="text-xs text-[#94A3B8]">{editing.detectionConfidence==='estimated'?'Đã ước lượng bốn góc: kiểm tra đủ cả góc bo tròn trước khi lưu.':'Chưa nhận diện chắc chắn: khung gần toàn ảnh để không cắt mất góc. Kéo bốn điểm về mép thực tế.'} Khi kéo sẽ có kính phóng đại 4,5×.</p>
+     <label className="flex items-center gap-2 text-xs text-[#CBD5E1]">Loại tài liệu
+      <select aria-label="Chọn loại tài liệu để nhận diện lại" value={scanDocumentType} onChange={e=>setScanDocumentType(e.target.value as ScanDocumentType)}
+       className="min-h-9 flex-1 rounded-lg border border-white/15 bg-[#14243B] text-white px-2">
+       <option value="auto">Tự động</option><option value="id-card">CCCD / thẻ</option><option value="paper">Giấy A4 / tài liệu</option>
+      </select></label>
      <div className="flex gap-2"><button onClick={()=>setShowResult(false)} className={`px-3 min-h-9 rounded-lg text-xs ${!showResult?'bg-[#E2B74B] text-[#071121]':'bg-[#17253D]'}`}>Ảnh gốc & góc</button>
        <button disabled={!editing.processed} onClick={()=>setShowResult(true)} className={`px-3 min-h-9 rounded-lg text-xs disabled:opacity-40 ${showResult?'bg-[#E2B74B] text-[#071121]':'bg-[#17253D]'}`}>Ảnh đã làm phẳng</button></div>
      <div className="max-w-xl mx-auto rounded-xl overflow-hidden bg-black border border-white/15">
        {showResult&&editing.processed?<img src={processedUrl} className="block w-full max-h-[55vh] object-contain" alt="Ảnh tài liệu đã làm phẳng"/>:
        <div ref={stageRef} className="relative w-fit max-w-full mx-auto">
          <img src={originalUrl} alt="Ảnh gốc cần chỉnh bốn góc" className="block max-w-full max-h-[52vh] w-auto h-auto" draggable={false}/>
-         <svg className="absolute inset-0 w-full h-full touch-none" viewBox="0 0 1000 1000" preserveAspectRatio="none" onPointerMove={handlePointerMove} onPointerUp={()=>dragPoint.current=null} onPointerCancel={()=>dragPoint.current=null}>
+         <svg className="absolute inset-0 w-full h-full touch-none" viewBox="0 0 1000 1000" preserveAspectRatio="none" onPointerMove={handlePointerMove} onPointerUp={()=>{dragPoint.current=null;setDragFocus(null)}} onPointerCancel={()=>{dragPoint.current=null;setDragFocus(null)}}>
            <polygon points={cornerDraft.map(p=>`${p.x*1000},${p.y*1000}`).join(' ')} fill="rgba(226,183,75,.12)" stroke="#E2B74B" strokeWidth="5" strokeDasharray="12 6"/>
-           {cornerDraft.map((p,i)=><circle key={i} cx={p.x*1000} cy={p.y*1000} r="29" fill="#E2B74B" stroke="#071121" strokeWidth="7" onPointerDown={e=>handleDragCorner(e,i)}/>)}
-         </svg></div>}
+           {cornerDraft.map((p,i)=><g key={i}>
+             <circle cx={p.x*1000} cy={p.y*1000} r="65" fill="transparent" onPointerDown={e=>handleDragCorner(e,i)} />
+             <circle cx={p.x*1000} cy={p.y*1000} r="28" fill="#E2B74B" stroke="#071121" strokeWidth="7" pointerEvents="none"/>
+           </g>)}
+         </svg>
+         {dragFocus&&<div aria-hidden="true" className={`absolute z-20 top-2 ${dragFocus.x>.5?'left-2':'right-2'} size-[112px] rounded-full overflow-hidden border-[3px] border-[#E2B74B] shadow-2xl pointer-events-none bg-[#071121]`}
+           style={{backgroundImage:`url("${originalUrl}")`,backgroundRepeat:'no-repeat',backgroundSize:'450% 450%',backgroundPosition:`${dragFocus.x*100}% ${dragFocus.y*100}%`}}>
+           <span className="absolute inset-x-0 top-1/2 h-px bg-[#E2B74B]/80"/><span className="absolute inset-y-0 left-1/2 w-px bg-[#E2B74B]/80"/>
+         </div>}
+       </div>}
      </div>
-     <div className="flex gap-2 items-center justify-between"><button onClick={async()=>{const found=await suggestDocumentEdges(editing.original);setCornerDraft(found.corners);setShowResult(false);setNotice(found.confidence==='estimated'?'Đã ước lượng mép tài liệu; hãy kiểm tra và kéo lại nếu cần.':'Ảnh khó nhận diện tự động, vui lòng kéo 4 góc thủ công.');}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center"><ScanLine size={15}/>Nhận diện mép</button>
+     <div className="flex gap-2 items-center justify-between"><button onClick={async()=>{const found=await suggestDocumentEdges(editing.original,scanDocumentType);setCornerDraft(found.corners);setShowResult(false);setNotice(found.confidence==='estimated'?'Đã nhận diện tứ giác; hãy xem kỹ từng góc rồi lưu.':'Độ tin cậy thấp; đã giữ khung gần toàn ảnh để tránh cắt mất góc.');}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center"><ScanLine size={15}/>Nhận diện mép</button>
        <button onClick={()=>{setCornerDraft(emptyCorners());setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
      <div className="flex flex-wrap gap-2">{FILTERS.map(f=><button key={f.id} onClick={()=>{setFilterDraft(f.id);setShowResult(false);}} className={`px-3 min-h-9 rounded-lg text-xs border ${filterDraft===f.id?'border-[#E2B74B] text-[#E2B74B] bg-[#E2B74B]/10':'border-white/10 bg-[#14223A]'}`}>{f.name}</button>)}</div>
      <button disabled={working||!validCorners(cornerDraft)} onClick={()=>void applyEdit()} className="min-h-11 w-full rounded-xl bg-[#E2B74B] text-[#071121] font-semibold flex items-center justify-center gap-2 disabled:opacity-40"><Save size={18}/>Làm phẳng & lưu bản scan</button>

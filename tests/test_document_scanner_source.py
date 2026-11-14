@@ -19,6 +19,14 @@ for marker in ['Chụp quét','Chọn nhiều ảnh','Làm phẳng & lưu bản 
                'Hai ảnh cạnh nhau','Xuất PDF','Lưu ảnh / ZIP','Sao lưu ZIP','Khôi phục ZIP',
                'onPointerMove={handlePointerMove}','putScan(p)','await putScan(next)']:
     assert marker in ui, marker
+# TEST28: contour/hull detector and safe ID-card fallback; preview loupe for manual corners.
+for marker in ['convexHull','hullToQuadrilateral','morphClose','orderQuad','ScanDocumentType',
+               "confidence:'manual'",'ratio<.46','DEFAULT_CORNERS:ScanCorners=[{x:.015']:
+ assert marker in engine, marker
+for marker in ['Khi kéo sẽ có kính phóng đại 4,5×','450% 450%','Chưa nhận diện chắc chắn',
+               'CCCD / thẻ','Loại tài liệu nhận diện','setDragFocus','Đã nhận diện tứ giác']:
+ assert marker in ui, marker
+assert ui.index('await putScan(p);') < ui.index('suggestDocumentEdges(file,scanDocumentType)',ui.index('const importFiles='))
 assert "const generatedPhotoCode = timemarkCode ||" in mark and "photoCode: timemarkCode" in mark
 assert "const photoCode = `${config.photoCodePrefix}" not in mark
 assert not any(s in app for s in ['cloudinary','document-scan.googleapis.com'])
