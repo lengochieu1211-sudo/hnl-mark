@@ -58,6 +58,23 @@ jobs:
             sleep 12
             adb shell pidof vn.hnl.xaydung.hnlmark.trial2514 | tee android-smoke-evidence/pid.txt
             adb exec-out screencap -p > android-smoke-evidence/studio-camera-emulator.png
+            # Actual Android WebView camera shutter — verify MediaStore publication.
+            adb shell input tap 540 2200
+            sleep 8
+            adb exec-out screencap -p > android-smoke-evidence/after-photo-capture.png
+            adb shell ls -lah /sdcard/Pictures/HNLMark > android-smoke-evidence/pictures-media.txt
+            grep -E '\.(jpg|jpeg|png)' android-smoke-evidence/pictures-media.txt
+            echo 'PASS: HNL camera photo written to Android Pictures/HNLMark' > android-smoke-evidence/photo-save-RESULT.txt
+            # Video media is observed, not presumed supported by a virtual camera/codec.
+            adb shell input tap 608 2020
+            sleep 4
+            adb exec-out screencap -p > android-smoke-evidence/video-mode.png
+            adb shell input tap 540 2200
+            sleep 3
+            adb shell input tap 540 2200
+            sleep 8
+            adb shell ls -lah /sdcard/Movies/HNLMark > android-smoke-evidence/video-media.txt 2>&1 || true
+            adb exec-out screencap -p > android-smoke-evidence/after-video-attempt.png
             # The Pixel_5 emulator is 1080x2340. Real camera button center:
             # use screenshots as evidence instead of trusting button clicks alone.
             adb shell input tap 540 2160
