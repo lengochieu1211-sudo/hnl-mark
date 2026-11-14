@@ -407,7 +407,10 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         <button
           type="button"
           onClick={() => {
-            if (isRecording && recorderRef.current?.state==='recording')recorderRef.current.stop();
+            if (isRecording || isFinalizing || recorderRef.current?.state==='recording') {
+              triggerTransientToast('Hãy dừng quay và chờ lưu video hoàn tất trước khi thoát.');
+              return;
+            }
             onCloseCamera();
           }}
           className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full text-[#F8FAFC] hover:bg-white/10 active:scale-95 transition"
@@ -431,7 +434,13 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           </button>
 
           {onOpenLegacyCamera && <button type="button" title="Dùng camera và watermark engine gốc"
-            onClick={onOpenLegacyCamera} className="min-h-[44px] px-2 rounded-xl bg-[#132139] text-[#E2B74B] text-xs font-semibold">HNL</button>}
+            onClick={() => {
+              if (isRecording || isFinalizing || recorderRef.current?.state==='recording') {
+                triggerTransientToast('Hãy dừng quay và chờ lưu video hoàn tất trước khi chuyển Camera.');
+                return;
+              }
+              onOpenLegacyCamera();
+            }} className="min-h-[44px] px-2 rounded-xl bg-[#132139] text-[#E2B74B] text-xs font-semibold">HNL</button>}
           <button
             type="button"
             onClick={handleCycleOrientation}
