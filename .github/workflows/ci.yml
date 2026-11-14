@@ -45,3 +45,4 @@ jobs:
           python3 tests/test_video_reopen_source_v259.py
           python3 tests/test_device_media_save_v2510.py
           python3 tests/test_launcher_color_fidelity_v2511.py
+          python3 tests/test_studio_ui_port.py
