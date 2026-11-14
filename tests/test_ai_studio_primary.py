@@ -33,3 +33,8 @@ assert 'await storeMedia(newPhoto)' in rd('studio-ui/src/App.tsx')
 assert 'await onCapturePhoto(item)' in rd('studio-ui/src/components/camera/CameraApkScreen.tsx')
 assert 'await onSaveVideo(item)' in rd('studio-ui/src/components/camera/CameraApkScreen.tsx')
 assert 'android:screenOrientation="fullUser"' in rd('android/app/src/main/AndroidManifest.xml')
+
+# Visual-regression guards: original artwork + no QA button in APK.
+assert "Logo HNL gốc" in rd('studio-ui/src/components/common/HnlBrandMark.tsx')
+assert '!isAndroidApk() && <button' in rd('studio-ui/src/App.tsx')
+assert '10 Mẫu Timemark (Placeholder)' not in rd('studio-ui/src/components/stamps/StampsAndSettingsScreen.tsx')

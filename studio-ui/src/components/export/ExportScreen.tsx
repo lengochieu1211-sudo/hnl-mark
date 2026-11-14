@@ -22,7 +22,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
       <div>
         <h1 className="text-[17px] font-semibold text-[#F8FAFC]">Xuất &amp; Bàn giao</h1>
         <p className="text-[12px] text-[#94A3B8]">
-          Kiểm tra kết quả trước khi lưu vào máy, chia sẻ hoặc tải gói Source ZIP cho kỹ sư tích hợp.
+          Kiểm tra ảnh/video trước khi lưu vào máy, chia sẻ hoặc sao lưu dữ liệu dự án.
         </p>
       </div>
 
@@ -65,11 +65,11 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
       <div className="rounded-2xl bg-[#0D1626] border border-white/[0.08] p-4 space-y-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-[#F8FAFC]">
           <FileArchive className="w-4 h-4 text-[#E2B74B]" />
-          <span>Gói bàn giao UI Prototype &amp; Android Adaptive Icon</span>
+          <span>Sao lưu & bảo vệ dữ liệu</span>
         </div>
         <p className="text-xs text-[#94A3B8] leading-relaxed">
           Nhấn nút <strong className="text-[#F8FAFC]">Lưu / Chia sẻ</strong> ở trên rồi chọn{' '}
-          <strong className="text-[#E2B74B]">Tải Source ZIP &amp; Tài liệu bàn giao</strong> để tải về bộ mã nguồn giao diện, CSS Design Tokens, hướng dẫn chuyển WebView HTML/JS, bản đối chiếu nhánh dev và báo cáo kiểm thử.
+          <strong className="text-[#E2B74B]">Sao lưu dự án ZIP</strong> để giữ lại ảnh/video gốc và dữ liệu chỉnh sửa. Xuất ảnh đóng dấu chính xác bằng bộ xử lý HNL gốc.
         </p>
         <div className="pt-2 border-t border-white/[0.07]">
           <AndroidAdaptiveIconPreview />

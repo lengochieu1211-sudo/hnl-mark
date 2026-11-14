@@ -236,7 +236,7 @@ export default function App() {
                 className="min-h-[38px] px-2.5 rounded-xl border border-[#E2B74B]/30 bg-[#111C30] text-[#E2B74B] text-xs font-semibold">
                 Dấu HNL gốc
               </button>
-              <button
+              {!isAndroidApk() && <button
                 type="button"
                 onClick={() => setQaModalOpen(true)}
                 className="min-h-[38px] px-2.5 rounded-xl bg-[#111C30] hover:bg-[#17253D] border border-white/[0.08] text-[12px] font-medium text-[#94A3B8] hover:text-[#E2B74B] flex items-center gap-1.5 whitespace-nowrap"
@@ -246,7 +246,7 @@ export default function App() {
                 <span className="hidden sm:inline">
                   {isFramedQaMode ? activePreset.id : 'Viewport QA'}
                 </span>
-              </button>
+              </button>}
             </div>
           </header>
 

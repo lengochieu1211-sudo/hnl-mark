@@ -149,7 +149,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
             {[
               { id: 'all', label: 'Tất cả (22)' },
               { id: 'hnl-independent', label: '12 Mẫu độc lập' },
-              { id: 'timemark-legacy', label: '10 Mẫu Timemark (Placeholder)' },
+              { id: 'timemark-legacy', label: '10 Mẫu Timemark' },
             ].map((grp) => (
               <button
                 key={grp.id}
@@ -435,7 +435,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
           {/* 7. Logo HNL */}
           <AccordionSection
             title="7. Logo HNL"
-            subtitle={config.showLogo ? 'Đang bật (Placeholder logo gốc)' : 'Đang ẩn'}
+            subtitle={config.showLogo ? 'Đang bật (logo HNL gốc)' : 'Đang ẩn'}
             isOpen={openAccordion === 'logo'}
             onToggle={() => toggleAcc('logo')}
           >

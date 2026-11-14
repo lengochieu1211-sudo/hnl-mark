@@ -268,7 +268,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         <AccordionSection
           title="Nhận diện Logo & Android Adaptive Icon"
-          subtitle="Placeholder logo HNL & khung kiểm thử vùng an toàn launcher"
+          subtitle="Logo HNL gốc và xem trước icon Android"
           isOpen={openSecondary === 'adaptive-icon'}
           onToggle={() =>
             setOpenSecondary((s) => (s === 'adaptive-icon' ? 'none' : 'adaptive-icon'))
