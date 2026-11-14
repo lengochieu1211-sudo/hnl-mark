@@ -24,5 +24,5 @@ assert 'Dùng camera hệ thống (dự phòng)' in scan
 assert 'cameraInput.current?.click()' in scan
 assert 'Manifest.permission.CAMERA' in native and 'RESOURCE_VIDEO_CAPTURE' in native
 assert 'trusted(request.getOrigin())' in native
-assert "applicationIdSuffix '.trial2528'" in (R/'android/app/build.gradle').read_text('utf-8')
+assert "applicationIdSuffix '.trial2529'" in (R/'android/app/build.gradle').read_text('utf-8')
 print('PASS: TEST27 scanner real camera single/continuous, saved originals, no forced picker, track teardown and fallback')

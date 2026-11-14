@@ -118,7 +118,7 @@ function quadPolygonArea(p:PixelPoint[]):number{
  let a=0;for(let i=0;i<4;i++)a+=p[i].x*p[(i+1)%4].y-p[(i+1)%4].x*p[i].y;
  return Math.abs(a)*.5;
 }
-export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+function detectDocumentByColor(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
  const {width:w,height:h,data}=image;
  if(w<70||h<70||data.length<w*h*4)return defaultDetection();
  const cornersRgb:number[][]=[];
@@ -207,6 +207,141 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  }
  return best??defaultDetection();
 }
+
+/** An independent gradient/closed-outline pass for white-on-white pages,
+ * patterned desks and CCCD with textured/uneven-colored card faces.
+ * The old color-segmentation pass remains available as the primary candidate.
+ * The perimeter must be supported by four long, strong image edges; isolated
+ * text rectangles and shadows are rejected rather than silently clipped.
+ * Implemented independently; no external model, OpenCV or remote CDN. */
+function findEdgeQuadrilateral(image:ImageData,kind:ScanDocumentType):{corners:ScanCorners;support:number}|null{
+ const {width:w,height:h,data}=image;
+ if(w<70||h<70)return null;
+ const size=w*h,gray=new Float32Array(size),smooth=new Float32Array(size),mag=new Float32Array(size);
+ for(let i=0;i<size;i++){
+  const j=i*4;gray[i]=.299*data[j]+.587*data[j+1]+.114*data[j+2];
+ }
+ // Separable 3x3 Gaussian blur without allocating a giant 12MP frame.
+ for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+  const k=y*w+x;
+  smooth[k]=(gray[k-w-1]+gray[k-w+1]+gray[k+w-1]+gray[k+w+1]
+   +2*(gray[k-1]+gray[k+1]+gray[k-w]+gray[k+w])+4*gray[k])/16;
+ }
+ const hist=new Uint32Array(512);
+ let n=0;
+ for(let y=3;y<h-3;y++)for(let x=3;x<w-3;x++){
+  const k=y*w+x;
+  const gx=(smooth[k-w+1]+2*smooth[k+1]+smooth[k+w+1])-(smooth[k-w-1]+2*smooth[k-1]+smooth[k+w-1]);
+  const gy=(smooth[k+w-1]+2*smooth[k+w]+smooth[k+w+1])-(smooth[k-w-1]+2*smooth[k-w]+smooth[k-w+1]);
+  const v=Math.hypot(gx,gy);mag[k]=v;hist[Math.min(511,v|0)]++;n++;
+ }
+ let count=0,p80=0,p94=0;
+ for(let i=0;i<hist.length;i++){
+  count+=hist[i];if(!p80&&count>=n*.80)p80=i;
+  if(!p94&&count>=n*.94){p94=i;break;}
+ }
+ // Low-contrast white paper still generates a 5-20 intensity gradient at its
+ // boundary. Texture noise raises the threshold adaptively.
+ const threshold=Math.max(7,Math.min(95,p80*1.48+3,p94*.92+4));
+ const edges=new Uint8Array(size);
+ for(let y=3;y<h-3;y++)for(let x=3;x<w-3;x++){
+  const k=y*w+x;if(mag[k]>threshold)edges[k]=1;
+ }
+ // Join short gaps (soft paper boundaries/shadow occlusion) using dilated edge
+ // strips. Dilation is limited to 2px; a missing entire edge stays uncertain.
+ let closed=edges;
+ for(let pass=0;pass<2;pass++){
+  const next=new Uint8Array(size);
+  for(let y=3;y<h-3;y++)for(let x=3;x<w-3;x++){
+   const k=y*w+x;
+   if(closed[k]||closed[k-1]||closed[k+1]||closed[k-w]||closed[k+w]||closed[k-w-1]||closed[k-w+1]||closed[k+w-1]||closed[k+w+1])next[k]=1;
+  }
+  closed=next;
+ }
+ // Flood-fill from outside the closed outlines, keeping enclosed objects.
+ const external=new Uint8Array(size),queue=new Int32Array(size);let head=0,tail=0;
+ const seed=(k:number)=>{if(!closed[k]&&!external[k]){external[k]=1;queue[tail++]=k;}};
+ for(let x=0;x<w;x++){seed(x);seed((h-1)*w+x);}
+ for(let y=0;y<h;y++){seed(y*w);seed(y*w+w-1);}
+ while(head<tail){const k=queue[head++],x=k%w;
+  if(x>0)seed(k-1);if(x<w-1)seed(k+1);
+  if(k>=w)seed(k-w);if(k<size-w)seed(k+w);
+ }
+ const filled=new Uint8Array(size);
+ for(let i=0;i<size;i++)if(!external[i])filled[i]=1;
+ const visited=new Uint8Array(size);let best:{corners:ScanCorners;support:number}|null=null;
+ const pixels=new Int32Array(size);
+ for(let sy=5;sy<h-5;sy+=2)for(let sx=5;sx<w-5;sx+=2){
+  const start=sy*w+sx;if(!filled[start]||visited[start])continue;
+  head=0;tail=1;pixels[0]=start;visited[start]=1;
+  let minX=w,minY=h,maxX=0,maxY=0,touch=0;
+  const boundary:PixelPoint[]=[];
+  while(head<tail){const k=pixels[head++],x=k%w,y=(k/w)|0;
+   if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;
+   if(x<5||y<5||x>w-6||y>h-6)touch++;
+   let outline=false;
+   const visit=(nk:number)=>{
+    if(!filled[nk]){outline=true;return;}
+    if(!visited[nk]){visited[nk]=1;pixels[tail++]=nk;}
+   };
+   if(x>0)visit(k-1);if(x<w-1)visit(k+1);if(y>0)visit(k-w);if(y<h-1)visit(k+w);
+   if(outline&&(head%2===0))boundary.push({x,y});
+  }
+  const ratio=tail/size,bw=maxX-minX,bh=maxY-minY;
+  if(ratio<.075||ratio>.83||touch||bw<w*.24||bh<h*.22||boundary.length<12)continue;
+  const ordered=orderQuad(hullToQuadrilateral(convexHull(boundary))||[]);
+  if(!ordered)continue;
+  const area=quadPolygonArea(ordered),rectArea=bw*bh;
+  if(area/size<.07||area/Math.max(1,rectArea)<.57)continue;
+  const lens=ordered.map((v,i)=>Math.hypot(v.x-ordered[(i+1)%4].x,v.y-ordered[(i+1)%4].y));
+  const long=(lens[0]+lens[2])/2,short=(lens[1]+lens[3])/2;
+  if(long/short<.35||long/short>3.6)continue;
+  // Evaluate actual edge evidence around each of 4 sides. Reject a contour
+  // made by office clutter / shadows despite a quadrilateral-looking hull.
+  let support=0,minSide=1;
+  for(let i=0;i<4;i++){
+   const a=ordered[i],b=ordered[(i+1)%4],N=48;
+   const dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy),nx=-dy/len,ny=dx/len;
+   let matching=0;
+   for(let j=2;j<N-2;j++){
+    const t=j/(N-1),xx=a.x+dx*t,yy=a.y+dy*t;
+    let max=0;
+    for(const offset of [-3,-1,0,1,3]){
+     const px=Math.round(xx+offset*nx),py=Math.round(yy+offset*ny);
+     if(px>2&&px<w-3&&py>2&&py<h-3)max=Math.max(max,mag[py*w+px]);
+    }
+    if(max>threshold*.85)matching++;
+   }
+   const match=matching/(N-4);support+=match/4;minSide=Math.min(minSide,match);
+  }
+  if(support<.64||minSide<.43)continue;
+  const pts=ordered.map(p=>({x:clamp(p.x/(w-1),0,1),y:clamp(p.y/(h-1),0,1)})) as ScanCorners;
+  if(!validCorners(pts))continue;
+  const expected=kind==='id-card'?1.585:kind==='paper'?Math.SQRT2:0;
+  const aspect=long/short;
+  const deviation=expected?Math.min(Math.abs(Math.log(aspect/expected)),Math.abs(Math.log(aspect*expected))):0;
+  if(expected&&deviation>.52)continue;
+  const weighted=support+.08*ratio+.035*(area/rectArea)-(expected ? .06*deviation : 0);
+  if(!best||weighted>best.support)best={corners:pts,support:weighted};
+ }
+ return best;
+}
+/** Higher-confidence 4-edge result replaces uncertain color-only segmentation.
+ * Never force detection when edges do not close: manual frame retains source. */
+export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+ const color=detectDocumentByColor(image,kind);
+ const edge=findEdgeQuadrilateral(image,kind);
+ if(!edge)return color;
+ if(color.confidence==='manual')return {corners:edge.corners,confidence:'estimated'};
+ // When two independent methods agree, color pass already has generous outer rim.
+ const difference=color.corners.reduce((d,p,i)=>d+Math.hypot(p.x-edge.corners[i].x,p.y-edge.corners[i].y),0)/4;
+ if(difference<.042)return color;
+ // Significant disagreement: use the edge model only with near-continuous
+ // support, otherwise preserve the previous conservative color candidate.
+ if(edge.support>.93)return {corners:edge.corners,confidence:'estimated'};
+ return color;
+}
+
 export async function suggestDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):Promise<ScanDetection>{return detectDocumentEdges(await sourcePixels(blob,360),kind);}
 export function validCorners(points:ScanCorners):boolean{
  if(points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return false;

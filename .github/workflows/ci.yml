@@ -64,3 +64,4 @@ jobs:
           npm run lint --prefix studio-ui
           npm run build --prefix studio-ui
           node tests/test_document_edges.cjs
+          node tests/test_document_edges_realistic.cjs

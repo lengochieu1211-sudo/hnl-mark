@@ -34,5 +34,5 @@ assert 'const canvas=edits?createEditedCanvas(bitmap,edits)' in photo
 assert 'applySmartErase(canvas,edits.smartErase||[])' in read('studio-ui/src/services/smartErase.ts')
 assert 'onUpdateEdits' in read('studio-ui/src/components/editor/ImageEditorScreen.tsx')
 assert 'Xóa thông minh' in read('studio-ui/src/components/editor/ImageEditorScreen.tsx')
-assert "applicationIdSuffix '.trial2528'" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2529'" in read('android/app/build.gradle')
 print(f'PASS: {len(ids)} templates have JPEG, live video, imported video dispatch; non-destructive erase and edits wired')

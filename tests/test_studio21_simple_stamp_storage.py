@@ -37,5 +37,5 @@ assert 'video/mp4' in read('studio-ui/src/services/videoFormat.ts')
 assert 'ACTION_OPEN_DOCUMENT_TREE' in native and 'takePersistableUriPermission' in native
 assert 'DocumentsContract.createDocument' in native and 's.mediaStore' in native
 assert 'chooseSaveLocation' in ui and 'Chọn thư mục / thẻ SD' in ui
-assert "applicationIdSuffix '.trial2528'" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2529'" in read('android/app/build.gradle')
 print('PASS: TEST21 three minimal actual renderers, EXIF/manual/GPS modes, codec validation, Android SAF chosen-folder writing')

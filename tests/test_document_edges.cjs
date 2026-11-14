@@ -39,6 +39,6 @@ scene('vn-id-card',[[.18,.27],[.78,.18],[.85,.69],[.15,.76]],[25,56,45],[219,204
 scene('dark-card',[[.22,.25],[.80,.19],[.83,.75],[.20,.80]],[228,228,228],[55,98,140],4);
 scene('rotated-card',[[.33,.12],[.9,.42],[.7,.87],[.1,.59]],[26,45,65],[244,235,226],3);
 scene('uniform-unknown',null,[220,225,228],[220,225,228]);
-scene('white-on-white-low-contrast',[[.2,.2],[.8,.18],[.82,.8],[.19,.82]],[229,229,229],[234,234,234],1,false,'manual');
+scene('white-on-white-low-contrast',[[.2,.2],[.8,.18],[.82,.8],[.19,.82]],[229,229,229],[234,234,234],1,false,'estimated');
 scene('document-partly-outside-frame',[[-.11,.19],[.82,.15],[.83,.8],[-.09,.83]],[35,48,66],[235,239,240],2,false,'manual');
 console.log('PASS: document quad detector synthetic perspective and manual fallback');
