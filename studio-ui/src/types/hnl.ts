@@ -1,4 +1,4 @@
-export type AppRoute = 'camera' | 'home' | 'library' | 'stamps' | 'editor' | 'export';
+export type AppRoute = 'camera' | 'review' | 'home' | 'library' | 'stamps' | 'editor' | 'export';
 
 export type CameraMode = 'photo' | 'video';
 export type OrientationDeg = 0 | 90 | -90 | 180;

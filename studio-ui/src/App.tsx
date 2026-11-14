@@ -19,13 +19,14 @@ import { HnlLogoPlaceholder } from './components/common/HnlBrandMark';
 import { CameraApkScreen } from './components/camera/CameraApkScreen';
 import { HomeScreen } from './components/home/HomeScreen';
 import { LibraryScreen } from './components/library/LibraryScreen';
+import { CameraRollScreen } from './components/library/CameraRollScreen';
 import { StampsAndSettingsScreen } from './components/stamps/StampsAndSettingsScreen';
 import { ExportScreen } from './components/export/ExportScreen';
 import { ExportActionSheet } from './components/export/ExportActionSheet';
 import { ViewportTesterModal } from './components/qa/ViewportTesterModal';
 import {storeMedia,loadMedia,removeMedia} from './services/mediaStorage';
 import {restoreProjectZip} from './services/projectBackup';
-import {setupAndroidBridge,saveToDevice,isAndroidApk} from './services/deviceBridge';
+import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
 
 function formatLocalIsoNow(): string {
   const now = new Date();
@@ -38,9 +39,8 @@ function formatLocalIsoNow(): string {
 export default function App() {
   // Mở thẳng Camera APK toàn màn hình theo thiết lập đã xác nhận
   const [route, setRoute] = useState<AppRoute>('camera');
-  const [legacyOpen,setLegacyOpen]=useState(false);
+  const [reviewMediaId,setReviewMediaId] = useState('');
   const backRef=useRef<()=>boolean>(()=>false);
-  const [legacyLoadKey,setLegacyLoadKey]=useState(0);
   const [libraryReady,setLibraryReady]=useState(false);
   const savedIds=useRef(new Set<string>());
   const restoreInput=useRef<HTMLInputElement|null>(null);
@@ -88,7 +88,6 @@ export default function App() {
     }).catch(err=>{console.error('Không đọc được thư viện:',err);}).finally(()=>{if(alive)setLibraryReady(true);});
     return ()=>{alive=false};
   },[]);
-  const openOriginalEngine=()=>{setRoute('home');setLegacyLoadKey(k=>k+1);setLegacyOpen(true);};
   const importPickedFiles=async (files:File[])=>{
     if(!files.length)return;
     const all:MediaItem[]=[];
@@ -114,10 +113,10 @@ export default function App() {
   },()=>backRef.current());},[]);
   // Real Android system Back. Recording/finalization must be finished before navigation.
   backRef.current=()=>{
-    if(legacyOpen){setLegacyOpen(false);return true;}
     if(exportSheetOpen){setExportSheetOpen(false);return true;}
     if(qaModalOpen){setQaModalOpen(false);return true;}
     if((window as any).__hnlStudioRecording===true){alert('Hãy dừng quay và lưu video trước khi thoát camera.');return true;}
+    if(route==='review'){setRoute('camera');return true;}
     if(route!=='home'){setRoute('home');return true;}
     return false;
   };
@@ -198,6 +197,9 @@ export default function App() {
 
   const appShellContent = (
     <div className="relative w-full h-full bg-[#060B14] text-[#F8FAFC] flex flex-col overflow-hidden">
+      {/* Global web fallback picker: Android native picker is invoked from Library. */}
+      <input id="hnl-studio-picker" type="file" accept="image/*,video/*" multiple hidden
+        onChange={e=>{handlePickLocalMedia(e.currentTarget.files);e.currentTarget.value='';}} />
       {/* Main Content Area */}
       {route === 'camera' ? (
         <div className="flex-1 min-h-0 w-full h-full">
@@ -206,13 +208,21 @@ export default function App() {
             recentMedia={mediaItems}
             isLandscapeViewport={isLandscapeViewport}
             onCloseCamera={() => setRoute('home')}
-            onOpenLibrary={() => setRoute('library')}
-            onOpenLegacyCamera={openOriginalEngine}
+            onOpenLibrary={() => {setReviewMediaId(mediaItems[0]?.id||'');setRoute('review');}}
             onCapturePhoto={handleCapturePhoto}
             onSaveVideo={handleSaveVideo}
             onShareMedia={(item) => openExportSheet([item])}
           />
         </div>
+      ) : route === 'review' ? (
+        <CameraRollScreen
+          items={mediaItems}
+          initialId={reviewMediaId}
+          onBackToCamera={()=>setRoute('camera')}
+          onOpenFullLibrary={()=>setRoute('library')}
+          onEditMedia={item=>{setActiveMediaId(item.id);setStampsSubTab('editor');setRoute('stamps');}}
+          onShareMedia={item=>openExportSheet([item])}
+        />
       ) : (
         <>
           {/* Compact Android App Top Bar (Non-sticky to preserve mobile scroll height budget) */}
@@ -232,10 +242,6 @@ export default function App() {
             </button>
 
             <div className="flex items-center gap-2 shrink-0">
-              <button type="button" onClick={openOriginalEngine} title="Mở engine đóng dấu HNL gốc"
-                className="min-h-[38px] px-2.5 rounded-xl border border-[#E2B74B]/30 bg-[#111C30] text-[#E2B74B] text-xs font-semibold">
-                Dấu HNL gốc
-              </button>
               {!isAndroidApk() && <button
                 type="button"
                 onClick={() => setQaModalOpen(true)}
@@ -251,7 +257,9 @@ export default function App() {
           </header>
 
           {/* Scrollable Workspace */}
-          {route==='library' && <div className="px-4 py-2 flex gap-2 items-center bg-[#0B1424] border-b border-white/10">
+          {route==='library' && <div className="px-4 py-2 flex flex-wrap gap-2 items-center bg-[#0B1424] border-b border-white/10">
+            <button type="button" onClick={()=>pickDeviceGallery()}
+              className="min-h-9 px-3 rounded-xl bg-[#E2B74B] text-[#06101E] text-xs font-semibold">Chọn ảnh / video từ máy</button>
             <input ref={restoreInput} type="file" accept=".zip,application/zip" hidden
               onChange={e=>{const file=e.target.files?.[0];if(file)restoreProjectZip(file).then(restored=>{
                 setMediaItems(old=>[...restored,...old]);if(restored[0])setActiveMediaId(restored[0].id);
@@ -259,7 +267,7 @@ export default function App() {
               }).catch(err=>alert('Lỗi khôi phục ZIP: '+String(err)));e.currentTarget.value='';}}/>
             <button type="button" onClick={()=>restoreInput.current?.click()}
               className="min-h-9 px-3 rounded-xl bg-[#17253D] text-[#E2B74B] text-xs font-semibold">Khôi phục ZIP chứa ảnh gốc</button>
-            <span className="text-[11px] text-[#94A3B8]">Không ghi đè thư viện cũ · Xem thư viện cũ trong Dấu HNL gốc</span>
+            <span className="text-[11px] text-[#94A3B8]">Không ghi đè thư viện cũ. Thư viện TEST14 được lưu riêng để bảo vệ dữ liệu.</span>
           </div>}
           <main className="flex-1 min-h-0 overflow-y-auto hnl-scroll pb-4">
             {route === 'home' && (
@@ -383,37 +391,12 @@ export default function App() {
         </>
       )}
 
-      {/* Keep original HNL engine accessible while React features reach runtime parity. */}
-      {legacyOpen && <div className="fixed inset-0 z-[500] flex flex-col bg-[#060B14]">
-        <div className="h-14 shrink-0 px-3 flex items-center justify-between border-b border-[#E2B74B]/30 bg-[#09111E]">
-          <span className="font-semibold text-sm text-[#E2B74B]">HNL Mark · Engine Timemark gốc</span>
-          <button className="min-h-10 rounded-xl px-4 bg-[#E2B74B] text-[#060B14] font-bold text-xs" onClick={()=>setLegacyOpen(false)}>Quay lại AI Studio</button>
-        </div>
-        <iframe key={legacyLoadKey} title="Engine đóng dấu HNL Mark nguyên bản" src="../index.html"
-          className="flex-1 w-full min-h-0 border-0 bg-white"
-          onLoad={(ev)=>{
-            const frame=ev.currentTarget;
-            try{
-              const w=frame.contentWindow as any;
-              const item=activeMedia;
-              if(!item||!item.rawBlob)return;
-              const file=new File([item.rawBlob],item.title+(item.kind==='video'?'.webm':'.jpg'),{type:item.rawBlob.type});
-              const poll=(count:number)=>{
-                if(w?.HNLMediaImport?.acceptFiles){
-                  w.HNLMediaImport.acceptFiles([file]).then(()=>{
-                    frame.contentDocument?.querySelector<HTMLElement>(`[data-preset="${watermarkConfig.templateId}"]`)?.click();
-                  }).catch(console.error);
-                }else if(count<20)window.setTimeout(()=>poll(count+1),250);
-              };poll(0);
-            }catch(e){console.warn('Không chuyển được ảnh sang engine gốc',e);}
-          }} />
-      </div>}
       {/* Unified Export Action Sheet */}
       <ExportActionSheet
-        onOpenOriginalEngine={openOriginalEngine}
         onRestoreBackup={async(file)=>{const restored=await restoreProjectZip(file);if(restored.length){setMediaItems(old=>[...restored,...old]);setActiveMediaId(restored[0].id);}}}
         isOpen={exportSheetOpen}
         targetItems={exportTargetItems}
+        watermarkConfig={watermarkConfig}
         onClose={() => setExportSheetOpen(false)}
       />
 

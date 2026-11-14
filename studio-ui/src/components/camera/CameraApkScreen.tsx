@@ -27,7 +27,7 @@ import {
 } from '../../types/hnl';
 import { DEMO_IMAGES, DEFAULT_IMAGE_EDITS } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
-import { pickDeviceGallery, setAndroidCameraActive } from '../../services/deviceBridge';
+import { setAndroidCameraActive } from '../../services/deviceBridge';
 
 interface CameraApkScreenProps {
   watermarkConfig: WatermarkConfig;
@@ -37,7 +37,6 @@ interface CameraApkScreenProps {
   onCapturePhoto: (item: MediaItem) => Promise<void>;
   onSaveVideo: (item: MediaItem) => Promise<void>;
   onShareMedia: (item: MediaItem) => void;
-  onOpenLegacyCamera?: () => void;
   isLandscapeViewport?: boolean;
 }
 
@@ -52,7 +51,6 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   onCapturePhoto,
   onSaveVideo,
   onShareMedia,
-  onOpenLegacyCamera,
   isLandscapeViewport = false,
 }) => {
   const [mode, setMode] = useState<CameraMode>('photo');
@@ -91,10 +89,12 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const previewRef = useRef<HTMLDivElement | null>(null);
   const liveRef = useRef<HTMLVideoElement|null>(null);
   const streamRef = useRef<MediaStream|null>(null);
+  const audioStreamRef = useRef<MediaStream|null>(null);
   const recorderRef = useRef<MediaRecorder|null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const [cameraError,setCameraError] = useState<string>('');
   const [cameraReady,setCameraReady] = useState(false);
+  const [cameraRetryKey,setCameraRetryKey] = useState(0);
   const [audioUnavailable,setAudioUnavailable] = useState(false);
   useEffect(()=>{
     const changed=(ev:Event)=>{const angle=(ev as CustomEvent<{angle:number}>).detail?.angle;
@@ -108,20 +108,14 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     let closed=false;setCameraReady(false);setCameraError('');setAudioUnavailable(false);
     const start=async()=>{
       try{
-        if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera WebView không khả dụng. Dùng Camera HNL gốc.');
+        if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera WebView không khả dụng trên thiết bị này.');
         const video={facingMode:{ideal:lens==='rear'?'environment':'user'},
           width:{ideal:videoSettings.resolution==='4K'?3840:videoSettings.resolution==='1080p'?1920:1280},
           height:{ideal:videoSettings.resolution==='4K'?2160:videoSettings.resolution==='1080p'?1080:720},
           frameRate:{ideal:videoSettings.fps}};
-        let stream:MediaStream;
-        try{stream=await navigator.mediaDevices.getUserMedia({video,audio:mode==='video'});}
-        catch(initialError){
-          if(mode!=='video')throw initialError;
-          // Some devices/emulators reject the microphone even though video works.
-          // Keep real video capture available but never claim it includes audio.
-          stream=await navigator.mediaDevices.getUserMedia({video,audio:false});
-          if(!closed)setAudioUnavailable(true);
-        }
+        // Open camera independently from the microphone. A failed Android audio source
+        // must never take away the camera preview or make VIDEO mode a black screen.
+        const stream=await navigator.mediaDevices.getUserMedia({video,audio:false});
         if(closed){stream.getTracks().forEach(t=>t.stop());return;}
         streamRef.current=stream;
         if(liveRef.current){liveRef.current.srcObject=stream;await liveRef.current.play().catch(()=>{});}
@@ -132,10 +126,11 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     return ()=>{closed=true;
       try{if(recorderRef.current?.state==='recording')recorderRef.current.stop();}catch{}
       streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;
+      audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;
       setAndroidCameraActive(false);
     };
     // Resolution change requires reopening camera; never modify a stream in use for recording.
-  },[lens,mode,videoSettings.resolution]);
+  },[lens,videoSettings.resolution,cameraRetryKey]);
 
 
   // A hardware Back/close during recording or commit must not silently lose video.
@@ -255,19 +250,31 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         await onCapturePhoto(item);
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
       }
-      triggerTransientToast(`Đã lưu ${count} ảnh gốc vào thư viện HNL`);
+      // Quiet success: only the camera shutter flash and updated thumbnail signal a saved photo.
       return;
     }
     if(!isRecording){
       const stream=streamRef.current;if(!stream)throw Error('Camera chưa sẵn sàng');
-      if(typeof MediaRecorder==='undefined'){triggerTransientToast('Thiết bị không hỗ trợ ghi video WebM; dùng camera HNL gốc.');return;}
+      if(typeof MediaRecorder==='undefined'){triggerTransientToast('Thiết bị không hỗ trợ ghi video WebM.');return;}
       const type=['video/webm;codecs=vp8,opus','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
       if(!type){triggerTransientToast('Không tìm thấy codec video được hỗ trợ.');return;}
-      const rec=new MediaRecorder(stream,{mimeType:type,videoBitsPerSecond:videoSettings.quality==='Tối đa'?8000000:videoSettings.quality==='Cao'?5000000:2500000});
+      let recordStream=stream;
+      // Microphone can be unavailable in MIUI WebView. VIDEO still records silently.
+      try {
+        const audio=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+        audioStreamRef.current=audio;
+        recordStream=new MediaStream([...stream.getVideoTracks(),...audio.getAudioTracks()]);
+        setAudioUnavailable(false);
+      } catch(e) {
+        setAudioUnavailable(true);
+        triggerTransientToast('Micro không khả dụng: video sẽ quay không tiếng.');
+      }
+      const rec=new MediaRecorder(recordStream,{mimeType:type,videoBitsPerSecond:videoSettings.quality==='Tối đa'?8000000:videoSettings.quality==='Cao'?5000000:2500000});
       recorderRef.current=rec;chunksRef.current=[];
       rec.ondataavailable=e=>{if(e.data?.size)chunksRef.current.push(e.data);};
       rec.onerror=()=>triggerTransientToast('Lỗi ghi video; vui lòng kiểm tra lại.');
       rec.onstop=async()=>{
+        audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;
         setIsFinalizing(true);
         const chunks=chunksRef.current.splice(0);const blob=new Blob(chunks,{type:rec.mimeType||'video/webm'});
         setIsRecording(false);
@@ -277,7 +284,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           durationSec:Math.max(1,recordSeconds),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
           photoCode:`HNL-V${Date.now()}`,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,edits:{...DEFAULT_IMAGE_EDITS}};
-        try{await onSaveVideo(item);setLastRecordedVideo(item);setShowVideoReview(true);setIsReviewPlaying(false);}
+        try{await onSaveVideo(item);setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
         catch(e){triggerTransientToast('Không lưu được video gốc: '+String(e));}
         finally{setIsFinalizing(false);}
 
@@ -292,7 +299,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  const latestThumb = recentMedia[0]?.url || DEMO_IMAGES.rearConstruction;
+  const latestThumb = recentMedia[0]?.url;
 
   const previewAspectStyle = (): React.CSSProperties => {
     if (aspectRatio === '1:1') return { aspectRatio: '1 / 1', maxHeight: '100%' };
@@ -370,7 +377,6 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
               type="button"
               onClick={() => {
                 onSaveVideo(lastRecordedVideo);
-                triggerTransientToast('Video đã có trong Thư viện HNL');
                 setShowVideoReview(false);
               }}
               className="min-h-[44px] px-3 rounded-xl bg-[#E2B74B] hover:bg-[#ECC768] text-[#060B14] text-xs font-semibold flex items-center justify-center gap-1.5"
@@ -440,14 +446,6 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             <Grid3X3 className="w-[19px] h-[19px]" style={iconRotationStyle} />
           </button>
 
-          {onOpenLegacyCamera && <button type="button" title="Dùng camera và watermark engine gốc"
-            onClick={() => {
-              if (isRecording || isFinalizing || recorderRef.current?.state==='recording') {
-                triggerTransientToast('Hãy dừng quay và chờ lưu video hoàn tất trước khi chuyển Camera.');
-                return;
-              }
-              onOpenLegacyCamera();
-            }} className="min-h-[44px] px-2 rounded-xl bg-[#132139] text-[#E2B74B] text-xs font-semibold">HNL</button>}
           <button
             type="button"
             onClick={handleCycleOrientation}
@@ -594,7 +592,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {cameraReady && mode==='video' && audioUnavailable && <div role="status" className="absolute top-2 left-2 right-2 z-20 rounded-lg bg-[#7F1D1D]/85 px-3 py-2 text-center text-xs text-white pointer-events-none">Không ghi được âm thanh từ micro. Video sẽ chỉ có hình.</div>}
           {!cameraReady && <div className="absolute inset-0 z-10 flex flex-col gap-3 items-center justify-center p-6 bg-[#071121] text-center">
             <p className="text-sm text-[#F8FAFC]">{cameraError||'Đang mở camera thực tế…'}</p>
-            {onOpenLegacyCamera && <button type="button" onClick={onOpenLegacyCamera} className="rounded-xl bg-[#E2B74B] px-4 py-2 text-[#071121] font-bold text-sm">Mở Camera HNL gốc</button>}
+            <button type="button" onClick={()=>{setCameraError('');setCameraRetryKey(k=>k+1);}} className="rounded-xl bg-[#E2B74B] px-4 py-2 text-[#071121] font-bold text-sm">Thử mở lại camera</button>
           </div>}
 
           {/* Optional 3x3 Composition Grid */}
@@ -613,7 +611,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           )}
 
           {/* Watermark sits cleanly ON preview without control occlusion */}
-          <WatermarkOverlay config={watermarkConfig} orientationDeg={orientationDeg} />
+          <WatermarkOverlay config={watermarkConfig} orientationDeg={0} />
 
           {/* Recording live timer */}
           {isRecording && (
@@ -683,14 +681,11 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {lastRecordedVideo && !isRecording && !isLandscapeViewport ? (
             <button
               type="button"
-              onClick={() => {
-                setIsReviewPlaying(true);
-                setShowVideoReview(true);
-              }}
+              onClick={onOpenLibrary}
               className="min-h-[36px] px-2.5 rounded-lg bg-[#121F36] text-[11px] font-medium text-[#E2B74B] flex items-center gap-1.5 hover:bg-[#192B4A] transition shrink-0"
             >
               <Film className="w-3.5 h-3.5" />
-              <span>Mở lại video</span>
+              <span>Xem video</span>
             </button>
           ) : (
             <div className={isLandscapeViewport ? 'hidden' : 'w-16'} />
@@ -757,18 +752,18 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {/* Left: Gallery Picker Thumbnail */}
           <button
             type="button"
-            disabled={isRecording}
-            onClick={()=>{pickDeviceGallery();}}
+            disabled={isRecording || isFinalizing}
+            onClick={onOpenLibrary}
             className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/25 bg-[#111C30] flex items-center justify-center hover:border-[#E2B74B] active:scale-95 transition disabled:opacity-40"
-            aria-label="Mở thư viện ảnh và video"
-            title="Thư viện ảnh / video"
+            aria-label="Xem ảnh, video đã chụp"
+            title="Xem lại ảnh và video đã chụp"
           >
-            <img
+            {latestThumb ? <img
               src={latestThumb}
-              alt="Ảnh gần nhất trong thư viện"
+              alt="Ảnh gần nhất trong thư viện HNL Mark"
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
-            />
+            /> : <Images className="w-6 h-6 text-[#E2B74B]" />}
             <span className="absolute inset-0 bg-black/20 flex items-end justify-end p-1">
               <Images className="w-3.5 h-3.5 text-white drop-shadow" />
             </span>

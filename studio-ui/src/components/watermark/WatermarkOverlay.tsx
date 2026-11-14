@@ -3,6 +3,7 @@ import { MapPin } from 'lucide-react';
 import { OrientationDeg, WatermarkConfig } from '../../types/hnl';
 import { WATERMARK_TEMPLATES } from '../../data/templates';
 import { HnlLogoPlaceholder } from '../common/HnlBrandMark';
+import { OriginalTimemarkOverlay } from './OriginalTimemarkOverlay';
 
 interface WatermarkOverlayProps {
   config: WatermarkConfig;
@@ -48,6 +49,9 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   onDragPositionChange,
   containerRef,
 }) => {
+  if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} />;
+  if(config.templateId === 'none') return null;
+
   const template =
     WATERMARK_TEMPLATES.find((t) => t.id === config.templateId) ?? WATERMARK_TEMPLATES[10];
 
@@ -96,6 +100,11 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   const isStripFooter = template.surfaceMode === 'strip-footer' && config.positionPreset !== 'custom';
 
   const getPositionStyle = (): React.CSSProperties => {
+    if (orientationDeg === 90 || orientationDeg === -90 || orientationDeg === 180) {
+      // Rotate about the viewport center instead of a corner; prevents watermark clipping.
+      return { left:'50%',top:'50%',maxWidth:orientationDeg===180?'74%':'65%',
+        transform:`translate(-50%, -50%) rotate(${orientationDeg}deg)`,transformOrigin:'center center' };
+    }
     if (isStripFooter) {
       if (orientationDeg === 90) {
         return { top: 0, bottom: 0, left: 0, width: compact ? '28%' : 'auto', maxWidth: '34%' };

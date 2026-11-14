@@ -6,7 +6,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-01",
     "name": "Timemark · Verified",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "glass-dark"
   },
@@ -15,7 +15,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-02",
     "name": "Công trường",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "stripe-gold"
   },
@@ -24,7 +24,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-03",
     "name": "Tối giản",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "minimal-text"
   },
@@ -33,7 +33,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-04",
     "name": "Thanh ngang",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "strip-footer"
   },
@@ -42,7 +42,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-05",
     "name": "Hiện đại",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "glass-dark"
   },
@@ -51,7 +51,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-06",
     "name": "Kỹ thuật",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "badge-card"
   },
@@ -60,7 +60,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-07",
     "name": "Điện ảnh",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "glass-dark"
   },
@@ -69,7 +69,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-08",
     "name": "Một dòng",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "minimal-text"
   },
@@ -78,7 +78,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-09",
     "name": "Chỉ giờ",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "led-digital"
   },
@@ -87,7 +87,7 @@ export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
     "code": "TM-10",
     "name": "Ảnh nguyên bản",
     "group": "timemark-legacy",
-    "summary": "Mẫu gốc HNL Mark · dùng engine gốc để xuất chính xác",
+    "summary": "Mẫu thiết kế nguyên bản HNL Mark",
     "accentHex": "#E2B74B",
     "surfaceMode": "minimal-text"
   },

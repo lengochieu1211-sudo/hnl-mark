@@ -1,10 +1,11 @@
 import React,{useRef,useState} from 'react';
-import {Download,Share2,Files,FolderArchive,CheckCircle2,AlertCircle,Loader2,X,ShieldCheck,Upload} from 'lucide-react';
-import type {MediaItem} from '../../types/hnl';
+import {Download,Share2,Files,FolderArchive,CheckCircle2,AlertCircle,Loader2,X,Upload} from 'lucide-react';
+import type {MediaItem,WatermarkConfig} from '../../types/hnl';
+import {createTimemarkPhoto} from '../../services/timemarkRenderer';
 import {saveToDevice,shareFromDevice} from '../../services/deviceBridge';
 import {createProjectZip} from '../../services/projectBackup';
-interface Props {isOpen:boolean;targetItems:MediaItem[];onClose:()=>void;onOpenOriginalEngine:()=>void;onRestoreBackup?:(file:File)=>Promise<void>}
-export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,onOpenOriginalEngine,onRestoreBackup})=>{
+interface Props {isOpen:boolean;targetItems:MediaItem[];onClose:()=>void;watermarkConfig:WatermarkConfig;onRestoreBackup?:(file:File)=>Promise<void>}
+export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,watermarkConfig,onRestoreBackup})=>{
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(false);
  const picker=useRef<HTMLInputElement>(null);
  if(!isOpen)return null;
@@ -19,11 +20,21 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,onOp
  const it=targetItems[0],blob=await getBlob(it);
  const ext=it.kind==='video'?(blob.type.includes('mp4')?'mp4':'webm'):(blob.type.includes('png')?'png':'jpg');
  await saveToDevice(blob,`HNLMark_Original_${Date.now()}.${ext}`);
- },'Đã hoàn tất lưu ảnh/video GỐC. Để xuất dấu Timemark dùng bộ xử lý HNL gốc.');
+ },'Đã lưu bản gốc vào máy; dữ liệu ảnh/video gốc không thay đổi.');
  const share=()=>run(async()=>{
  if(targetItems.length!==1)throw Error('Chia sẻ một tệp mỗi lần');const it=targetItems[0],blob=await getBlob(it);
  await shareFromDevice(blob,`HNLMark_Original_${Date.now()}.${it.kind==='video'?'webm':'jpg'}`);
  },'Đã gửi yêu cầu mở trình chia sẻ (xác nhận gửi ở ứng dụng đích).');
+ const saveStamped=(sharing:boolean)=>run(async()=>{
+   if(targetItems.length!==1)throw Error('Vui lòng chọn một ảnh.');
+   const it=targetItems[0];
+   if(it.kind!=='photo')throw Error('Video có dấu cần bộ kết xuất video riêng; không xuất video chưa có dấu như đã đóng dấu.');
+   if(!['timemark','none'].includes(watermarkConfig.templateId))throw Error('Mẫu dấu này chưa kết xuất chính xác trong TEST14. Hãy chọn Timemark hoặc lưu ảnh gốc.');
+   const blob=await createTimemarkPhoto(await getBlob(it),{...watermarkConfig,...it.watermarkOverride},it.photoCode);
+   const filename=`HNLMark_Timemark_${Date.now()}.jpg`;
+   if(sharing)await shareFromDevice(blob,filename);
+   else await saveToDevice(blob,filename);
+ },sharing?'Đã mở trình chia sẻ ảnh có dấu (xác nhận tại ứng dụng nhận).':'Đã lưu bản JPEG có dấu Timemark vào máy. Ảnh gốc được giữ nguyên.');
  const backup=()=>run(async()=>{const zip=await createProjectZip(targetItems);
  await saveToDevice(zip,`HNLMark_Backup_${Date.now()}.zip`);
  },'Đã tạo ZIP bao gồm ảnh/video GỐC và dữ liệu chỉnh sửa.');
@@ -39,11 +50,12 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,onOp
     <button disabled={busy||targetItems.length!==1} onClick={saveSelected} className="w-full min-h-[50px] flex items-center gap-3 rounded-xl bg-[#17253D] text-white text-sm px-4 text-left disabled:opacity-40"><Download size={19} className="text-[#E2B74B]"/>Lưu ảnh/video gốc vào máy</button>
     <button disabled={busy||targetItems.length!==1} onClick={share} className="w-full min-h-[50px] flex items-center gap-3 rounded-xl bg-[#17253D] text-white text-sm px-4 text-left disabled:opacity-40"><Share2 size={19}/>Chia sẻ tệp gốc</button>
     <button disabled={busy||!targetItems.length} onClick={backup} className="w-full min-h-[50px] flex items-center gap-3 rounded-xl bg-[#17253D] text-white text-sm px-4 text-left disabled:opacity-40"><FolderArchive size={19}/>Sao lưu dự án ZIP ({targetItems.length})</button>
-    <button disabled={busy} onClick={()=>{onOpenOriginalEngine();close();}} className="w-full min-h-[54px] flex items-center gap-3 rounded-xl bg-[#E2B74B] text-[#071121] font-semibold text-sm px-4 text-left"><ShieldCheck size={20}/>Xuất đúng mẫu Timemark bằng engine HNL gốc</button>
+    <button disabled={busy||targetItems.length!==1||targetItems[0]?.kind!=='photo'} onClick={()=>saveStamped(false)} className="w-full min-h-[52px] flex items-center gap-3 rounded-xl bg-[#E2B74B] text-[#071121] font-semibold text-sm px-4 text-left disabled:opacity-40"><Download size={19}/>Lưu ảnh có dấu Timemark</button>
+    <button disabled={busy||targetItems.length!==1||targetItems[0]?.kind!=='photo'} onClick={()=>saveStamped(true)} className="w-full min-h-[48px] flex items-center gap-3 rounded-xl bg-[#17253D] text-[#E2B74B] font-semibold text-sm px-4 text-left disabled:opacity-40"><Share2 size={19}/>Chia sẻ ảnh có dấu Timemark</button>
     {onRestoreBackup&&<><input ref={picker} type="file" accept=".zip,application/zip" hidden onChange={e=>{const f=e.target.files?.[0];if(f)run(()=>onRestoreBackup(f),'Đã khôi phục dự án ZIP vào thư viện mới, không xóa dữ liệu cũ.');e.currentTarget.value='';}}/>
       <button disabled={busy} className="w-full min-h-[44px] flex gap-3 items-center px-4 text-sm text-[#94A3B8]" onClick={()=>picker.current?.click()}><Upload size={17}/>Khôi phục dự án ZIP</button></>}
    </div>
-   <p className="pt-3 text-[11px] text-[#94A3B8]">Ảnh/video gốc không bị ghi đè. Preview React chưa thay thế thuật toán Timemark gốc.</p>
+   <p className="pt-3 text-[11px] text-[#94A3B8]">Bản gốc luôn được giữ riêng. Xuất Timemark dùng đúng bố cục chữ giờ, ngày và mã dọc HNL; các mẫu khác cần xác minh kết xuất riêng.</p>
    {busy&&<p className="text-xs text-[#E2B74B] flex items-center gap-2 mt-2"><Loader2 size={16} className="animate-spin"/>Đang xử lý, không đóng ứng dụng</p>}
   </div>
  </div>;

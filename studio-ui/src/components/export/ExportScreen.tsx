@@ -69,7 +69,7 @@ export const ExportScreen: React.FC<ExportScreenProps> = ({
         </div>
         <p className="text-xs text-[#94A3B8] leading-relaxed">
           Nhấn nút <strong className="text-[#F8FAFC]">Lưu / Chia sẻ</strong> ở trên rồi chọn{' '}
-          <strong className="text-[#E2B74B]">Sao lưu dự án ZIP</strong> để giữ lại ảnh/video gốc và dữ liệu chỉnh sửa. Xuất ảnh đóng dấu chính xác bằng bộ xử lý HNL gốc.
+          <strong className="text-[#E2B74B]">Sao lưu dự án ZIP</strong> để giữ lại ảnh/video gốc và dữ liệu chỉnh sửa. Ảnh Timemark được đóng dấu trực tiếp trong giao diện AI Studio, luôn giữ lại ảnh gốc.
         </p>
         <div className="pt-2 border-t border-white/[0.07]">
           <AndroidAdaptiveIconPreview />
