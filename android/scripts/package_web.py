@@ -12,6 +12,7 @@ resources = [
     "crop-ratios.js", "sw.js", "manifest.webmanifest",
     "camera-controls.js", "camera-controls.css",
     "hnl-logo-192.png", "hnl-logo-512.png",
+    "hnl-studio-ui.css", "hnl-studio-ui.js",
 ]
 for name in resources:
     source = ROOT / name
@@ -35,7 +36,7 @@ assert "</head>" in index and "</body>" in index
 assert "orientation.js" in index and "video.js" in index
 index = index.replace(
     "</head>",
-    '<link rel="stylesheet" href="./android-ui.css"><link rel="stylesheet" href="./camera-controls.css"><link rel="stylesheet" href="./android-camera-v25.css"><link rel="stylesheet" href="./android-select-v25.css"><link rel="stylesheet" href="./android-ux-v251.css"><link rel="stylesheet" href="./android-preview-v253.css"><link rel="stylesheet" href="./android-polish-v257.css"><link rel="stylesheet" href="./android-preview-zoom-v259.css"></head>',
+    '<link rel="stylesheet" href="./android-ui.css"><link rel="stylesheet" href="./camera-controls.css"><link rel="stylesheet" href="./android-camera-v25.css"><link rel="stylesheet" href="./android-select-v25.css"><link rel="stylesheet" href="./android-ux-v251.css"><link rel="stylesheet" href="./android-preview-v253.css"><link rel="stylesheet" href="./android-polish-v257.css"><link rel="stylesheet" href="./android-preview-zoom-v259.css"><link rel="stylesheet" href="./hnl-studio-ui.css?v=20261114"></head>',
     1,
 )
 index = index.replace(

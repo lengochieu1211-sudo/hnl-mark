@@ -26,6 +26,9 @@ jobs:
           node tests/test_crop_ratios.cjs
           node tests/test_video_orientation.cjs
           node --check sw.js
+          node --check hnl-studio-ui.js
+          grep -q 'hnl-studio-ui.js' index.html
+          grep -q 'hnl-studio-ui.css' android/scripts/package_web.py
           grep -q 'video.js?v=2.2.1' index.html
           test -s video.js
           test -s orientation.js
