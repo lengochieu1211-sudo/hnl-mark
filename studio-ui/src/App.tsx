@@ -29,7 +29,7 @@ import {storeMedia,loadMedia,removeMedia} from './services/mediaStorage';
 import {restoreProjectZip} from './services/projectBackup';
 import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
 import { createTimemarkPhoto,createTimemarkCode } from './services/timemarkRenderer';
-import {isSimpleStamp} from './services/simpleStampRenderer';
+import {isRenderableStamp} from './services/stampRenderer';
 import {mediaWatermarkConfig,readPhotoExifGps} from './services/watermarkLocation';
 
 function formatLocalIsoNow(): string {
@@ -161,9 +161,9 @@ export default function App() {
     let item=newPhoto;
     try{
       const config=newPhoto.captureWatermark||watermarkConfig;
-      if(!['timemark','none'].includes(config.templateId)&&!isSimpleStamp(config.templateId))throw Error('Mẫu dấu này chưa hỗ trợ kết xuất pixel. Ảnh gốc vẫn còn.');
+      if(!isRenderableStamp(config.templateId))throw Error('Mẫu dấu không có bộ xuất. Ảnh gốc vẫn được giữ.');
       if(!newPhoto.rawBlob)throw Error('Không có ảnh gốc để tạo dấu');
-      const stamped=await createTimemarkPhoto(newPhoto.rawBlob,mediaWatermarkConfig(config,newPhoto),newPhoto.photoCode,newPhoto.orientationDeg||0);
+      const stamped=await createTimemarkPhoto(newPhoto.rawBlob,mediaWatermarkConfig(config,newPhoto),newPhoto.photoCode,newPhoto.orientationDeg||0,newPhoto.edits);
       item={...newPhoto,stampedBlob:stamped,isStamped:config.templateId!=='none',url:URL.createObjectURL(stamped)};
       await storeMedia(item);
     }catch(e){

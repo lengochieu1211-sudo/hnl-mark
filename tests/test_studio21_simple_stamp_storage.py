@@ -23,8 +23,8 @@ assert 'Đặt dấu tại' in ui and 'showLogo' in ui
 assert 'roundRect(x,y,w,h' in read('studio-ui/src/services/watermarkLogo.ts')
 assert 'rounded-[23%]' in read('studio-ui/src/components/common/HnlBrandMark.tsx')
 assert 'drawSimpleStamp(ctx,canvas.width,canvas.height,config,orientation,logo)' in photo
-assert 'drawSimpleStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
-assert 'drawSimpleStamp(ctx,canvas.width,canvas.height,cfg,0,logo)' in importvideo
+assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
+assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,cfg,0,code,logo)' in importvideo
 assert 'Ngày giờ / Tùy chỉnh (4)' in ui and 'Vị trí chữ dấu thời gian' in ui
 assert "locationSource: 'manual'" in tpl and 'readPhotoExifGps(mediaFile)' in read('studio-ui/src/App.tsx')
 assert 'getCurrentPosition' in read('studio-ui/src/services/watermarkLocation.ts')
@@ -37,5 +37,5 @@ assert 'video/mp4' in read('studio-ui/src/services/videoFormat.ts')
 assert 'ACTION_OPEN_DOCUMENT_TREE' in native and 'takePersistableUriPermission' in native
 assert 'DocumentsContract.createDocument' in native and 's.mediaStore' in native
 assert 'chooseSaveLocation' in ui and 'Chọn thư mục / thẻ SD' in ui
-assert "applicationIdSuffix '.trial2525'" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2526'" in read('android/app/build.gradle')
 print('PASS: TEST21 three minimal actual renderers, EXIF/manual/GPS modes, codec validation, Android SAF chosen-folder writing')

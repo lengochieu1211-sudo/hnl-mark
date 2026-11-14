@@ -6,6 +6,8 @@ import { HnlLogoPlaceholder } from '../common/HnlBrandMark';
 import { OriginalTimemarkOverlay } from './OriginalTimemarkOverlay';
 import {SimpleStampOverlay} from './SimpleStampOverlay';
 import {isSimpleStamp} from '../../services/simpleStampRenderer';
+import {IndependentStampOverlay} from './IndependentStampOverlay';
+import {isIndependentStamp} from '../../services/independentStampRenderer';
 import {watermarkFontFamily} from '../../services/watermarkFonts';
 import {loadWatermarkLogo,drawWatermarkLogo} from '../../services/watermarkLogo';
 
@@ -58,6 +60,10 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode} />;
   if(isSimpleStamp(config.templateId))return <SimpleStampOverlay config={config} orientationDeg={orientationDeg}/>;
   if(config.templateId === 'none') return null;
+  // All non-draggable previews use the same Canvas pixels as photo/video export.
+  // Keep the existing draggable DOM controls in the photo editor.
+  if(!draggable&&isIndependentStamp(config.templateId))
+    return <IndependentStampOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode}/>;
 
   const template =
     WATERMARK_TEMPLATES.find((t) => t.id === config.templateId) ?? WATERMARK_TEMPLATES[10];

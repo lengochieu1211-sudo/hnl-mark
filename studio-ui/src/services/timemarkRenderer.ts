@@ -9,6 +9,9 @@ import type { OrientationDeg, WatermarkConfig, WatermarkFontKey } from '../types
 import {watermarkFontFamily} from './watermarkFonts';
 import {drawWatermarkLogo,loadWatermarkLogo} from './watermarkLogo';
 import {drawSimpleStamp,isSimpleStamp} from './simpleStampRenderer';
+import {drawIndependentStamp,isIndependentStamp} from './independentStampRenderer';
+import {createEditedCanvas} from './smartErase';
+import type {ImageEdits} from '../types/hnl';
 
 const clamp = (v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
 const pad = (n:number)=>String(n).padStart(2,'0');
@@ -135,17 +138,19 @@ export function loadTimemarkLogo():Promise<HTMLImageElement|undefined>{
    logo.src='./hnl-logo-192.png';
  });
 }
-export async function createTimemarkPhoto(source:Blob,config:WatermarkConfig,photoCode?:string,orientation:OrientationDeg=0):Promise<Blob>{
+export async function createTimemarkPhoto(source:Blob,config:WatermarkConfig,photoCode?:string,orientation:OrientationDeg=0,edits?:ImageEdits):Promise<Blob>{
  const bitmap=await createImageBitmap(source);
  try{
-   const canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+   const canvas=edits?createEditedCanvas(bitmap,edits):document.createElement('canvas');
+   if(!edits){canvas.width=bitmap.width;canvas.height=bitmap.height;}
    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Không thể tạo ảnh dấu');
    await prepareTimemarkFont(config.fontKey);
-   ctx.drawImage(bitmap,0,0);
+   if(!edits)ctx.drawImage(bitmap,0,0);
    if(config.templateId!=='none'){
      const logo=await loadWatermarkLogo(config);
      if(isSimpleStamp(config.templateId))drawSimpleStamp(ctx,canvas.width,canvas.height,config,orientation,logo);
      else if(config.templateId==='timemark')drawOriginalTimemark(ctx,canvas.width,canvas.height,config,orientation,photoCode,logo);
+     else if(isIndependentStamp(config.templateId))drawIndependentStamp(ctx,canvas.width,canvas.height,config,orientation,photoCode,logo);
      else throw Error('Mẫu dấu này chưa có bộ kết xuất pixel. Ảnh gốc vẫn được giữ riêng.');
    }
    return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Không kết xuất được JPEG')),'image/jpeg',clamp(config.jpegQuality/100,.5,1)));

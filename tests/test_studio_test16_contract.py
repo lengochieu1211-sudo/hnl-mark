@@ -11,7 +11,7 @@ storage=read('studio-ui/src/services/mediaStorage.ts')
 backup=read('studio-ui/src/services/projectBackup.ts')
 icon=read('android/scripts/make_launcher_icon.py')
 assert 'createStampedVideoCapture(' in cam
-assert 'canvas.captureStream(fps)' in video and 'drawOriginalTimemark(ctx' in video
+assert 'canvas.captureStream(fps)' in video and 'drawConfiguredStamp(ctx' in video
 assert 'new MediaStream([...capture.stream.getVideoTracks()' in cam
 assert 'getUserMedia({audio:true,video:false})' in cam
 assert 'recorder.pause()' in cam and 'recorder.resume()' in cam
@@ -22,13 +22,13 @@ assert 'orientationDeg:watermarkTurn, captureWatermark:' in cam
 assert 'createTimemarkPhoto(newPhoto.rawBlob' in app
 assert 'saveToDevice(item.stampedBlob' in app
 assert 'await storeMedia(newPhoto)' in app  # Commit original first.
-assert 'isStamped:stampConfig.templateId' in cam
+assert 'isStamped:isRenderableStamp(stampConfig.templateId)' in cam
 assert 'stampImportedVideo(await getBlob(it)' in exp
 assert 'Lưu ảnh / video có dấu vào máy' in exp and 'Chia sẻ ảnh / video có dấu' in exp
 assert 'Tệp gốc và sao lưu · Tùy chọn nâng cao' in exp
 assert 'stampedBlob:item.stampedBlob' in storage
 assert 'stampedName' in backup and "zip.file(stampedName,stampedBlob" in backup
 assert 'LEGACY_RATIO = 0.98' in icon and 'BACKGROUND_RGB' not in icon
-assert 'versionCode 2525' in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2525'" in read('android/app/build.gradle')
+assert 'versionCode 2526' in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2526'" in read('android/app/build.gradle')
 print('PASS: TEST21 stamped photo/video, protected originals, pause/resume, spot metering and icon')

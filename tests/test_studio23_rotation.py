@@ -12,7 +12,7 @@ video=read('studio-ui/src/services/stampedVideoCapture.ts')
 orient=read('studio-ui/src/services/stampOrientation.ts')
 assert android.count('setDeviceOrientation(')>=1 and android.count('screenAngle()')>=3
 assert 'displayAngle?:number' in bridge and 'detail:{angle,displayAngle}' in bridge
-assert 'physicalDegrees+displayDegrees' in orient
+assert 'normalizeStampAngle(-(physicalDegrees+displayDegrees))' in orient
 assert 'resolveStampOrientation(angle,screen)' in cam
 assert '__hnlNativeOrientation' in cam and '__hnlNativeOrientation' in android
 assert 'registerDisplayListener' in android and 'unregisterDisplayListener' in android
@@ -27,4 +27,4 @@ assert 'ctx.translate(width,height);ctx.rotate(Math.PI)' in simple
 assert 'drawWatermarkLogo(ctx,W,H,config,logo)' in simple
 assert 'translate(-50%, -50%) rotate(${orientationDeg}deg)' in wm
 assert "transform: orientationDeg === 180 ? 'rotate(180deg)'" not in wm
-print('PASS: camera orientation uses clockwise OEL + CCW display; independent display events and 4-direction stamp parity')
+print('PASS: inverse residual stamp correction (-90/+90), native display events, preview/photo/video parity')

@@ -4,8 +4,8 @@
  * Unsupported codecs, permissions or media durations cause an explicit error.
  */
 import type {WatermarkConfig} from '../types/hnl';
-import {drawOriginalTimemark,prepareTimemarkFont} from './timemarkRenderer';
-import {drawSimpleStamp,isSimpleStamp} from './simpleStampRenderer';
+import {prepareTimemarkFont} from './timemarkRenderer';
+import {drawConfiguredStamp,isRenderableStamp} from './stampRenderer';
 import {supportedVideoMime} from './videoFormat';
 import {loadWatermarkLogo} from './watermarkLogo';
 
@@ -24,7 +24,7 @@ export async function stampImportedVideo(
  onProgress?:(percent:number)=>void,signal?:AbortSignal,
 ):Promise<Blob>{
  if(!original.size||!original.type.startsWith('video/'))throw Error('Tệp được chọn không phải video hợp lệ.');
- if(!['timemark','none'].includes(config.templateId)&&!isSimpleStamp(config.templateId))throw Error('Mẫu dấu này chưa hỗ trợ kết xuất video.');
+ if(!isRenderableStamp(config.templateId))throw Error('Không tìm thấy bộ xuất video cho mẫu dấu này.');
  if(typeof MediaRecorder==='undefined'||typeof HTMLCanvasElement.prototype.captureStream!=='function')
    throw Error('Android WebView chưa hỗ trợ mã hóa video có dấu. Tệp gốc vẫn được giữ nguyên.');
  const mime=supportedVideoMime(config.videoFormat||'auto',true);
@@ -75,8 +75,7 @@ export async function stampImportedVideo(
      if(config.templateId!=='none'){
        const stampedTime=config.dateTimeIso || localDate(new Date());
        const cfg={...config,dateTimeIso:stampedTime};
-       if(isSimpleStamp(config.templateId))drawSimpleStamp(ctx,canvas.width,canvas.height,cfg,0,logo);
-       else drawOriginalTimemark(ctx,canvas.width,canvas.height,cfg,0,code,logo);
+       drawConfiguredStamp(ctx,canvas.width,canvas.height,cfg,0,code,logo);
      }
    };
    await prepareTimemarkFont(config.fontKey);

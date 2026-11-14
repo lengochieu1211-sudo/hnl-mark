@@ -30,7 +30,7 @@ import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
-import {isSimpleStamp} from '../../services/simpleStampRenderer';
+import {isRenderableStamp} from '../../services/stampRenderer';
 import {supportedVideoMime} from '../../services/videoFormat';
 import {readDeviceGps,mediaWatermarkConfig} from '../../services/watermarkLocation';
 import {normalizeStampAngle,resolveStampOrientation} from '../../services/stampOrientation';
@@ -379,7 +379,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000)),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
           photoCode,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:orientation,captureWatermark:stampConfig,isStamped:stampConfig.templateId==='timemark'||isSimpleStamp(stampConfig.templateId),edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:orientation,captureWatermark:stampConfig,isStamped:isRenderableStamp(stampConfig.templateId)&&stampConfig.templateId!=='none',edits:{...DEFAULT_IMAGE_EDITS}};
         try{await onSaveVideo(item);setPreviewCode(createTimemarkCode());setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
         catch(e){triggerTransientToast('Không lưu được video gốc: '+String(e));}
         finally{setIsFinalizing(false);}

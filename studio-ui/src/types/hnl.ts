@@ -89,7 +89,14 @@ export type MediaKind = 'photo' | 'video';
 
 export type CropRatio = 'free' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16';
 
+/** Nondestructive local restoration from HNL Mark main v2.0.4. */
+export type SmartEraseDirection = 'auto' | 'up' | 'down' | 'left' | 'right' | 'blur';
+export interface SmartEraseOperation {
+  rect: { x:number; y:number; w:number; h:number }; // normalized to ORIGINAL image
+  direction: SmartEraseDirection;
+}
 export interface ImageEdits {
+  smartErase?: SmartEraseOperation[];
   cropRatio: CropRatio;
   centeredFrame: boolean;
   rotationDeg: number;

@@ -4,9 +4,9 @@
  * No silent unmarked-video fallback is allowed.
  */
 import type { OrientationDeg, WatermarkConfig } from '../types/hnl';
-import { drawOriginalTimemark,prepareTimemarkFont } from './timemarkRenderer';
+import {prepareTimemarkFont} from './timemarkRenderer';
 import {loadWatermarkLogo} from './watermarkLogo';
-import {drawSimpleStamp,isSimpleStamp} from './simpleStampRenderer';
+import {drawConfiguredStamp,isRenderableStamp} from './stampRenderer';
 
 type StampedCapture = {
   stream: MediaStream;
@@ -25,9 +25,7 @@ export async function createStampedVideoCapture(
   brightness: number,
   desiredFps: number,
 ): Promise<StampedCapture> {
-  if (!['timemark', 'none'].includes(config.templateId)&&!isSimpleStamp(config.templateId)) {
-    throw new Error('Mẫu dấu video này chưa hỗ trợ kết xuất. Hãy chọn Timemark trước khi quay.');
-  }
+  if(!isRenderableStamp(config.templateId))throw new Error('Không tìm thấy bộ xuất video cho mẫu dấu này.');
   if (video.videoWidth <= 0 || video.videoHeight <= 0 || video.readyState < 2) {
     throw new Error('Khung hình camera chưa sẵn sàng để ghi dấu.');
   }
@@ -60,8 +58,7 @@ export async function createStampedVideoCapture(
     if (config.templateId !== 'none') {
       const activeOrientation=typeof orientation==='function'?orientation():orientation;
       const timestamp = config.autoTime ? {...config,dateTimeIso: toLocalTime(new Date())} : config;
-      if(isSimpleStamp(config.templateId))drawSimpleStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,logo);
-      else drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, activeOrientation, photoCode,logo);
+      drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,photoCode,logo);
     }
   };
   const stream = canvas.captureStream(fps);

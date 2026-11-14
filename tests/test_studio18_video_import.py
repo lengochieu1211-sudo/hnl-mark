@@ -28,7 +28,7 @@ assert "video.addEventListener('loadedmetadata'" in enc
 assert "video.addEventListener('ended'" in enc and "video.addEventListener('error'" in enc
 assert 'const hasDuration=Number.isFinite(video.duration)' in enc
 assert 'video.duration>MAX_DURATION_SECONDS' in enc
-assert 'canvas.captureStream(FPS)' in enc and 'drawOriginalTimemark(ctx' in enc
+assert 'canvas.captureStream(FPS)' in enc and 'drawConfiguredStamp(ctx' in enc
 assert 'createMediaElementSource(video)' in enc and 'createMediaStreamDestination()' in enc
 assert 'new MediaRecorder(output' in enc and 'await completed' in enc
 assert "slice(String(reader.result).lastIndexOf(',')+1)" in read('studio-ui/src/services/deviceBridge.ts')
@@ -41,8 +41,8 @@ assert 'if(config.showLogo&&logo' not in mark
 assert 'orientationDeg:watermarkTurn, captureWatermark:' in cam
 assert 'const orientation:OrientationDeg=stampOrientationRef.current;' in cam
 assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn}' in cam
-assert 'drawOriginalTimemark(ctx, canvas.width, canvas.height, timestamp, activeOrientation,' in read('studio-ui/src/services/stampedVideoCapture.ts')
+assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert '<video key={active.id} src={active.url} playsInline controls' in roll
-assert "versionCode 2525" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2525'" in read('android/app/build.gradle')
+assert "versionCode 2526" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2526'" in read('android/app/build.gradle')
 print('PASS: TEST21 imported video player / stamping / audio / unknown WebM duration / backup / rotation')
