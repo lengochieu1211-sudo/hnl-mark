@@ -55,6 +55,10 @@ export interface WatermarkConfig {
   videoFormat?: VideoExportFormat;
   customTitle: string;
   customNote: string;
+  /** Custom stamp switches, omitted in older saved projects (defaults on). */
+  customShowDateTime?: boolean;
+  customShowLocation?: boolean;
+  customShowNote?: boolean;
   inspectorName: string;
   fontKey: WatermarkFontKey;
   fontSizePx: number;

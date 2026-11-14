@@ -16,10 +16,16 @@ for stamp in ('simple-datetime','simple-date','simple-time'):
  assert f"id:'{stamp}'" in tpl
 assert "group:'simple'" in tpl and "WatermarkGroup = 'timemark-legacy' | 'hnl-independent' | 'simple'" in types
 assert 'SimpleStampOverlay' in wm and 'drawSimpleStamp' in simple
+assert "id:'custom-stamp'" in tpl and 'customStampLines' in simple
+for flag in ('customShowDateTime', 'customShowLocation', 'customShowNote'):
+ assert flag in types and flag in simple and flag in ui,flag
+assert 'Đặt dấu tại' in ui and 'showLogo' in ui
+assert 'roundRect(x,y,w,h' in read('studio-ui/src/services/watermarkLogo.ts')
+assert 'rounded-[23%]' in read('studio-ui/src/components/common/HnlBrandMark.tsx')
 assert 'drawSimpleStamp(ctx,canvas.width,canvas.height,config,orientation,logo)' in photo
 assert 'drawSimpleStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert 'drawSimpleStamp(ctx,canvas.width,canvas.height,cfg,0,logo)' in importvideo
-assert 'Chỉ ngày / giờ (3)' in ui and 'Vị trí chữ dấu thời gian' in ui
+assert 'Ngày giờ / Tùy chỉnh (4)' in ui and 'Vị trí chữ dấu thời gian' in ui
 assert "locationSource: 'manual'" in tpl and 'readPhotoExifGps(mediaFile)' in read('studio-ui/src/App.tsx')
 assert 'getCurrentPosition' in read('studio-ui/src/services/watermarkLocation.ts')
 assert 'GPS từ ảnh đã chọn' in ui and 'Lấy GPS từ điện thoại' in ui

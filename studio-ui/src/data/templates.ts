@@ -1,6 +1,7 @@
 import { ViewportPreset, WatermarkConfig, WatermarkTemplate } from '../types/hnl';
 
 export const WATERMARK_TEMPLATES: WatermarkTemplate[] = [
+  {id:'custom-stamp',code:'S-04',name:'Dấu tùy chỉnh',group:'simple',summary:'Tùy chọn ngày giờ, vị trí, ghi chú, logo',accentHex:'#E2B74B',surfaceMode:'minimal-text'},
   {id:'simple-datetime',code:'S-01',name:'Chỉ ngày + giờ',group:'simple',summary:'Chữ gọn · Không khung · 4 góc',accentHex:'#F8FAFC',surfaceMode:'minimal-text'},
   {id:'simple-date',code:'S-02',name:'Chỉ ngày',group:'simple',summary:'Chỉ hiện ngày · 4 góc',accentHex:'#F8FAFC',surfaceMode:'minimal-text'},
   {id:'simple-time',code:'S-03',name:'Chỉ giờ',group:'simple',summary:'Chỉ hiện giờ · 4 góc',accentHex:'#F8FAFC',surfaceMode:'minimal-text'},
@@ -223,6 +224,7 @@ export interface TemplateCatalogGroup {
 
 export const TEMPLATE_CATALOG_GROUPS: TemplateCatalogGroup[] = [
   {id:'original-timemark',title:'Timemark Verified',description:'Mẫu Timemark gốc duy nhất · giữ nguyên',category:'timemark',templateIds:['timemark']},
+  {id:'custom-stamp-layout',title:'Dấu tùy chỉnh',description:'Ngày giờ · Vị trí · Ghi chú · Logo',category:'simple',templateIds:['custom-stamp']},
   {id:'date-time',title:'Ngày + giờ',description:'Chỉ ngày và giờ, không khung',category:'simple',templateIds:['simple-datetime']},
   {id:'date-only',title:'Chỉ ngày',description:'Dấu ngày tối giản',category:'simple',templateIds:['simple-date']},
   {id:'time-only',title:'Chỉ giờ',description:'Dấu giờ tối giản',category:'simple',templateIds:['simple-time']},
@@ -247,6 +249,9 @@ export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   videoFormat: 'auto',
   customTitle: '',
   customNote: '',
+  customShowDateTime: true,
+  customShowLocation: true,
+  customShowNote: true,
   inspectorName: '',
   fontKey: 'be-vietnam',
   fontSizePx: 13,

@@ -187,7 +187,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
             {[
               { id: 'all', label: `Tất cả (${TEMPLATE_CATALOG_GROUPS.length})` },
               { id: 'timemark', label: 'Timemark gốc (1)' },
-              { id: 'simple', label: 'Chỉ ngày / giờ (3)' },
+              { id: 'simple', label: 'Ngày giờ / Tùy chỉnh (4)' },
               { id: 'independent', label: '6 Kiểu HNL' },
               { id: 'none', label: 'Không dấu' },
             ].map((grp) => (
@@ -212,10 +212,9 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
             </p>
           )}
           <p className="text-[11px] text-[#94A3B8]">
-            Chỉ giữ TM-01 Timemark Verified. Các mẫu HNL dùng chung bố cục được gom thành
-            nhóm; chọn tên biến thể bên dưới nếu cần. Mã mẫu cũ vẫn đọc được khi khôi phục ZIP.
+            TM-01 là mẫu Timemark gốc. Mẫu Tùy chỉnh cho phép bật/tắt từng nội dung.
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 items-start">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 items-stretch">
             {visibleCatalog.map((group, idx) => {
               const variants = group.templateIds.map(id =>
                 WATERMARK_TEMPLATES.find(template => template.id === id)!);
@@ -228,16 +227,16 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
               const selectTemplate = (tpl: typeof preview) => onChangeConfig({
                 templateId: tpl.id,
                 accentColor: tpl.accentHex,
-                ...(group.category === 'simple' ? {showLogo:false} : {}),
+                ...(tpl.id==='custom-stamp'?{showLogo:true}:group.category === 'simple'?{showLogo:false}:{}),
               });
               return (
-                <div key={group.id} className={`rounded-2xl overflow-hidden bg-[#111C30] border ${
+                <div key={group.id} className={`h-full flex flex-col rounded-2xl overflow-hidden bg-[#111C30] border ${
                   selected ? 'border-[#E2B74B] ring-1 ring-[#E2B74B]/60' : 'border-white/[0.08]'
                 }`}>
                   <button type="button" onClick={() => selectTemplate(variants[0])}
                     aria-label={`Chọn kiểu ${group.title}`}
-                    className="text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E2B74B]">
-                    <div className="relative aspect-[4/3] bg-[#060B14] overflow-hidden">
+                    className="text-left w-full flex-1 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E2B74B]">
+                    <div className="relative aspect-[4/3] w-full bg-[#060B14] overflow-hidden">
                       <img src={thumbBg} alt={group.title} referrerPolicy="no-referrer"
                         className="w-full h-full object-cover" />
                       <WatermarkOverlay compact config={{...effectiveConfig,
@@ -247,34 +246,69 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                         <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                       </span>}
                     </div>
-                    <div className="p-2.5 space-y-0.5">
+                    <div className="p-2.5 space-y-0.5 flex-1 min-h-[74px]">
                       <div className="text-[13px] font-semibold text-[#F8FAFC]">{group.title}</div>
                       <div className="text-[11px] text-[#94A3B8]">{group.description}</div>
                     </div>
                   </button>
-                  {variants.length > 1 && (
-                    <div className="flex flex-wrap gap-1 px-2.5 pb-2.5" aria-label={`Biến thể ${group.title}`}>
-                      {variants.map(variant => (
-                        <button key={variant.id} type="button" onClick={() => selectTemplate(variant)}
-                          aria-pressed={config.templateId===variant.id}
-                          className={`rounded-lg border px-2 py-1.5 text-[11px] min-h-8 ${
-                            config.templateId === variant.id
-                              ? 'border-[#E2B74B] text-[#E2B74B] bg-[#17253D]'
-                              : 'border-white/10 text-[#CBD5E1] hover:border-white/30'
-                          }`}>{variant.name}</button>
-                      ))}
-                    </div>
-                  )}
+
                 </div>
               );
             })}
           </div>
+          {visibleCatalog.filter(group=>group.templateIds.length>1&&group.templateIds.includes(config.templateId)).map(group=>(
+            <div key={group.id} className="rounded-xl border border-[#E2B74B]/25 bg-[#0D1626] p-2.5" aria-label={`Biến thể ${group.title}`}>
+              <div className="mb-2 text-[12px] text-[#CBD5E1]">Biến thể {group.title}</div>
+              <div className="flex flex-wrap gap-1.5">{group.templateIds.map(id=>{
+                const template=WATERMARK_TEMPLATES.find(t=>t.id===id)!;
+                return <button type="button" key={id} aria-pressed={config.templateId===id}
+                  onClick={()=>onChangeConfig({templateId:id,accentColor:template.accentHex})}
+                  className={`min-h-9 rounded-lg border px-3 text-xs ${config.templateId===id?'border-[#E2B74B] bg-[#17253D] text-[#E2B74B]':'border-white/10 text-[#CBD5E1]'}`}>
+                  {template.name}</button>;
+              })}</div>
+            </div>
+          ))}
         </div>
       )}
 
       {/* TAB 2: 11 ACCORDION SETTINGS GROUPS (Compact 13-14px inputs) */}
       {subTab === 'customize' && (
         <div className="rounded-2xl bg-[#0D1626] border border-white/[0.08] px-3.5 py-1">
+          {config.templateId==='custom-stamp'&&(
+            <section className="py-3 space-y-3 border-b border-white/10" aria-label="Dấu tùy chỉnh: bật tắt nội dung">
+              <div className="text-sm font-semibold text-[#E2B74B]">Nội dung dấu tùy chỉnh</div>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['customShowDateTime','Ngày / giờ'],
+                  ['customShowLocation','Vị trí / GPS'],
+                  ['customShowNote','Ghi chú'],
+                  ['showLogo','Logo HNL']
+                ] as const).map(([key,label])=><label key={key} className="flex items-center justify-between gap-2 min-h-10 rounded-lg bg-[#111C30] px-2.5 text-[12px] text-[#F8FAFC]">
+                  <span>{label}</span><input type="checkbox" className="size-4 accent-[#E2B74B]"
+                    checked={config[key]!==false} onChange={e=>onChangeConfig({[key]:e.target.checked})}/>
+                </label>)}
+              </div>
+              {config.customShowLocation!==false&&<input aria-label="Địa chỉ trên dấu tùy chỉnh" type="text" value={config.locationText}
+                onChange={e=>onChangeConfig({locationText:e.target.value,locationSource:'manual'})}
+                placeholder="Địa chỉ / vị trí công trình" className="w-full min-h-9 rounded-lg bg-[#111C30] border border-white/10 px-2.5 text-[13px]"/>}
+              {config.customShowNote!==false&&<input aria-label="Ghi chú trên dấu tùy chỉnh" type="text" value={config.customNote}
+                onChange={e=>onChangeConfig({customNote:e.target.value})} placeholder="Ghi chú tự chọn"
+                className="w-full min-h-9 rounded-lg bg-[#111C30] border border-white/10 px-2.5 text-[13px]"/>}
+              <label className="flex items-center gap-2 text-[12px] text-[#CBD5E1]">Đặt dấu tại
+                <select aria-label="Vị trí dấu tùy chỉnh" value={config.positionPreset}
+                  onChange={e=>onChangeConfig({positionPreset:e.target.value as WatermarkPositionPreset})}
+                  className="flex-1 min-w-0 min-h-9 rounded-lg bg-[#111C30] border border-white/10 px-2.5 text-[12px]">
+                  <option value="bottom-left">Dưới trái</option><option value="bottom-right">Dưới phải</option>
+                  <option value="top-left">Trên trái</option><option value="top-right">Trên phải</option>
+                  <option value="bottom-center">Dưới giữa</option><option value="custom">Theo X/Y</option>
+                </select>
+              </label>
+              {config.positionPreset==='custom'&&<div className="grid grid-cols-2 gap-2">{(['xPct','yPct'] as const).map(axis=><label className="text-xs text-[#CBD5E1]" key={axis}>
+                {axis==='xPct'?'Ngang X':'Dọc Y'}: {config.customPos[axis]}%
+                <input type="range" min="0" max="100" value={config.customPos[axis]} className="w-full accent-[#E2B74B]"
+                  onChange={e=>onChangeConfig({customPos:{...config.customPos,[axis]:Number(e.target.value)}})}/></label>)}</div>}
+            </section>
+          )}
           {/* 1. Ngày giờ */}
           <AccordionSection
             title="1. Ngày giờ"

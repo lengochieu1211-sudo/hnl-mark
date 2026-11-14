@@ -40,6 +40,7 @@ export function drawWatermarkLogo(ctx:CanvasRenderingContext2D,width:number,heig
  if(!logo||!logoEnabled(config)||logo.width<=0||logo.height<=0)return;
  const {x,y,w,h}=logoGeometry(width,height,config,logo.width,logo.height);
  ctx.save();ctx.shadowColor='rgba(0,0,0,.40)';ctx.shadowBlur=Math.min(width,height)*.003;
+ ctx.beginPath();ctx.roundRect(x,y,w,h,Math.min(w,h)*.24);ctx.clip();
  ctx.drawImage(logo,x,y,w,h);ctx.restore();
 }
 /** Convert a selected image into a small self-contained asset for offline preview/export. */
