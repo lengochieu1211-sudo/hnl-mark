@@ -17,3 +17,6 @@ assert 'src="../index.html"' in rd('studio-ui/src/App.tsx')
 assert 'app.js' in rd('android/scripts/package_web.py')
 assert "versionName '2.5.14-studio-test'" in rd('android/app/build.gradle')
 print('PASS: AI Studio primary UI, original HNL render retained, native picker + APK isolated')
+
+assert "setRoute('home');setLegacyLoadKey" in rd('studio-ui/src/App.tsx')
+assert 'recorderRef.current.stop();' in rd('studio-ui/src/components/camera/CameraApkScreen.tsx')

@@ -87,7 +87,7 @@ export default function App() {
     }).catch(err=>{console.error('Không đọc được thư viện:',err);}).finally(()=>{if(alive)setLibraryReady(true);});
     return ()=>{alive=false};
   },[]);
-  const openOriginalEngine=()=>{setLegacyLoadKey(k=>k+1);setLegacyOpen(true);};
+  const openOriginalEngine=()=>{setRoute('home');setLegacyLoadKey(k=>k+1);setLegacyOpen(true);};
   const importPickedFiles=async (files:File[])=>{
     if(!files.length)return;
     const all:MediaItem[]=[];
@@ -246,7 +246,7 @@ export default function App() {
               }).catch(err=>alert('Lỗi khôi phục ZIP: '+String(err)));e.currentTarget.value='';}}/>
             <button type="button" onClick={()=>restoreInput.current?.click()}
               className="min-h-9 px-3 rounded-xl bg-[#17253D] text-[#E2B74B] text-xs font-semibold">Khôi phục ZIP chứa ảnh gốc</button>
-            <span className="text-[11px] text-[#94A3B8]">Không ghi đè thư viện cũ</span>
+            <span className="text-[11px] text-[#94A3B8]">Không ghi đè thư viện cũ · Xem thư viện cũ trong Dấu HNL gốc</span>
           </div>}
           <main className="flex-1 min-h-0 overflow-y-auto hnl-scroll pb-4">
             {route === 'home' && (

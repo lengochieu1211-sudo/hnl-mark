@@ -122,6 +122,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     };
     start();
     return ()=>{closed=true;
+      try{if(recorderRef.current?.state==='recording')recorderRef.current.stop();}catch{}
       streamRef.current?.getTracks().forEach(t=>t.stop());streamRef.current=null;
       setAndroidCameraActive(false);
     };
