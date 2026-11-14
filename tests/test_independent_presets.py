@@ -16,5 +16,5 @@ assert 'if(config.showFooter && style!==\'bottom-strip\')drawIndependentFooter' 
 assert 'ID '+"'+photoSerial(p)" in js
 assert '<details id="presetExtra"' in html
 assert '.preset-extra>summary' in css
-assert 'versionCode 2510' in (p/'android/app/build.gradle').read_text()
+assert 'versionCode 2511' in (p/'android/app/build.gradle').read_text()
 print('PASS: 12 independent photo/video timestamp presets, legacy path preserved')

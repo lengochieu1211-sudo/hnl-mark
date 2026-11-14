@@ -46,6 +46,7 @@ jobs:
         run: |
           python3 android/scripts/package_web.py
           python3 android/scripts/audit_android.py
+          python3 tests/test_launcher_color_fidelity_v2511.py
           node --check android/android-app.js
           python3 tests/test_android_picker_source.py
           python3 tests/test_android_polish_v257.py

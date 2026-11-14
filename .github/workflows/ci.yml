@@ -12,6 +12,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Pillow for exact launcher color fidelity
+        run: python3 -m pip install --disable-pip-version-check pillow==11.1.0
       - name: JavaScript syntax and required assets
         run: |
           node --check app.js
@@ -36,3 +38,4 @@ jobs:
           node --check android/android-preview-zoom-v259.js
           python3 tests/test_video_reopen_source_v259.py
           python3 tests/test_device_media_save_v2510.py
+          python3 tests/test_launcher_color_fidelity_v2511.py

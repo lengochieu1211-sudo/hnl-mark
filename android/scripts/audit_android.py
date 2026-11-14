@@ -35,7 +35,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"portrait\"" in manifest
-assert "versionCode 2510" in gradle and "versionName '2.5.10-test'" in gradle
+assert "versionCode 2511" in gradle and "versionName '2.5.11-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -88,7 +88,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.10-test'" in bridge
+assert "version:'2.5.11-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -104,8 +104,8 @@ assert 'cameraOrientationListener.disable()' in java
 assert 'android:icon="@mipmap/ic_launcher"' in manifest
 assert '@mipmap/ic_launcher' in manifest
 assert 'android:screenOrientation="portrait"' in manifest
-assert 'artwork=_cut_out_neutral_plate(Image.open(source))' in launcher
-assert "foreground.save(drawable/'hnlmark_foreground.png')" in launcher
+assert 'original_full_color_image(root)' in launcher and '_cut_out_neutral_plate' not in launcher
+assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
 assert (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()
 assert 'hnlmark_icon_bg' in r("android/app/src/main/res/values/colors.xml")
 for token in ('apk-camera-topbar','apk-grid-toggle','syncCameraToolbar',
@@ -129,9 +129,9 @@ assert (root/"android/app/src/main/res/drawable/hnlmark_icon.png").exists()
 ux=r("android/android-ux-v251.js")
 uxcss=r("android/android-ux-v251.css")
 camera_core=r("android/android-camera-v25.js")
-assert 'ARTWORK = 312' in launcher
-assert "foreground=Image.new('RGBA',(CANVAS,CANVAS),(0,0,0,0))" in launcher
-assert 'foreground.alpha_composite(artwork.resize(' in launcher
+assert 'OUTER_PADDING = 19' in launcher
+assert "icon = original.resize((CANVAS, CANVAS), Image.Resampling.LANCZOS)" in launcher
+assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
 assert 'android:drawable="@drawable/hnlmark_icon"' in r("android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
 assert "#FFFFFF" in r("android/app/src/main/res/values/colors.xml")
 assert "apkImportHint" not in bridge
@@ -154,10 +154,10 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial2510'" in gradle
-assert "HNLMark TEST 10" in gradle
+assert "applicationIdSuffix '.trial2511'" in gradle
+assert "HNLMark TEST 11" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
-assert "TEST v2.5.10" in ux
+assert "TEST v2.5.11" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
 assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
 
@@ -212,8 +212,8 @@ print("      focus/EV/zoom/torch capability gates and bottom-fixed rotating icon
 polish_css=r("android/android-polish-v257.css")
 polish_js=r("android/android-polish-v257.js")
 core_controls=r("camera-controls.js")
-assert 'ARTWORK = 312' in launcher
-assert 'foreground.alpha_composite(artwork.resize(' in launcher
+assert 'OUTER_PADDING = 19' in launcher
+assert 'icon.save(drawable / "hnlmark_foreground.png")' in launcher
 assert 'dock:$(' in photo and "dock:studio.querySelector('.video-ios-controls')" in video
 assert 'getDigitalZoom' in core_controls and 'hnl-camera-dock-adjust' in core_controls
 assert 'digitalZoom' in photo and 'digitalZoom' in video
@@ -235,4 +235,4 @@ assert 'cameraOpenGeneration' in video and "selectedMedia='photo';updateMediaPic
 assert 'isVideoSelected' in video and 'isVideoSelected' in photo
 assert 'dock&&!apk' in core_controls and '&&caps.zoom' not in core_controls
 assert 'grid-template-columns:repeat(2,minmax(0,1fr))' in polish_css
-assert 'ImageFilter.GaussianBlur' in launcher and 'background.save' in launcher
+assert 'DENSITIES =' in launcher and 'background.save' in launcher and 'ImageFilter' not in launcher

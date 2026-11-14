@@ -1,4 +1,11 @@
-# HNLMark DEV TEST v2.5.10 — Media auto-save and icon/preview polish
+# HNLMark DEV TEST v2.5.11 — Original full-color icon restored
+
+- APK icon now uses source RGB unmodified, crops only 19px of external white padding. No color key, tint or artificial sky-blue/navy overlay.
+- Builds adaptive icon and legacy density-specific icons from the SAME original color pixels, like the resource density strategy of HNL QLTC.
+- TEST 11 uses isolated package `vn.hnl.xaydung.hnlmark.trial2511`. Never uninstall older TEST before exporting its photo library ZIP.
+- Media auto-save, camera, video, offline library and stamp presets are unchanged from TEST 10.
+- Build/CI are not real Xiaomi/MIUI runtime verification; visually inspect launcher on device.
+
 
 - Android photos captured by HNLMark: editable original remains in app IndexedDB; separately auto-save a stamped export to Pictures/HNLMark with MediaStore.Images, visible in phone gallery. Imported photos are not duplicated automatically. If auto-save fails, keep the editable original and show an explicit warning.
 - Android camera video: auto-save finished recorded output in Movies/HNLMark with MediaStore.Video. Keep video result for retry on failure; do not close while a save is active. Video import/export still requires explicit Save.
