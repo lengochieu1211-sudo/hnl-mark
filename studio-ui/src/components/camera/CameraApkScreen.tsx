@@ -315,7 +315,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  const latestThumb = recentMedia[0]?.url;
+  const latestItem = recentMedia[0];
+  const latestThumb = latestItem?.kind === 'photo' ? latestItem.url : null;
 
   const previewAspectStyle = (): React.CSSProperties => {
     if (aspectRatio === '1:1') return { aspectRatio: '1 / 1', maxHeight: '100%' };
@@ -606,7 +607,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             aria-label="Khung ngắm camera trực tiếp"
             style={{transform:`scale(${zoomLevel}) ${lens==='front'?'scaleX(-1)':''}`,transition:'transform 110ms ease-out'}}
             className="w-full h-full object-cover select-none pointer-events-none" />
-          {cameraReady && mode==='video' && audioUnavailable && <div role="status" className="absolute top-2 left-2 right-2 z-20 rounded-lg bg-[#7F1D1D]/85 px-3 py-2 text-center text-xs text-white pointer-events-none">Không ghi được âm thanh từ micro. Video sẽ chỉ có hình.</div>}
+          {cameraReady && mode==='video' && isRecording && audioUnavailable && <div role="status" className="absolute top-2 left-2 right-2 z-20 rounded-lg bg-[#7F1D1D]/85 px-3 py-2 text-center text-xs text-white pointer-events-none">Không ghi được âm thanh từ micro. Video sẽ chỉ có hình.</div>}
           {!cameraReady && <div className="absolute inset-0 z-10 flex flex-col gap-3 items-center justify-center p-6 bg-[#071121] text-center">
             <p className="text-sm text-[#F8FAFC]">{cameraError||'Đang mở camera thực tế…'}</p>
             <button type="button" onClick={()=>{setCameraError('');setCameraRetryKey(k=>k+1);}} className="rounded-xl bg-[#E2B74B] px-4 py-2 text-[#071121] font-bold text-sm">Thử mở lại camera</button>
@@ -780,7 +781,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
               alt="Ảnh gần nhất trong thư viện HNL Mark"
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
-            /> : <Images className="w-6 h-6 text-[#E2B74B]" />}
+            /> : latestItem?.kind === 'video' ? <Film className="w-6 h-6 text-[#E2B74B]" aria-label="Video đã quay" /> : <Images className="w-6 h-6 text-[#E2B74B]" />}
             <span className="absolute inset-0 bg-black/20 flex items-end justify-end p-1">
               <Images className="w-3.5 h-3.5 text-white drop-shadow" />
             </span>
