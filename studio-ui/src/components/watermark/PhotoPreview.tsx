@@ -9,6 +9,7 @@ import type {MediaItem,WatermarkConfig} from '../../types/hnl';
 import {createEditorPreview} from '../../services/smartErase';
 import {mediaWatermarkConfig} from '../../services/watermarkLocation';
 import {WatermarkOverlay} from './WatermarkOverlay';
+import {editedRasterSize,type StampReferenceSize} from '../../services/stampPreviewGeometry';
 
 type PreviewFrame={key:string;url:string;width:number;height:number;original:boolean};
 
@@ -28,6 +29,16 @@ export const PhotoPreview:React.FC<{
    ((edits.rotationDeg||0)%360) || edits.flipHorizontal);
  // Color sliders never trigger a canvas encode or object-URL replacement.
  const processingEdits=useMemo(()=>({...edits,brightness:100,contrast:100,saturation:100}),[structural]);
+ const [originalSize,setOriginalSize]=useState<StampReferenceSize|null>(null);
+ useEffect(()=>{
+  if(!needsProcessing||!media.rawBlob){setOriginalSize(null);return;}
+  let alive=true;
+  void createImageBitmap(media.rawBlob).then(bitmap=>{
+   if(alive)setOriginalSize({width:bitmap.width,height:bitmap.height});
+   bitmap.close();
+  }).catch(()=>{if(alive)setOriginalSize(null);});
+  return()=>{alive=false;};
+ },[media.id,media.rawBlob,needsProcessing]);
 
  useEffect(()=>{
   const node=stage.current;if(!node)return;
@@ -83,6 +94,10 @@ export const PhotoPreview:React.FC<{
  const ratio=photo&&photo.height>0?photo.width/photo.height:1;
  const fittedW=ready?Math.min(bounds.width,bounds.height*ratio):0;
  const fittedH=ready?fittedW/ratio:0;
+ const referenceSize=photo?(needsProcessing&&originalSize
+  ?editedRasterSize(originalSize.width,originalSize.height,edits)
+  :{width:photo.width,height:photo.height}):undefined;
+
  const effective=mediaWatermarkConfig({...config,...media.captureWatermark,...media.watermarkOverride},media);
  const url=matching&&photo?photo.url:media.url;
  const canOverlay=ready&&photo?.original&&showStamp&&effective.templateId!=='none';
@@ -101,7 +116,7 @@ export const PhotoPreview:React.FC<{
      onError={()=>setFailure('Không đọc được tệp ảnh. Vui lòng kiểm tra ảnh gốc trong thư viện.')}
      className="absolute inset-0 h-full w-full select-none"
      style={{objectFit:ready?'fill':'contain',filter:`brightness(${edits.brightness??100}%) contrast(${edits.contrast??100}%) saturate(${edits.saturation??100}%)`}}/>
-    {canOverlay&&<WatermarkOverlay config={effective} orientationDeg={media.orientationDeg||0} photoCode={media.photoCode}/>}
+    {canOverlay&&<WatermarkOverlay config={effective} orientationDeg={media.orientationDeg||0} photoCode={media.photoCode} referenceSize={referenceSize}/>}
    </div>
    {pending&&!compact&&<span className="absolute left-2 bottom-2 rounded bg-[#0B1424]/80 px-2 py-1 text-[10px] text-[#CBD5E1]" role="status">Đang áp dụng chỉnh sửa…</span>}
    {failure&&!compact&&<div role="alert" className="absolute left-2 right-2 bottom-2 flex items-center justify-between gap-2 rounded-lg bg-[#5B1D27]/95 px-2 py-1.5 text-[11px] text-white">
