@@ -40,7 +40,7 @@ assert.equal(normalizeStampAngle(resolveStampOrientation(270,0)-(-90)),180);
 console.log('PASS: inverse stamp correction for Redmi 90/-90 + 4 unlocked + 4 locked + 16 combos');
 
 // TEST33: rotate the camera RASTER as a unit before stamping/encoding video.
-import {orientedFrameSize} from '../studio-ui/src/services/capturedPhotoOrientation.ts';
+import {capturedPhotoTurn,orientedFrameSize} from '../studio-ui/src/services/capturedPhotoOrientation.ts';
 assert.equal(capturedPhotoTurn(720,1280,90,-90),-90);
 assert.equal(capturedPhotoTurn(720,1280,270,90),90);
 assert.equal(capturedPhotoTurn(720,1280,90,0),-90);
