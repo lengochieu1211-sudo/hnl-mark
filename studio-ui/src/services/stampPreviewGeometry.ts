@@ -16,6 +16,12 @@ export function paintStampPreview(canvas:HTMLCanvasElement,parent:HTMLElement,
  canvas.width=Math.max(1,Math.round(w*dpr));canvas.height=Math.max(1,Math.round(h*dpr));
  const ctx=canvas.getContext('2d');if(!ctx)return;
  const W=ref?.width&&ref.width>0?ref.width:w,H=ref?.height&&ref.height>0?ref.height:h;
- ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
+ // Match <video object-cover> and camera center-crop: a single scale factor
+ // prevents 90-degree/landscape transitions from stretching the date/time.
+ // Independent X/Y scaling corrupted Timemark whenever the viewfinder and
+ // native capture raster briefly disagreed (rotation lock / WebView resize).
+ const scale=Math.max(canvas.width/W,canvas.height/H);
+ const left=(canvas.width-W*scale)/2,top=(canvas.height-H*scale)/2;
+ ctx.setTransform(scale,0,0,scale,left,top);
  paint(ctx,W,H);
 }
