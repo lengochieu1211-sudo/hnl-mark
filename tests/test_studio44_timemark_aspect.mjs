@@ -13,7 +13,7 @@ function preview(box,reference){
  const [a,b,c,d,x,y]=calls[0];
  assert.equal(b,0);assert.equal(c,0);
  assert.equal(a,d,'Timemark must NEVER be stretched independently on X/Y');
- assert.deepEqual(painted,reference);
+ assert.deepEqual(painted,{w:reference.width,h:reference.height});
  assert.ok(a*reference.width>=canvas.width-1e-7);
  assert.ok(d*reference.height>=canvas.height-1e-7);
  assert.ok(Math.abs(x*2+a*reference.width-canvas.width)<1e-7,'center horizontally');
