@@ -9,7 +9,11 @@ const editsSource=fs.readFileSync(path.join(__dirname,'../studio-ui/src/services
 const editsJs=ts.transpileModule(editsSource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
 const editsModule={exports:{}};
 vm.runInNewContext(editsJs,{module:editsModule,exports:editsModule.exports,Math,Map,Set,Date,console,Number,Error,Array});
-const localRequire=(name)=>{if(name==='./scannerEdits')return editsModule.exports;throw new Error('Unexpected detector import '+name);};
+const printSource=fs.readFileSync(path.join(__dirname,'../studio-ui/src/services/scannerPrintLayout.ts'),'utf8');
+const printJs=ts.transpileModule(printSource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
+const printModule={exports:{}};
+vm.runInNewContext(printJs,{module:printModule,exports:printModule.exports,Math,Map,Set,Date,console,Number,Error,Array});
+const localRequire=(name)=>{if(name==='./scannerEdits')return editsModule.exports;if(name==='./scannerPrintLayout')return printModule.exports;throw new Error('Unexpected detector import '+name);};
 const mod={exports:{}};vm.runInNewContext(js,{require:localRequire,module:mod,exports:mod.exports,Uint8Array,Int32Array,Uint8ClampedArray,Math,Map,Set,Date,console,Number,Error,Array});
 const {detectDocumentEdges}=mod.exports;
 const W=360,H=300;

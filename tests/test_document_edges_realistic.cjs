@@ -8,7 +8,11 @@ const editsSource=fs.readFileSync(path.join(__dirname,'../studio-ui/src/services
 const editsJs=ts.transpileModule(editsSource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
 const editsModule={exports:{}};
 vm.runInNewContext(editsJs,{module:editsModule,exports:editsModule.exports,Math,Map,Set,Date,console,Number,Error,Array});
-const localRequire=(name)=>{if(name==='./scannerEdits')return editsModule.exports;throw new Error('Unexpected detector import '+name);};
+const printSource=fs.readFileSync(path.join(__dirname,'../studio-ui/src/services/scannerPrintLayout.ts'),'utf8');
+const printJs=ts.transpileModule(printSource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
+const printModule={exports:{}};
+vm.runInNewContext(printJs,{module:printModule,exports:printModule.exports,Math,Map,Set,Date,console,Number,Error,Array});
+const localRequire=(name)=>{if(name==='./scannerEdits')return editsModule.exports;if(name==='./scannerPrintLayout')return printModule.exports;throw new Error('Unexpected detector import '+name);};
 const mod={exports:{}};vm.runInNewContext(js,{require:localRequire,module:mod,exports:mod.exports,Uint8Array,Uint32Array,Int32Array,Uint8ClampedArray,Float32Array,Math,Map,Set,Date,console,Number,Error,Array});
 const {detectDocumentEdges,validCorners,squareToQuadrilateral}=mod.exports;
 const inQuad=(x,y,quad)=>{let inside=false;for(let i=0,j=3;i<4;j=i++){const a=quad[i],b=quad[j];if(((a[1]>y)!==(b[1]>y))&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])inside=!inside;}return inside;};
