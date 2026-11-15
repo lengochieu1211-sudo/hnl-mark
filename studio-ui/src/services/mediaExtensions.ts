@@ -11,3 +11,20 @@ export function mediaExtension(mime:string,kind:'photo'|'video',fallbackFilename
  if(ext&&new Set(kind==='photo'?['jpg','jpeg','png','webp','heic','heif','avif','gif']:['mp4','m4v','mov','webm','3gp','ogv']).has(ext))return ext;
  return kind==='video'?'webm':'jpg';
 }
+
+/** Strictly infer a stamped ZIP entry's MIME from its extension. Older
+ * archives are accepted, but a misnamed/foreign file is never silently JPEG.
+ */
+export function stampedArchiveMime(stampedName:string,originalName:string):string{
+ const original=originalName.match(/^media\/(\d{4})\.(?:jpg|jpeg|png|webp|heic|heif|avif|gif|mp4|webm|mov|m4v|3gp|ogv)$/);
+ const stamped=stampedName.match(/^media\/(\d{4})_stamped\.(jpg|jpeg|png|webp|heic|heif|avif|gif|mp4|webm|mov|m4v|3gp|ogv)$/);
+ if(!original||!stamped||original[1]!==stamped[1])throw Error('Tệp có dấu không khớp tên ảnh/video gốc');
+ const ext=stamped[2];
+ const types:Record<string,string>={
+  jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',
+  heic:'image/heic',heif:'image/heif',avif:'image/avif',gif:'image/gif',
+  mp4:'video/mp4',webm:'video/webm',mov:'video/quicktime',m4v:'video/x-m4v',
+  '3gp':'video/3gpp',ogv:'video/ogg'
+ };
+ return types[ext];
+}

@@ -100,6 +100,9 @@ public final class MainActivity extends Activity {
     private final Map<String, SaveSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, ShareSession> shares = new ConcurrentHashMap<>();
     private final Map<String, PickedContent> pickedContents = new ConcurrentHashMap<>();
+    // Pending batch IDs are unguessable. Only an explicit JS persistence result
+    // releases the content:// URI allowlist; never infer success from evaluateJavascript.
+    private final Map<String, List<String>> pendingPickedBatches = new ConcurrentHashMap<>();
     private static final class PickedContent {
         final Uri uri;
         final String mime;
@@ -568,6 +571,10 @@ public final class MainActivity extends Activity {
 
     private void openDeviceGallery(){
         runOnUiThread(()->{
+            if(!pendingPickedBatches.isEmpty()){
+                toast("Đang nhập tệp đã chọn; hãy hoàn tất trước khi chọn lượt mới.");
+                return;
+            }
             if(fileCallback!=null){
                 toast("Hãy hoàn tất chọn tệp đang mở trước.");
                 return;
@@ -675,8 +682,27 @@ public final class MainActivity extends Activity {
             return;
         }
         if(web!=null){
-            String script="window.HNLAndroidApp?.receivePickedMedia("+media.toString()+")";
-            web.post(()->web.evaluateJavascript(script,null));
+            String batchId=UUID.randomUUID().toString();
+            List<String> tokens=new ArrayList<>();
+            for(int i=0;i<media.length();i++){
+                JSONObject item=media.optJSONObject(i);
+                if(item==null)continue;
+                Uri selectedUri=Uri.parse(item.optString("url",""));
+                if(selectedUri.getLastPathSegment()!=null)tokens.add(selectedUri.getLastPathSegment());
+            }
+            pendingPickedBatches.put(batchId,tokens);
+            String script="window.HNLAndroidApp?.receivePickedMedia("+media.toString()+","+JSONObject.quote(batchId)+")";
+            web.post(()->{
+                web.evaluateJavascript(script,null);
+                // Crashed/reloaded WebView? Never leave a permanent picker lock.
+                web.postDelayed(()->{
+                    List<String> expired=pendingPickedBatches.remove(batchId);
+                    if(expired!=null){
+                        for(String token:expired)pickedContents.remove(token);
+                        toast("Chưa xác nhận được kết quả nhập tệp. Mở Thư viện HNL để kiểm tra rồi chọn lại nếu cần.");
+                    }
+                },4L*60*1000);
+            });
         }
     }
 
@@ -733,12 +759,29 @@ public final class MainActivity extends Activity {
         super.onPause();
     }
 
+    /** Acknowledged only after the React importer has completed its IndexedDB writes.
+     * One bad file must not discard the other successfully imported originals. */
+    private void completePickedBatch(String batchId,int imported,int failed,String firstError){
+        List<String> tokens=pendingPickedBatches.remove(batchId);
+        if(tokens==null)return; // Ignore duplicate/forged/stale acknowledgements.
+        for(String token:tokens)pickedContents.remove(token);
+        String feedback="Đã nhập "+Math.max(0,imported)+"/"+tokens.size()+" ảnh/video vào HNL Mark";
+        if(failed>0){
+            String reason=firstError==null?"":firstError.replaceAll("[\r\n]"," ");
+            if(reason.length()>90)reason=reason.substring(0,90);
+            feedback+="; lỗi "+failed+" tệp"+(reason.isEmpty()?"":": "+reason);
+        }
+        toast(feedback);
+    }
+
     @Override protected void onDestroy() {
         if(cameraOrientationListener!=null)cameraOrientationListener.disable();
         if(displayManager!=null&&displayRotationListener!=null)
             displayManager.unregisterDisplayListener(displayRotationListener);
         for (String token : new ArrayList<>(sessions.keySet())) abortSession(token);
         for (String token : new ArrayList<>(shares.keySet())) abortShareFile(token);
+        pendingPickedBatches.clear();
+        pickedContents.clear();
         if (web != null) {
             web.loadUrl("about:blank");
             web.destroy();
@@ -999,6 +1042,9 @@ public final class MainActivity extends Activity {
             reverseDeviceAddress(token,latitude,longitude);
         }
         @JavascriptInterface public void openDeviceGallery(){MainActivity.this.openDeviceGallery();}
+        @JavascriptInterface public void pickedBatchFinished(String batchId,int imported,int failed,String firstError){
+            runOnUiThread(()->completePickedBatch(batchId,imported,failed,firstError));
+        }
         @JavascriptInterface public void chooseSaveFolder(){openSaveTreePicker();}
         @JavascriptInterface public String getSaveDestination(){return getSaveDestinationLabel();}
         @JavascriptInterface public void resetSaveFolder(){

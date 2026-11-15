@@ -2,7 +2,7 @@
 import JSZip from 'jszip';
 import type {MediaItem} from '../types/hnl';
 import {storeMediaBatchNew} from './mediaStorage';
-import {mediaExtension} from './mediaExtensions';
+import {mediaExtension,stampedArchiveMime} from './mediaExtensions';
 interface Entry {name:string;mime:string;size:number;stampedName?:string;sourceIsStamped?:boolean;meta:Omit<MediaItem,'rawBlob'|'stampedBlob'|'url'>}
 const MAX_ARCHIVE_BYTES=512*1024*1024;
 export async function createProjectZip(items:MediaItem[]):Promise<Blob>{
@@ -38,9 +38,10 @@ export async function restoreProjectZip(zipBlob:Blob):Promise<MediaItem[]>{
  const blob=new Blob([raw],{type:entry.mime});const id=`restored-${Date.now()}-${prepared.length}-${crypto.randomUUID()}`;
  let stamped:Blob|undefined;
  if(entry.stampedName){
-   if(!/^media\/\d{4}_stamped\.(jpg|mp4|webm)$/.test(entry.stampedName))throw Error('Tệp dấu sai tên');
-   const file=zip.file(entry.stampedName);if(!file)throw Error('Thiếu ảnh có dấu');
-   stamped=new Blob([await file.async('arraybuffer')],{type:entry.stampedName.endsWith('.mp4')?'video/mp4':entry.stampedName.endsWith('.webm')?'video/webm':entry.stampedName.endsWith('.png')?'image/png':entry.stampedName.endsWith('.webp')?'image/webp':'image/jpeg'});
+   const stampedMime=stampedArchiveMime(entry.stampedName,entry.name);
+   if(!stampedMime.startsWith(entry.meta?.kind==='video'?'video/':'image/'))throw Error('Ảnh/video có dấu sai định dạng');
+   const file=zip.file(entry.stampedName);if(!file)throw Error('Thiếu ảnh/video có dấu');
+   stamped=new Blob([await file.async('arraybuffer')],{type:stampedMime});
    sum+=stamped.size;if(sum>MAX_ARCHIVE_BYTES)throw Error('Vượt giới hạn giải nén');
  }
  if(!entry.meta||typeof entry.meta!=='object'||!['photo','video'].includes(entry.meta.kind)||

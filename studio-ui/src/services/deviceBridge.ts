@@ -1,5 +1,6 @@
 /** Real Android WebView MediaStore bridge. No fake Save/Share success. */
-type MediaCallback=(files:File[])=>Promise<void>;
+import {deliverPickedBatch,type PickedItem,type PickedImportSummary} from './nativePickedBatch';
+type MediaCallback=(files:File[])=>Promise<PickedImportSummary>;
 type TabCallback=(tab:string)=>void;
 let selectedCallback:MediaCallback|undefined, tabCallback:TabCallback|undefined;
 const native=()=> (window as any).HNLAndroidBridge as any;
@@ -34,14 +35,22 @@ export function setAndroidCameraActive(active:boolean){try{native()?.cameraState
 export function setupAndroidBridge(onPicked:MediaCallback,onTab:TabCallback,onBack:()=>boolean):void{
  selectedCallback=onPicked;tabCallback=onTab;
  (window as any).HNLAndroidApp={handleBack:onBack,chooseTab:(tab:string)=>tabCallback?.(tab),openGallery:pickDeviceGallery,
- receivePickedMedia:async (items:Array<{url:string,name:string,type:string}>)=>{
- if(!Array.isArray(items))return;
- for(const item of items.slice(0,30)){
- if(!/^https:\/\/appassets\.androidplatform\.net\/picked\/[a-f\d-]+$/.test(item.url))throw Error('Đường dẫn Android không hợp lệ');
- const resp=await fetch(item.url,{credentials:'same-origin',cache:'no-store'});
- if(!resp.ok)throw Error('Không đọc được '+item.name);const blob=await resp.blob();
- if(!blob.size)throw Error('Tệp rỗng');await selectedCallback?.([new File([blob],item.name,{type:item.type})]);
- }
+ receivePickedMedia:async (items:PickedItem[],batchId?:string)=>{
+   let summary:PickedImportSummary={imported:0,failed:0,errors:[]};
+   try{
+     summary=await deliverPickedBatch(items,async files=>{
+       if(!selectedCallback)throw Error('Thư viện chưa khởi tạo; xin mở lại ứng dụng');
+       return selectedCallback(files);
+     },fetch,(processed,total)=>window.dispatchEvent(new CustomEvent('hnl-studio:picker-progress',{detail:{processed,total}})));
+   }catch(error){summary={imported:0,failed:Array.isArray(items)?items.length:1,errors:[String(error)]};}
+   finally{
+     if(batchId){
+       try{native()?.pickedBatchFinished?.(batchId,summary.imported,summary.failed,summary.errors[0]||'');}
+       catch(error){console.warn('Không gửi được xác nhận nhập tệp tới Android:',error);}
+     }
+     window.dispatchEvent(new CustomEvent('hnl-studio:picker-result',{detail:summary}));
+   }
+   return summary;
  },setDeviceOrientation:(angle:number,displayAngle?:number)=>window.dispatchEvent(new CustomEvent('hnl-studio:orientation',{detail:{angle,displayAngle}})),
  saveDestinationChanged:()=>window.dispatchEvent(new Event('hnl-studio:save-destination'))};
 }

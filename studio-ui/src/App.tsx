@@ -131,7 +131,7 @@ export default function App() {
     setActiveMediaId(restored[0].id);
   };
   const importPickedFiles=async (files:File[])=>{
-    if(!files.length)return;
+    if(!files.length)return {imported:0,failed:0,errors:[] as string[]};
     const all:MediaItem[]=[];
     let imported=0;const failures:string[]=[];
     const startingSerial=watermarkConfig.photoCodeSeq;
@@ -140,7 +140,7 @@ export default function App() {
       const detectedType=file.type.startsWith('image/')||file.type.startsWith('video/')?file.type:
         /\.mov$/i.test(file.name)?'video/quicktime':/\.3gp$/i.test(file.name)?'video/3gpp':/\.m4v$/i.test(file.name)?'video/x-m4v':/\.mp4$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':
         /\.(jpg|jpeg)$/i.test(file.name)?'image/jpeg':/\.png$/i.test(file.name)?'image/png':/\.webp$/i.test(file.name)?'image/webp':/\.heic$/i.test(file.name)?'image/heic':/\.heif$/i.test(file.name)?'image/heif':'';
-      if(!detectedType)continue;
+      if(!detectedType){failures.push(file.name+': không hỗ trợ định dạng');continue;}
       const mediaFile=file.type===detectedType?file:new File([file],file.name,{type:detectedType,lastModified:file.lastModified});
       const now=new Date();
       const exifCoords=detectedType==='image/jpeg'?await readPhotoExifGps(mediaFile).catch(()=>undefined):undefined;
@@ -150,7 +150,13 @@ export default function App() {
       resolutionLabel:detectedType.startsWith('video/')?'Video thiết bị':'Ảnh thiết bị',
       sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:exifCoords||'',photoCode:captureStampCode(watermarkConfig.templateId,watermarkConfig.showPhotoCode,
         watermarkConfig.photoCodePrefix,nextPhotoSerialSequence(startingSerial,imported),createTimemarkCode()),
-      customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
+      customNote:'',templateId:watermarkConfig.templateId,
+      // Imported media must not silently switch back to Timemark when a different
+      // template was selected. Snapshot only when per-photo mode is enabled.
+      watermarkOverride:watermarkConfig.perPhotoOverrideEnabled?{
+        ...watermarkConfig,dateTimeIso:now.toISOString(),autoTime:false
+      }:undefined,
+      edits:{...DEFAULT_IMAGE_EDITS}};
       // Persist EACH original before adding to UI; native picker processes sequentially.
       await storeMedia(item);all.push(item);imported++;
       setMediaItems(old=>[item,...old]);setActiveMediaId(item.id);
@@ -161,7 +167,8 @@ export default function App() {
         try{localStorage.setItem('hnlmark-watermark-settings-v1',JSON.stringify({...next,dateTimeIso:next.autoTime?'':next.dateTimeIso}));}catch{}
         return next;});
     }
-    if(failures.length)alert(`Đã nhập ${imported}/${files.length} tệp. Các tệp lỗi vẫn còn nguyên trên máy:\n${failures.slice(0,3).join('\n')}`);
+    if(failures.length&&!isAndroidApk())alert(`Đã nhập ${imported}/${files.length} tệp. Các tệp lỗi vẫn còn nguyên trên máy:\n${failures.slice(0,3).join('\n')}`);
+    return {imported,failed:files.length-imported,errors:failures};
   };
   const pickerRef=useRef(importPickedFiles);
   pickerRef.current=importPickedFiles;
