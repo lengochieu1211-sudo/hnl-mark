@@ -15,6 +15,7 @@ import { CropRatio, ImageEdits, MediaItem, WatermarkConfig, SmartEraseDirection 
 import {createEditorPreview,clampSmartRect} from '../../services/smartErase';
 import { DEFAULT_IMAGE_EDITS } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
+import {editedRasterSize} from '../../services/stampPreviewGeometry';
 
 interface ImageEditorScreenProps {
   media: MediaItem;
@@ -49,6 +50,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
   const [previewUrl,setPreviewUrl]=useState<string>('');
   const [erasePreviewUrl,setErasePreviewUrl]=useState<string>('');
   const [imageSize,setImageSize]=useState<{w:number;h:number}>({w:4,h:3});
+  const [sourceSize,setSourceSize]=useState<{mediaId:string;width:number;height:number}|null>(null);
   const [eraseError,setEraseError]=useState('');
   const [previewBox,setPreviewBox]=useState({left:0,top:0,width:0,height:0});
 
@@ -68,6 +70,20 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
   const edits = media.edits;
   // Recreate bitmap only when a geometric/erase operation changes, never on color slider ticks.
   const structureKey=JSON.stringify([media.id,edits.smartErase||[],edits.cropRatio,edits.rotationDeg,edits.flipHorizontal]);
+  // Use the source raster (and the exact crop/rotation output dimensions) just
+  // like PhotoPreview and JPEG export. CSS preview pixels must not resize Timemark.
+  useEffect(()=>{
+    let cancelled=false;
+    setSourceSize(null);
+    const loadSourceSize=async()=>{
+      const source=media.rawBlob||await(await fetch(media.url)).blob();
+      const bitmap=await createImageBitmap(source);
+      try{if(!cancelled)setSourceSize({mediaId:media.id,width:bitmap.width,height:bitmap.height});}
+      finally{bitmap.close();}
+    };
+    void loadSourceSize().catch(()=>{/* Keep the displayed-image fallback available. */});
+    return()=>{cancelled=true;};
+  },[media.id,media.rawBlob,media.url]);
   // Always work from the ORIGINAL Blob, not the already-stamped photo URL.
   // Release every preview object URL when edits change or the editor unmounts.
   useEffect(()=>{
@@ -189,6 +205,9 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
   const scaleToFit=Math.min(stageSize.w/Math.max(1,imageSize.w),stageSize.h/Math.max(1,imageSize.h));
   const fittedW=Math.max(0,imageSize.w*scaleToFit),fittedH=Math.max(0,imageSize.h*scaleToFit);
   const imageRect={left:(stageSize.w-fittedW)/2,top:(stageSize.h-fittedH)/2,width:fittedW,height:fittedH};
+  const stampReferenceSize=sourceSize?.mediaId===media.id
+    ?editedRasterSize(sourceSize.width,sourceSize.height,edits)
+    :{width:imageSize.w,height:imageSize.h};
 
   return (
     <div className="px-4 py-3 space-y-3.5 max-w-4xl mx-auto">
@@ -252,7 +271,10 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
                 style={{filter:activeTab==='erase'?'none':`brightness(${edits.brightness??100}%) contrast(${edits.contrast??100}%) saturate(${edits.saturation??100}%)`}}
                 className="w-full h-full pointer-events-none" draggable={false}/>
               {activeTab!=='erase'&&<WatermarkOverlay
-                config={{ ...watermarkConfig, positionPreset: 'custom' }}
+                config={watermarkConfig}
+                orientationDeg={media.orientationDeg||0}
+                photoCode={media.photoCode}
+                referenceSize={stampReferenceSize}
                 draggable
                 containerRef={imageRectRef}
                 onDragPositionChange={onUpdateWatermarkPos}/>} 

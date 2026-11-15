@@ -84,6 +84,7 @@ jobs:
           node --experimental-strip-types tests/test_studio43_stamp_parity.mjs
           node --experimental-strip-types tests/test_studio44_timemark_aspect.mjs
           node --experimental-strip-types tests/test_studio45_classic_camera_stamp.mjs
+          node --experimental-strip-types tests/test_studio46_editor_stamp_parity.mjs
           node --experimental-strip-types tests/test_studio41_timemark_code.mjs
           python3 tests/test_studio41_timemark_wiring.py
           node --experimental-strip-types tests/test_studio39_pdf_cccd.mjs
