@@ -23,6 +23,6 @@ assert 'const fillScale=Math.max(canvas.width/oriented.width,canvas.height/orien
 assert 'await updateScanBatch(modified,f.id)' in scanner and 'await updateScanBatch(changes)' in scanner
 assert "db.transaction(['pages','folders'],'readwrite')" in eng
 assert 'const persistMediaRevision=' in ui and 'mediaWriteQueueRef.current.set(id,write)' in ui
-assert 'next.captureWatermark=' in ui and 'next.stampedBlob=undefined' in ui
+assert 'next.captureWatermark=' in ui and 'next.watermarkOverride=' in ui and 'next.stampedBlob=undefined' in ui
 assert 'Xem trong thư viện' in cam and 'onSaveVideo(lastRecordedVideo)' not in cam
 print('PASS TEST37: atomic restore/reorder, distinct GPS requests, shutter no GPS delay, capture geometry, serialized edits, no duplicate video save')

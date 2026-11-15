@@ -255,14 +255,17 @@ export default function App() {
   ) => {
     persistMediaRevision(id,m=>{
       const next={...m,...patch};
-      if(m.kind==='photo'&&m.captureWatermark){
-        next.captureWatermark={...m.captureWatermark,
+      if(m.kind==='photo'){
+        const stampMetadata={
           ...(patch.createdAt?{dateTimeIso:patch.createdAt,autoTime:false}:{}),
           ...(patch.location!==undefined?{locationText:patch.location}:{}),
           ...(patch.coordinates!==undefined?{coordinates:patch.coordinates}:{}),
           ...(patch.customNote!==undefined?{customNote:patch.customNote}:{})};
-        // Historical stamped pixels no longer match metadata. Future save/share
-        // re-renders from rawBlob; the original JPEG stays immutable.
+        // Captured photos retain their immutable capture preset. Imported photos
+        // have no capture preset, so keep edits in the per-photo override.
+        if(m.captureWatermark)next.captureWatermark={...m.captureWatermark,...stampMetadata};
+        else next.watermarkOverride={...m.watermarkOverride,...stampMetadata};
+        // Do not show/export an out-of-date JPEG after metadata changed.
         next.stampedBlob=undefined;
         if(m.rawBlob&&m.stampedBlob){
           next.url=URL.createObjectURL(m.rawBlob);
