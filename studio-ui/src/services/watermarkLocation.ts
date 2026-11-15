@@ -75,3 +75,46 @@ export async function readDeviceGps(timeoutMs=6000):Promise<string>{
   {enableHighAccuracy:true,timeout:timeoutMs,maximumAge:10000}
  ));
 }
+
+/** Only run Android's platform reverse geocoder after explicit user request. */
+export async function reverseDeviceGpsAddress(coordinates:string,timeoutMs=8000):Promise<string>{
+ const pair=parseGpsPair(coordinates);
+ if(!pair)throw Error('Tọa độ GPS không hợp lệ.');
+ const bridge=(window as any).HNLAndroidBridge;
+ if(!bridge?.reverseGeocode)throw Error('Thiết bị này chưa hỗ trợ tra địa chỉ tự động; hãy nhập địa chỉ thủ công.');
+ const token=`gps_1794704528037_jthefzj`;
+ return new Promise<string>((resolve,reject)=>{
+  let settled=false;
+  const done=(address:string,reason?:string)=>{
+   if(settled)return;settled=true;window.clearTimeout(timeout);
+   window.removeEventListener('hnl-studio:reverse-geocode',onAnswer);
+   if(reason)reject(Error(reason));else resolve(address);
+  };
+  const onAnswer=(event:Event)=>{
+   const result=(event as CustomEvent<{token:string;address:string}>).detail;
+   if(result?.token!==token)return;
+   done(typeof result.address==='string'?result.address.trim().slice(0,240):'');
+  };
+  window.addEventListener('hnl-studio:reverse-geocode',onAnswer);
+  const timeout=window.setTimeout(()=>done('','Hết thời gian tra địa chỉ. GPS vẫn được giữ nguyên.'),timeoutMs);
+  try{bridge.reverseGeocode(token,pair[0],pair[1]);}
+  catch{done('','Dịch vụ địa chỉ Android không hoạt động. GPS vẫn được giữ nguyên.');}
+ });
+}
+export function parseGpsPair(value:string):[number,number]|undefined{
+ const parts=value.split(',').map(p=>p.trim());
+ if(parts.length!==2||parts.some(p=>!/^[-+]?\d+(?:\.\d+)?$/.test(p)))return undefined;
+ const lat=Number(parts[0]),lon=Number(parts[1]);
+ if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return undefined;
+ return [lat,lon];
+}
+/** Reject stale addresses when a new photo GPS fix is far from the address fix. */
+export function nearbyGpsAddress(savedGps:string,currentGps:string,address:string,maxMetres=100):string{
+ const previous=parseGpsPair(savedGps),current=parseGpsPair(currentGps);
+ if(!previous||!current||!address.trim())return '';
+ const toRad=Math.PI/180;
+ const deltaLat=(current[0]-previous[0])*toRad;
+ const deltaLon=(current[1]-previous[1])*toRad;
+ const a=Math.sin(deltaLat/2)**2+Math.cos(previous[0]*toRad)*Math.cos(current[0]*toRad)*Math.sin(deltaLon/2)**2;
+ return 2*6371000*Math.asin(Math.min(1,Math.sqrt(a)))<=maxMetres?address.trim():'';
+}

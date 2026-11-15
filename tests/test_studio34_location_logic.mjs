@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import {parseGpsPair,nearbyGpsAddress,reverseDeviceGpsAddress} from '../studio-ui/src/services/watermarkLocation.ts';
+assert.deepEqual(parseGpsPair('10.813530, 106.680120'),[10.81353,106.68012]);
+for(const s of ['','999, 12','10.1','abc, 1','10, 40, 20','1e3,2'])assert.equal(parseGpsPair(s),undefined);
+assert.equal(nearbyGpsAddress('10.813530, 106.680120','10.813555, 106.680150','Đường A, Phường B'),'Đường A, Phường B');
+assert.equal(nearbyGpsAddress('10.813530, 106.680120','10.836500, 106.700000','Đường A, Phường B'),'');
+assert.equal(nearbyGpsAddress('','10.813530, 106.680120','Đường A'),'');
+const win=new EventTarget();win.setTimeout=setTimeout;win.clearTimeout=clearTimeout;
+win.HNLAndroidBridge={reverseGeocode(token,lat,lon){assert.equal(lat,10.81353);assert.equal(lon,106.68012);queueMicrotask(()=>win.dispatchEvent(new CustomEvent('hnl-studio:reverse-geocode',{detail:{token,address:'Đường A, Phường B'}})));}};
+globalThis.window=win;
+assert.equal(await reverseDeviceGpsAddress('10.813530, 106.680120'),'Đường A, Phường B');
+win.HNLAndroidBridge={reverseGeocode(token){queueMicrotask(()=>win.dispatchEvent(new CustomEvent('hnl-studio:reverse-geocode',{detail:{token,address:''}})));}};
+assert.equal(await reverseDeviceGpsAddress('10.813530, 106.680120'),'');
+console.log('PASS TEST34: parse GPS; nearby address; stale-address rejection; Android async callback; no address fallback');

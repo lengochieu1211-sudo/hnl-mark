@@ -17,7 +17,7 @@ import { HnlLogoPlaceholder } from '../common/HnlBrandMark';
 import {FONT_OPTIONS,watermarkFontFamily} from '../../services/watermarkFonts';
 import {normalizeWatermarkLogo,logoSrc} from '../../services/watermarkLogo';
 import { ImageEditorScreen } from '../editor/ImageEditorScreen';
-import {mediaWatermarkConfig,readDeviceGps} from '../../services/watermarkLocation';
+import {mediaWatermarkConfig,readDeviceGps,reverseDeviceGpsAddress} from '../../services/watermarkLocation';
 import {isAndroidApk,getSaveLocationLabel,chooseSaveLocation,clearSaveLocation} from '../../services/deviceBridge';
 
 interface StampsAndSettingsScreenProps {
@@ -47,7 +47,14 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
   const [saveLocation,setSaveLocation]=useState(()=>getSaveLocationLabel());
   const effectiveConfig=mediaWatermarkConfig(config,activeMedia);
   const fetchGps=async()=>{setGpsBusy(true);setGpsError('');try{
-    const coordinates=await readDeviceGps();onChangeConfig({locationSource:'device',coordinates});
+    const coordinates=await readDeviceGps();
+    // A new GPS fix invalidates the previous address until it is verified.
+    onChangeConfig({locationSource:'device',coordinates,locationText:''});
+    try{
+      const address=await reverseDeviceGpsAddress(coordinates);
+      if(address)onChangeConfig({locationSource:'device',coordinates,locationText:address});
+      else setGpsError('Đã lấy tọa độ nhưng Android chưa tra được địa chỉ. Có thể nhập địa chỉ thủ công.');
+    }catch(e){setGpsError(e instanceof Error?e.message:String(e));}
   }catch(e){setGpsError(e instanceof Error?e.message:String(e));}finally{setGpsBusy(false);}};
   const pickSaveFolder=()=>{chooseSaveLocation();setSaveLocation('Đang chọn thư mục trong Android…');};
   React.useEffect(()=>{const fn=()=>setSaveLocation(getSaveLocationLabel());
@@ -367,8 +374,10 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
               </p>}
               {config.locationSource==='device'&&<div className="space-y-1">
                 <button type="button" disabled={gpsBusy} onClick={()=>void fetchGps()} className="min-h-10 w-full rounded-lg bg-[#17253D] border border-[#E2B74B]/40 text-[#E2B74B] text-xs">
-                  {gpsBusy?'Đang lấy GPS…':'Lấy GPS từ điện thoại (cấp quyền khi được hỏi)'}</button>
+                  {gpsBusy?'Đang lấy GPS / địa chỉ…':isAndroidApk()?'Lấy GPS và tra địa chỉ':'Lấy GPS (Web: nhập địa chỉ)'}</button>
                 <p className="text-[11px] text-[#CBD5E1]">{config.coordinates||'Chưa có GPS; ứng dụng không tự điền tọa độ.'}</p>
+                {config.locationText&&<p className="text-[11px] text-[#E2B74B]">Địa chỉ gần đúng: {config.locationText}</p>}
+                <p className="text-[11px] text-[#94A3B8]">Địa chỉ do Android tra cứu, có thể cần mạng và không đảm bảo đúng số nhà.</p>
                 {gpsError&&<p role="alert" className="text-xs text-red-300">{gpsError}</p>}
               </div>}
               <input

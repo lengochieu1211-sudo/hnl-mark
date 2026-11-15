@@ -33,7 +33,7 @@ import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
 import {isRenderableStamp} from '../../services/stampRenderer';
 import {supportedVideoMime} from '../../services/videoFormat';
-import {readDeviceGps,mediaWatermarkConfig} from '../../services/watermarkLocation';
+import {readDeviceGps,mediaWatermarkConfig,nearbyGpsAddress} from '../../services/watermarkLocation';
 import {normalizeStampAngle,resolveStampOrientation} from '../../services/stampOrientation';
 import {capturedPhotoTurn,orientCapturedCanvas} from '../../services/capturedPhotoOrientation';
 import {isAndroidApk} from '../../services/deviceBridge';
@@ -310,6 +310,11 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       const count=burstMode?3:1;
       // Location lookup is opt-in; failure must never block the shutter.
       const shotGps=watermarkConfig.locationSource==='device'?await readDeviceGps(3500).catch(()=>undefined):undefined;
+      // A GPS-resolved address belongs to the same place, never to a new fix
+      // far away or a different photo. No reverse-geocode network call on shutter.
+      const shotAddress=watermarkConfig.locationSource==='device'
+        ?nearbyGpsAddress(watermarkConfig.coordinates,shotGps||'',watermarkConfig.locationText)
+        :watermarkConfig.locationSource==='manual'?watermarkConfig.locationText:'';
       setShutterFlash(true);window.setTimeout(()=>setShutterFlash(false),160);
       for(let i=0;i<count;i++){
         const canvas=document.createElement('canvas');canvas.width=live.videoWidth;canvas.height=live.videoHeight;
@@ -329,10 +334,10 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         const at=new Date();const item:MediaItem={id:`cam-${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}`,
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
           createdAt:at.toISOString(),resolutionLabel:`${output.width} × ${output.height}`,
-          sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationSource==='manual'?watermarkConfig.locationText:'',
+          sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:shotAddress,
           coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?previewCode:createTimemarkCode(),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:'',coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);
         setPreviewCode(createTimemarkCode());
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));

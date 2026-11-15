@@ -8,6 +8,8 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.hardware.display.DisplayManager;
 import android.graphics.Color;
+import android.location.Address;
+import android.location.Geocoder;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Build;
@@ -52,6 +54,7 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import org.json.JSONArray;
@@ -879,6 +882,44 @@ public final class MainActivity extends Activity {
         session.file.delete();
     }
 
+    /** Only the opt-in GPS button invokes this. Never geocode on every shutter press. */
+    private void finishReverseGeocode(String token, String address) {
+        if(web==null)return;
+        try {
+            JSONObject detail=new JSONObject();
+            detail.put("token",token);
+            detail.put("address",address==null?"":address);
+            String script="window.dispatchEvent(new CustomEvent('hnl-studio:reverse-geocode',{detail:"+detail.toString()+"}));";
+            web.post(()->web.evaluateJavascript(script,null));
+        }catch(Exception ignored){}
+    }
+    private String firstAddressLine(List<Address> addresses){
+        if(addresses==null||addresses.isEmpty())return "";
+        Address address=addresses.get(0);
+        if(address==null)return "";
+        String line=address.getAddressLine(0);
+        if(line==null||line.trim().isEmpty())return "";
+        return line.trim().length()>240?line.trim().substring(0,240):line.trim();
+    }
+    private void reverseDeviceAddress(String token,double lat,double lon){
+        if(token==null||!token.matches("[a-zA-Z0-9_-]{1,70}")||!Double.isFinite(lat)||!Double.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;
+        if(!Geocoder.isPresent()){finishReverseGeocode(token,"");return;}
+        try{
+            Geocoder coder=new Geocoder(this,new Locale("vi","VN"));
+            if(Build.VERSION.SDK_INT>=33){
+                coder.getFromLocation(lat,lon,1,new Geocoder.GeocodeListener(){
+                    @Override public void onGeocode(List<Address> addresses){finishReverseGeocode(token,firstAddressLine(addresses));}
+                    @Override public void onError(String message){finishReverseGeocode(token,"");}
+                });
+            }else{
+                new Thread(()->{
+                    try{finishReverseGeocode(token,firstAddressLine(coder.getFromLocation(lat,lon,1)));}
+                    catch(Exception ignored){finishReverseGeocode(token,"");}
+                },"hnl-reverse-geocode").start();
+            }
+        }catch(Exception ignored){finishReverseGeocode(token,"");}
+    }
+
     /** Exposed only to trusted appassets content; all external WebView URLs blocked. */
     public final class NativeBridge {
         @JavascriptInterface public String beginSave(String name, String mime) {
@@ -897,6 +938,9 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public boolean appendShare(String token,String chunk){return appendShareFile(token,chunk);}
         @JavascriptInterface public boolean finishShare(String token){return finishShareFile(token);}
         @JavascriptInterface public void abortShare(String token){abortShareFile(token);}
+        @JavascriptInterface public void reverseGeocode(String token,double latitude,double longitude){
+            reverseDeviceAddress(token,latitude,longitude);
+        }
         @JavascriptInterface public void openDeviceGallery(){MainActivity.this.openDeviceGallery();}
         @JavascriptInterface public void chooseSaveFolder(){openSaveTreePicker();}
         @JavascriptInterface public String getSaveDestination(){return getSaveDestinationLabel();}
