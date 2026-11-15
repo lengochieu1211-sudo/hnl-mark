@@ -20,7 +20,7 @@ assert 'camera-roll-review-attempt.png' in emu
 assert "isLandscapeViewport ? 'flex-col w-full' : 'flex-row'" in cam
 assert cam.count("isLandscapeViewport ? 'w-full px-1' : 'px-3.5'") == 2
 assert 'camera-roll-two-photos.png' in emu and 'camera-roll-swipe-older.png' in emu
-assert 'camera-roll-after-relaunch.png' in emu and 'am force-stop ${PACKAGE}' in emu
+assert 'camera-roll-after-relaunch.png' in emu and 'am force-stop ${HNL_TEST_PACKAGE}' in emu
 assert '<PhotoPreview compact media={latestItem}' in cam
 assert 'latestItem?.kind === \'video\' ? <Film' in cam
 assert "cameraReady && mode==='video' && isRecording && audioUnavailable" in cam
