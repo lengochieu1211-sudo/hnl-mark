@@ -7,6 +7,7 @@ import type { OrientationDeg, WatermarkConfig } from '../types/hnl';
 import {prepareTimemarkFont} from './timemarkRenderer';
 import {loadWatermarkLogo} from './watermarkLogo';
 import {drawConfiguredStamp,isRenderableStamp} from './stampRenderer';
+import {capturedPhotoTurn,orientedFrameSize} from './capturedPhotoOrientation';
 
 type StampedCapture = {
   stream: MediaStream;
@@ -19,6 +20,7 @@ export async function createStampedVideoCapture(
   video: HTMLVideoElement,
   config: WatermarkConfig,
   orientation: OrientationDeg | (()=>OrientationDeg),
+  physicalAngle: number,
   photoCode: string,
   lens: 'front' | 'rear',
   zoom: number,
@@ -29,9 +31,14 @@ export async function createStampedVideoCapture(
   if (video.videoWidth <= 0 || video.videoHeight <= 0 || video.readyState < 2) {
     throw new Error('Khung hình camera chưa sẵn sàng để ghi dấu.');
   }
+  // Normalize the source raster before stamping/encoding: a WebView camera
+  // may still serve portrait frames with the handset held landscape.
+  const startStampAngle=typeof orientation==='function'?orientation():orientation;
+  const turn=capturedPhotoTurn(video.videoWidth,video.videoHeight,physicalAngle,startStampAngle);
+  const dimensions=orientedFrameSize(video.videoWidth,video.videoHeight,turn);
   const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = dimensions.width;
+  canvas.height = dimensions.height;
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx || typeof canvas.captureStream !== 'function') {
     throw new Error('WebView không hỗ trợ quay video có dấu trực tiếp (CanvasCapture).');
@@ -48,17 +55,20 @@ export async function createStampedVideoCapture(
     if (now - previousFrame < 1000 / fps) return;
     previousFrame = now;
     if (video.readyState < 2) return;
+    const rawWidth=video.videoWidth, rawHeight=video.videoHeight;
     ctx.save();
-    if (lens === 'front') { ctx.translate(canvas.width, 0); ctx.scale(-1, 1); }
-    const sourceW = canvas.width / zoom, sourceH = canvas.height / zoom;
-    ctx.filter = `brightness(${brightness})`;
-    ctx.drawImage(video, (canvas.width - sourceW) / 2, (canvas.height - sourceH) / 2,
-      sourceW, sourceH, 0, 0, canvas.width, canvas.height);
+    ctx.translate(canvas.width/2,canvas.height/2);
+    ctx.rotate(turn*Math.PI/180);
+    if(lens==='front')ctx.scale(-1,1);
+    const sourceW=rawWidth/zoom, sourceH=rawHeight/zoom;
+    ctx.filter=`brightness(${brightness})`;
+    ctx.drawImage(video,(rawWidth-sourceW)/2,(rawHeight-sourceH)/2,
+      sourceW,sourceH,-rawWidth/2,-rawHeight/2,rawWidth,rawHeight);
     ctx.restore();
     if (config.templateId !== 'none') {
-      const activeOrientation=typeof orientation==='function'?orientation():orientation;
       const timestamp = config.autoTime ? {...config,dateTimeIso: toLocalTime(new Date())} : config;
-      drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,photoCode,logo);
+      // The frame is already physically upright; do not rotate its stamp twice.
+      drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode,logo);
     }
   };
   const stream = canvas.captureStream(fps);

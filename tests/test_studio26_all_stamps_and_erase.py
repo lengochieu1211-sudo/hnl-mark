@@ -26,7 +26,7 @@ assert 'isIndependentStamp(id)' in dispatch and 'isSimpleStamp(id)' in dispatch
 assert 'drawIndependentStamp' in dispatch and 'drawOriginalTimemark' in dispatch and 'drawSimpleStamp' in dispatch
 assert 'drawIndependentStamp' in photo and 'drawSimpleStamp' in photo and 'drawOriginalTimemark' in photo
 assert 'if(!isRenderableStamp(config.templateId))' in app
-assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,photoCode,logo)' in record
+assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode,logo)' in record
 assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,cfg,0,code,logo)' in importvideo
 assert 'stampImportedVideo(await getBlob(it),cfg' in export
 assert 'createTimemarkPhoto(await getBlob(it),cfg,it.photoCode,it.orientationDeg||0,it.edits)' in export
@@ -34,5 +34,5 @@ assert 'const canvas=edits?createEditedCanvas(bitmap,edits)' in photo
 assert 'applySmartErase(canvas,edits.smartErase||[])' in read('studio-ui/src/services/smartErase.ts')
 assert 'onUpdateEdits' in read('studio-ui/src/components/editor/ImageEditorScreen.tsx')
 assert 'Xóa thông minh' in read('studio-ui/src/components/editor/ImageEditorScreen.tsx')
-assert "applicationIdSuffix '.trial2530'" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2531'" in read('android/app/build.gradle')
 print(f'PASS: {len(ids)} templates have JPEG, live video, imported video dispatch; non-destructive erase and edits wired')

@@ -361,10 +361,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;
       }
       const photoCode=previewCode;
-      // Apply physical rotation only if the UI viewport itself is portrait-locked.
-      const orientation:OrientationDeg=stampOrientationRef.current;
+      // The export raster is normalized once at record start.
       const stampConfig={...watermarkConfig};
-      const capture=await createStampedVideoCapture(live,stampConfig,()=>stampOrientationRef.current,photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps);
+      const capture=await createStampedVideoCapture(live,stampConfig,()=>stampOrientationRef.current,physicalPhotoAngleRef.current,photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps);
       stampedCaptureRef.current=capture;
       const hasAudio=!!audioStreamRef.current?.getAudioTracks().some(t=>t.readyState==='live');
       const recStream=new MediaStream([...capture.stream.getVideoTracks(),...(hasAudio?audioStreamRef.current!.getAudioTracks():[])]);
@@ -387,10 +386,10 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         if(!blob.size){triggerTransientToast('Không ghi được video.');setIsFinalizing(false);return;}
         const date=new Date(),item:MediaItem={id:`video-${Date.now()}`,title:`Video HNL ${date.toLocaleString('vi-VN')}`,
           kind:'video',origin:'newly-picked',rawBlob:blob,url:URL.createObjectURL(blob),createdAt:date.toISOString(),
-          durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000)),resolutionLabel:`${videoSettings.resolution} · tối đa ${videoSettings.fps} FPS`,
+          durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000)),resolutionLabel:`${capture.width} × ${capture.height} · tối đa ${videoSettings.fps} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
           photoCode,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:orientation,captureWatermark:stampConfig,isStamped:isRenderableStamp(stampConfig.templateId)&&stampConfig.templateId!=='none',edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:0,captureWatermark:stampConfig,isStamped:isRenderableStamp(stampConfig.templateId)&&stampConfig.templateId!=='none',edits:{...DEFAULT_IMAGE_EDITS}};
         try{await onSaveVideo(item);setPreviewCode(createTimemarkCode());setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
         catch(e){triggerTransientToast('Không lưu được video gốc: '+String(e));}
         finally{setIsFinalizing(false);}

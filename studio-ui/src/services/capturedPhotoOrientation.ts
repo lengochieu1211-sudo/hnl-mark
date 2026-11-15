@@ -5,7 +5,7 @@
  * Do NOT change the already-correct live watermark rotation.
  */
 import type {OrientationDeg} from '../types/hnl';
-import {normalizeStampAngle} from './stampOrientation';
+import {normalizeStampAngle} from './stampOrientation.ts';
 export function capturedPhotoTurn(width:number,height:number,physicalAngle:number,liveStampAngle:OrientationDeg):OrientationDeg{
  if(width===height||width<=0||height<=0)return 0;
  const physical=normalizeStampAngle(physicalAngle);
@@ -19,12 +19,16 @@ export function capturedPhotoTurn(width:number,height:number,physicalAngle:numbe
  if(liveStampAngle===90||liveStampAngle===-90)return liveStampAngle;
  return physical===90?-90:physical===-90?90:90;
 }
+export function orientedFrameSize(width:number,height:number,turn:OrientationDeg):{width:number;height:number}{
+ const quarter=turn===90||turn===-90;
+ return {width:quarter?height:width,height:quarter?width:height};
+}
 export function orientCapturedCanvas(input:HTMLCanvasElement,turn:OrientationDeg):HTMLCanvasElement{
  if(turn===0)return input;
- const quarter=turn===90||turn===-90;
+ const dimensions=orientedFrameSize(input.width,input.height,turn);
  const canvas=document.createElement('canvas');
- canvas.width=quarter?input.height:input.width;
- canvas.height=quarter?input.width:input.height;
+ canvas.width=dimensions.width;
+ canvas.height=dimensions.height;
  const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không thể căn hướng ảnh chụp');
  ctx.translate(canvas.width/2,canvas.height/2);
  ctx.rotate(turn*Math.PI/180);

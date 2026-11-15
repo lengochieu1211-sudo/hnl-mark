@@ -39,10 +39,10 @@ assert 'const cleanCode=String(rawCode).replace(/^HNL(?:[-_: ]+)/i' in mark
 assert 'const baseline=clamp(y+firstH*.90' in mark
 assert 'if(config.showLogo&&logo' not in mark
 assert 'orientationDeg:0, captureWatermark:' in cam
-assert 'const orientation:OrientationDeg=stampOrientationRef.current;' in cam
+assert 'physicalPhotoAngleRef.current,photoCode,lens' in cam
 assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn}' in cam
-assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,activeOrientation,photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
+assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert '<video key={active.id} src={active.url} playsInline controls' in roll
-assert "versionCode 2530" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2530'" in read('android/app/build.gradle')
+assert "versionCode 2531" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2531'" in read('android/app/build.gradle')
 print('PASS: TEST21 imported video player / stamping / audio / unknown WebM duration / backup / rotation')

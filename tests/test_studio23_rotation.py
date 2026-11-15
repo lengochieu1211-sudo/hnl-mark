@@ -21,7 +21,7 @@ assert 'isLandscapeViewport ? 0 : orientationDeg' not in cam
 assert 'const watermarkTurn: OrientationDeg = normalizeStampAngle(orientationDeg);' in cam
 assert 'stampOrientationRef.current' in cam and '()=>stampOrientationRef.current' in cam
 assert 'orientation: OrientationDeg | (()=>OrientationDeg)' in video
-assert 'activeOrientation' in video
+assert 'const startStampAngle=' in video and 'capturedPhotoTurn(' in video
 assert 'ctx.rotate(orientation*Math.PI/180)' in simple
 assert 'ctx.translate(width,height);ctx.rotate(Math.PI)' in simple
 assert 'drawWatermarkLogo(ctx,W,H,config,logo)' in simple
