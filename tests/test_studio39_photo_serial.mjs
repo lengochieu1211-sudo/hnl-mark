@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {formattedPhotoSerial,nextPhotoSerialSequence} from '../studio-ui/src/services/photoSerial.ts';
+assert.equal(formattedPhotoSerial('HNL',1),'HNL-0001');
+assert.equal(formattedPhotoSerial('PHUONG_NHA',26),'PHUONG_NHA-0026');
+assert.equal(formattedPhotoSerial('a/b.c<script>',12345),'ABCSCRIPT-12345');
+assert.equal(formattedPhotoSerial('',0),'HNL-0001');
+assert.equal(nextPhotoSerialSequence(9,3),12);
+assert.equal(nextPhotoSerialSequence(0,1),2);
+assert.equal(nextPhotoSerialSequence(12,0),12);
+assert.equal(nextPhotoSerialSequence(Number.MAX_SAFE_INTEGER,1),Number.MAX_SAFE_INTEGER);
+console.log('PASS TEST39: photo code prefix, positive sequence, burst advancement, escape and bounds');

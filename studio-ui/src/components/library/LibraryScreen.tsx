@@ -13,6 +13,7 @@ import {
   Pencil,
   Play,
   RefreshCw,
+  RotateCcw,
   Search,
   Share2,
   Sliders,
@@ -24,6 +25,7 @@ import { LibraryStateMode, MediaItem, WatermarkConfig } from '../../types/hnl';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {PhotoPreview} from '../watermark/PhotoPreview';
 import {mediaLocalDateTime,mediaStoredDateTime} from '../../services/mediaDateTime';
+import type {TrashMediaSummary} from '../../services/mediaStorage';
 
 interface LibraryScreenProps {
   items: MediaItem[];
@@ -36,6 +38,9 @@ interface LibraryScreenProps {
     patch: Partial<Pick<MediaItem, 'createdAt' | 'location' | 'coordinates' | 'customNote' | 'photoCode' | 'title'>>,
   ) => void;
   onDeleteItems: (ids: string[]) => void;
+  trashItems: TrashMediaSummary[];
+  onRestoreTrash: (ids: string[]) => Promise<void>;
+  onPurgeExpiredTrash: () => Promise<number>;
   onRestoreBackupFile: (file:File) => Promise<void>;
   libraryLoadError?: string;
   onRetryLoad: () => Promise<void>;
@@ -53,6 +58,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   onEditMediaInEditor,
   onUpdateMediaMetadata,
   onDeleteItems,
+  trashItems,
+  onRestoreTrash,
+  onPurgeExpiredTrash,
   onRestoreBackupFile,
   libraryLoadError = '',
   onRetryLoad,
@@ -66,6 +74,8 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   const [multiSelect, setMultiSelect] = useState<boolean>(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [restoring,setRestoring]=useState(false);
+  const [showTrash,setShowTrash]=useState(false);
+  const [trashBusy,setTrashBusy]=useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState<boolean>(false);
 
   // Lightbox + Edit Stamp Modal
@@ -241,6 +251,11 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             </button>
             <button
               type="button"
+              onClick={() => {setShowActionsMenu(false);setShowTrash(v=>!v);}}
+              className="w-full min-h-[44px] px-3.5 flex items-center gap-2.5 text-left text-[#F8FAFC] hover:bg-white/[0.06]"
+            ><Trash2 className="w-4 h-4 text-[#E2B74B]"/><span>Thùng rác / Khôi phục ({trashItems.length})</span></button>
+            <button
+              type="button"
               onClick={handleBackupDownload}
               className="w-full min-h-[44px] px-3.5 flex items-center gap-2.5 text-left text-[#F8FAFC] hover:bg-white/[0.06]"
             >
@@ -262,6 +277,25 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           </div>
         )}
       </div>
+
+      {showTrash&&<section className="rounded-2xl border border-[#E2B74B]/35 bg-[#101B2D] p-3 space-y-2" data-hnl-media-trash="true">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-[#E2B74B]">Thùng rác · {trashItems.length} ảnh/video</h2>
+          <button type="button" className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng thùng rác" onClick={()=>setShowTrash(false)}><X size={17}/></button>
+        </div>
+        <p className="text-xs text-[#94A3B8]">Ảnh/video gốc còn nguyên trong thùng rác. Có thể khôi phục trong 7 ngày; các mục quá 7 ngày chỉ bị xóa khi bạn chọn dọn thùng rác.</p>
+        {trashItems.map(it=><div key={it.id} className="flex items-center gap-2 py-2 border-t border-white/10">
+          <div className="min-w-0 flex-1"><p className="truncate text-xs text-white">{it.title}</p><p className="text-[11px] text-[#94A3B8]">{it.kind==='video'?'Video':'Ảnh'} · Đã xóa {new Date(it.deletedAt).toLocaleString('vi-VN')}</p></div>
+          <button type="button" disabled={trashBusy} onClick={()=>{setTrashBusy(true);void onRestoreTrash([it.id]).then(()=>setStatusNotice('Đã khôi phục ảnh/video gốc.')).catch(e=>setStatusNotice('Không thể khôi phục: '+String(e))).finally(()=>setTrashBusy(false));}}
+            className="min-h-9 px-2 rounded-lg bg-[#17253D] text-xs text-[#E2B74B] disabled:opacity-50 flex gap-1 items-center"><RotateCcw size={14}/>Khôi phục</button>
+        </div>)}
+        {!trashItems.length&&<p className="text-xs text-[#94A3B8] py-2">Thùng rác trống.</p>}
+        {trashItems.some(it=>Date.now()-it.deletedAt>=7*24*60*60*1000)&&<button type="button" disabled={trashBusy} onClick={()=>{
+          if(!window.confirm('Xóa vĩnh viễn các tệp đã nằm trong thùng rác hơn 7 ngày? Chỉ thực hiện sau khi sao lưu ZIP nếu còn cần.'))return;
+          setTrashBusy(true);
+          void onPurgeExpiredTrash().then(n=>setStatusNotice(`Đã dọn ${n} tệp quá 7 ngày.`)).catch(e=>setStatusNotice('Không thể dọn thùng rác: '+String(e))).finally(()=>setTrashBusy(false));
+        }} className="min-h-10 px-3 rounded-lg bg-red-950/30 text-red-200 text-xs disabled:opacity-50">Dọn các tệp quá 7 ngày</button>}
+      </section>}
 
       {/* Search + Sort + Grid/List Toggle */}
       <div className="flex flex-wrap items-center gap-2">
@@ -366,14 +400,14 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             <button
               type="button"
               onClick={() => {
-                if(!window.confirm(`Xóa ${selectedIds.length} ảnh/video khỏi thư viện ứng dụng? Hành động này không thể hoàn tác. Hãy sao lưu ZIP trước nếu cần.`))return;
+                if(!window.confirm(`Chuyển ${selectedIds.length} ảnh/video vào Thùng rác? Có thể khôi phục trong 7 ngày; hãy sao lưu ZIP nếu cần chuyển APK.`))return;
                 onDeleteItems(selectedIds);
                 setSelectedIds([]);
               }}
               className="min-h-[36px] px-3 rounded-lg bg-[#EF4444]/15 text-[#EF4444] text-xs font-medium flex items-center gap-1"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Xóa
+              Vào Thùng rác
             </button>
           </div>
         </div>

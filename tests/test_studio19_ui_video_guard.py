@@ -16,7 +16,7 @@ assert 'Sao lưu & bảo vệ dữ liệu' in export
 assert 'HnlLogoPlaceholder' in logo
 assert 'FONT_FAMILIES:Record<WatermarkFontKey,string>' in read('studio-ui/src/services/watermarkFonts.ts')
 assert 'prepareTimemarkFont(config.fontKey)' in mark
-assert 'createTimemarkCode()' in cam and 'photoCode={previewCode}' in cam
+assert 'createTimemarkCode()' in cam and 'photoCode={capturePreviewCode}' in cam
 assert 'photoCode?: string;' in read('studio-ui/src/components/watermark/WatermarkOverlay.tsx')
 assert '`${cleanCode} Timemark Verified`' in mark and '${cleanCode}  |' not in mark
 assert "shield(g,f*.68,'#ffffff')" in mark
@@ -28,6 +28,6 @@ assert 'MAX_EDGE=1280' in video and 'const FPS=15' in video
 assert 'STALL_TIMEOUT_MS=12000' in video and 'window.clearInterval(stallInterval)' in video
 assert 'AbortController' in sheet and 'Hủy xử lý' in sheet
 assert 'await stampImportedVideo' in sheet and 'await onStampedMedia?.(it,blob,cfg)' in sheet
-assert "applicationIdSuffix '.trial2536'" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2537'" in read('android/app/build.gradle')
 assert 'mipmap-anydpi-v26/ic_launcher.xml' not in str(list((r/'android/app/src/main/res/mipmap-anydpi-v26').glob('*'))) if (r/'android/app/src/main/res/mipmap-anydpi-v26').exists() else True
 print('PASS: TEST21 removes icon QA; Timemark font/serial/rotation; imported-video bounds, stall detection, cancel')

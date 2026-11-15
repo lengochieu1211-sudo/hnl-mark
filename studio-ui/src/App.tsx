@@ -25,11 +25,12 @@ import { StampsAndSettingsScreen } from './components/stamps/StampsAndSettingsSc
 import { ExportScreen } from './components/export/ExportScreen';
 import { ExportActionSheet } from './components/export/ExportActionSheet';
 import { ViewportTesterModal } from './components/qa/ViewportTesterModal';
-import {storeMedia,loadMedia,removeMedia} from './services/mediaStorage';
+import {storeMedia,loadMedia,removeMedia,listTrashedMedia,restoreTrashedMedia,purgeExpiredTrash,type TrashMediaSummary} from './services/mediaStorage';
 import {restoreProjectZip} from './services/projectBackup';
 import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
 import {mediaExtension} from './services/mediaExtensions';
 import { createTimemarkPhoto,createTimemarkCode } from './services/timemarkRenderer';
+import {formattedPhotoSerial,nextPhotoSerialSequence} from './services/photoSerial';
 import {isRenderableStamp} from './services/stampRenderer';
 import {mediaWatermarkConfig,readPhotoExifGps} from './services/watermarkLocation';
 
@@ -48,6 +49,7 @@ export default function App() {
   const backRef=useRef<()=>boolean>(()=>false);
   const [libraryReady,setLibraryReady]=useState(false);
   const [libraryLoadError,setLibraryLoadError]=useState('');
+  const [trashItems,setTrashItems]=useState<TrashMediaSummary[]>([]);
   const savedIds=useRef(new Set<string>());
   const restoreInput=useRef<HTMLInputElement|null>(null);
   const [stampsSubTab, setStampsSubTab] = useState<'templates' | 'customize' | 'editor'>('templates');
@@ -57,6 +59,7 @@ export default function App() {
   const mediaSnapshotRef=useRef<MediaItem[]>(INITIAL_MEDIA_ITEMS);
   const pendingMediaRef=useRef(new Map<string,MediaItem>());
   const mediaWriteQueueRef=useRef(new Map<string,Promise<void>>());
+  const deletingMediaIdsRef=useRef(new Set<string>());
   // The displayed media and persisted media share the same revision stream.
   useEffect(()=>{mediaSnapshotRef.current=mediaItems;},[mediaItems]);
 
@@ -107,11 +110,13 @@ export default function App() {
     }).catch(err=>{console.error('Không đọc được thư viện:',err);if(alive)setLibraryLoadError(String(err));}).finally(()=>{if(alive)setLibraryReady(true);});
     return ()=>{alive=false};
   },[]);
+  useEffect(()=>{void listTrashedMedia().then(setTrashItems).catch(error=>console.warn('Chưa thể đọc thùng rác:',error));},[]);
   const retryLibraryLoad=async()=>{
     setLibraryReady(false);
     try{
       const recovered=(await loadMedia()).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
       setMediaItems(recovered);
+      setTrashItems(await listTrashedMedia());
       setActiveMediaId(recovered[0]?.id||'');
       setLibraryLoadError('');
     }catch(error){
@@ -128,6 +133,7 @@ export default function App() {
     if(!files.length)return;
     const all:MediaItem[]=[];
     let imported=0;const failures:string[]=[];
+    const startingSerial=watermarkConfig.photoCodeSeq;
     for(const [i,file] of files.entries()){
       try{
       const detectedType=file.type.startsWith('image/')||file.type.startsWith('video/')?file.type:
@@ -141,14 +147,20 @@ export default function App() {
       title:file.name.replace(/\.[^/.]+$/,'')||'Tệp mới chọn',kind:detectedType.startsWith('video/')?'video':'photo',
       origin:'newly-picked',url:URL.createObjectURL(mediaFile),rawBlob:mediaFile,createdAt:now.toISOString(),
       resolutionLabel:detectedType.startsWith('video/')?'Video thiết bị':'Ảnh thiết bị',
-      sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:exifCoords||'',photoCode:createTimemarkCode(),
+      sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:exifCoords||'',photoCode:watermarkConfig.showPhotoCode
+        ?formattedPhotoSerial(watermarkConfig.photoCodePrefix,nextPhotoSerialSequence(startingSerial,imported))
+        :createTimemarkCode(),
       customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
       // Persist EACH original before adding to UI; native picker processes sequentially.
       await storeMedia(item);all.push(item);imported++;
       setMediaItems(old=>[item,...old]);setActiveMediaId(item.id);
       }catch(error){failures.push(file.name+': '+String(error));}
     }
-    if(all.length){setRoute('library');}
+    if(all.length){setRoute('library');
+      setWatermarkConfig(prev=>{const next={...prev,photoCodeSeq:nextPhotoSerialSequence(prev.photoCodeSeq,imported)};
+        try{localStorage.setItem('hnlmark-watermark-settings-v1',JSON.stringify({...next,dateTimeIso:next.autoTime?'':next.dateTimeIso}));}catch{}
+        return next;});
+    }
     if(failures.length)alert(`Đã nhập ${imported}/${files.length} tệp. Các tệp lỗi vẫn còn nguyên trên máy:\n${failures.slice(0,3).join('\n')}`);
   };
   const pickerRef=useRef(importPickedFiles);
@@ -202,7 +214,11 @@ export default function App() {
     }
     setMediaItems(prev=>[item,...prev]);
     setActiveMediaId(item.id);
-    setWatermarkConfig(prev=>({...prev,photoCodeSeq:prev.photoCodeSeq+1}));
+    setWatermarkConfig(prev=>{
+      const next={...prev,photoCodeSeq:nextPhotoSerialSequence(prev.photoCodeSeq)};
+      try{localStorage.setItem('hnlmark-watermark-settings-v1',JSON.stringify({...next,dateTimeIso:next.autoTime?'':next.dateTimeIso}));}catch{}
+      return next;
+    });
     if(isAndroidApk()&&item.stampedBlob&&(item.isStamped||(newPhoto.captureWatermark||watermarkConfig).templateId==='none')){
       try{await saveToDevice(item.stampedBlob,`HNLMark_${item.isStamped?'Timemark':'NoStamp'}_${Date.now()}.jpg`);}
       catch(e){alert('Ảnh có dấu còn trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
@@ -214,6 +230,11 @@ export default function App() {
     savedIds.current.add(newVideo.id);
     setMediaItems(prev=>[newVideo,...prev]);
     setActiveMediaId(newVideo.id);
+    setWatermarkConfig(prev=>{
+      const next={...prev,photoCodeSeq:nextPhotoSerialSequence(prev.photoCodeSeq)};
+      try{localStorage.setItem('hnlmark-watermark-settings-v1',JSON.stringify({...next,dateTimeIso:next.autoTime?'':next.dateTimeIso}));}catch{}
+      return next;
+    });
     if(isAndroidApk()&&newVideo.rawBlob){
       try{await saveToDevice(newVideo.rawBlob,`HNLMark_${newVideo.isStamped?'Timemark':'NoStamp'}_${Date.now()}.${mediaExtension(newVideo.rawBlob.type,'video')}`);}
       catch(e){alert('Video có dấu vẫn trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
@@ -226,6 +247,7 @@ export default function App() {
   };
 
   const persistMediaRevision=(id:string,transform:(item:MediaItem)=>MediaItem)=>{
+    if(deletingMediaIdsRef.current.has(id))return; // no new writes after deletion begins
     const current=pendingMediaRef.current.get(id)||mediaSnapshotRef.current.find(item=>item.id===id);
     if(!current)return;
     const updated=transform(current);
@@ -304,11 +326,36 @@ export default function App() {
   };
 
   const handleDeleteItems = async(ids:string[])=>{
+    const unique=[...new Set(ids)].filter(id=>!deletingMediaIdsRef.current.has(id));
+    if(!unique.length)return;
+    // Take the lock synchronously, before any await. UI edit callbacks cannot
+    // enqueue a stale revision after the pending-write snapshot is taken.
+    unique.forEach(id=>deletingMediaIdsRef.current.add(id));
     try{
-      await removeMedia(ids);
-      setMediaItems(prev=>prev.filter(m=>!ids.includes(m.id)));
-      if(ids.includes(activeMediaId))setActiveMediaId(mediaItems.find(m=>!ids.includes(m.id))?.id||'');
-    }catch(e){alert('Không xóa được ảnh/video; thư viện đang được giữ nguyên: '+String(e));}
+      await Promise.all(unique.map(id=>mediaWriteQueueRef.current.get(id)).filter((p):p is Promise<void>=>!!p));
+      await removeMedia(unique); // atomic active→trash transaction
+      unique.forEach(id=>{pendingMediaRef.current.delete(id);mediaWriteQueueRef.current.delete(id);});
+      mediaSnapshotRef.current=mediaSnapshotRef.current.filter(item=>!unique.includes(item.id));
+      setMediaItems(prev=>prev.filter(item=>!unique.includes(item.id)));
+      if(unique.includes(activeMediaId))setActiveMediaId(mediaSnapshotRef.current[0]?.id||'');
+      // A failed trash counter refresh cannot undo a successful IDB move.
+      try{setTrashItems(await listTrashedMedia());}
+      catch(error){console.warn('Đã chuyển ảnh vào thùng rác nhưng không tải được số lượng:',error);}
+    }catch(e){alert('Không thể chuyển vào thùng rác. Ảnh/video vẫn giữ nguyên: '+String(e));}
+    finally{unique.forEach(id=>deletingMediaIdsRef.current.delete(id));}
+  };
+  const handleRestoreTrash=async(ids:string[])=>{
+    const restored=await restoreTrashedMedia(ids);
+    if(!restored.length)throw Error('Không tìm thấy tệp cần khôi phục.');
+    setMediaItems(prev=>[...restored,...prev].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)));
+    setActiveMediaId(restored[0].id);
+    setTrashItems(await listTrashedMedia());
+  };
+
+  const handlePurgeExpiredTrash=async()=>{
+    const count=await purgeExpiredTrash();
+    setTrashItems(await listTrashedMedia());
+    return count;
   };
 
   const openExportSheet = (targets: MediaItem[]) => {
@@ -430,6 +477,9 @@ export default function App() {
                 }}
                 onUpdateMediaMetadata={handleUpdateMediaMetadata}
                 onDeleteItems={handleDeleteItems}
+                trashItems={trashItems}
+                onRestoreTrash={handleRestoreTrash}
+                onPurgeExpiredTrash={handlePurgeExpiredTrash}
                 onRestoreBackupFile={restoreLibraryZip}
                 libraryLoadError={libraryLoadError}
                 onRetryLoad={retryLibraryLoad}

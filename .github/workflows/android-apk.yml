@@ -72,6 +72,9 @@ jobs:
           TZ=Asia/Ho_Chi_Minh node --experimental-strip-types tests/test_studio38_date_audio_media.mjs
           node --experimental-strip-types tests/test_studio37_camera_geometry.mjs
           python3 tests/test_studio37_safety.py
+          python3 tests/test_studio39_trash_and_native_capture.py
+          node --experimental-strip-types tests/test_studio39_photo_serial.mjs
+          node --experimental-strip-types tests/test_studio39_pdf_cccd.mjs
           python3 tests/test_logo_fonts_test20.py
           python3 tests/test_document_scanner_source.py
           python3 tests/test_studio22_timemark_catalog.py

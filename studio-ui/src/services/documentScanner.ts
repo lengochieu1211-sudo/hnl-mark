@@ -1,3 +1,4 @@
+import {idCardPrintLayout} from './scannerPrintLayout';
 /** HNL Mark offline scanner: no network, no OCR, source blobs retained unmodified. */
 import {scanOrientedSize,drawScannerOriented,adjustScanRgb,safeScanOps,safeScanColor,
  type ScanImageOp,type ScanColorAdjust} from './scannerEdits';
@@ -465,7 +466,7 @@ export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanF
  return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không thể xuất ảnh quét')),'image/jpeg',.91));
 }
 
-export interface PdfExportOptions {paper:ScanPaper;landscape:boolean;marginMm:number;customWidthMm:number;customHeightMm:number;twoPerPage:boolean;}
+export interface PdfExportOptions {paper:ScanPaper;landscape:boolean;marginMm:number;customWidthMm:number;customHeightMm:number;twoPerPage:boolean;idCardPrintSize?:boolean;}
 const pt=(mm:number)=>mm*72/25.4;
 const paperSize=(opts:PdfExportOptions):[number,number]=>{
  const sizes:Record<ScanPaper,[number,number]>={A4:[210,297],A5:[148,210],Letter:[215.9,279.4],custom:[clamp(opts.customWidthMm,60,420),clamp(opts.customHeightMm,60,594)]};
@@ -495,8 +496,19 @@ export async function createScannerPdf(images:Blob[],opts:PdfExportOptions):Prom
   if(cellW<10||cellH<10)throw Error('Lề trang quá lớn');
   const draws:string[]=[];
   group.forEach((img,i)=>{
-   const scale=Math.min(cellW/img.w,cellH/img.h),w=img.w*scale,h=img.h*scale;
-   const x=margin+i*(cellW+gap)+(cellW-w)/2,y=margin+(cellH-h)/2;
+   let w:number,h:number,x:number,y:number;
+   if(opts.twoPerPage&&opts.idCardPrintSize){
+    // ISO/IEC 7810 ID-1 credit-card footprint (Vietnamese CCCD):
+    // print at 100% scale, not the previous fit-to-page enlargement.
+    ({w,h,x,y}=idCardPrintLayout(pw,ph,margin,group.length,gap)[i]);
+    // Never silently stretch a poor crop into an official-sized card.
+    if(Math.abs(Math.log((img.w/img.h)/(w/h)))>.12)
+     throw Error('Ảnh CCCD chưa đúng tỷ lệ 85,60 × 53,98 mm. Hãy chỉnh lại bốn góc trước khi xuất.');
+   }else{
+    const scale=Math.min(cellW/img.w,cellH/img.h);
+    w=img.w*scale;h=img.h*scale;
+    x=margin+i*(cellW+gap)+(cellW-w)/2;y=margin+(cellH-h)/2;
+   }
    draws.push(`q ${w.toFixed(3)} 0 0 ${h.toFixed(3)} ${x.toFixed(3)} ${y.toFixed(3)} cm /Im${i} Do Q\n`);
   });
   const stream=ascii(draws.join(''));

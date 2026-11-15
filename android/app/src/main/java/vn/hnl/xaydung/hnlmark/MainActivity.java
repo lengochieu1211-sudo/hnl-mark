@@ -83,6 +83,10 @@ public final class MainActivity extends Activity {
     private View fullscreenView;
     private WebChromeClient.CustomViewCallback fullscreenCallback;
     private ValueCallback<Uri[]> fileCallback;
+    // Camera fallback is a real ACTION_IMAGE_CAPTURE request, not a gallery chooser.
+    // Keep the temp capture file after returning its content URI: WebView loads it asynchronously.
+    private Uri pendingScanCaptureUri;
+    private File pendingScanCaptureFile;
     private PermissionRequest pendingMediaRequest;
     private GeolocationPermissions.Callback pendingGeoCallback;
     private String pendingGeoOrigin;
@@ -365,6 +369,22 @@ public final class MainActivity extends Activity {
                     if(type!=null&&(type.contains("zip")||type.contains("octet-stream")))isZip=true;
                 }
                 final boolean multiple=params.getMode()==FileChooserParams.MODE_OPEN_MULTIPLE;
+                // Scanner's <input accept="image/*" capture="environment"> must
+                // launch a camera app even when the WebView file chooser is native.
+                boolean imageCapture=params.isCaptureEnabled()&&!isZip;
+                if(imageCapture){
+                    boolean acceptsImage=false;
+                    for(String accepted:params.getAcceptTypes()){
+                        if(accepted!=null&&(accepted.contains("image")||accepted.contains("jpeg")))acceptsImage=true;
+                    }
+                    if(acceptsImage){
+                        if(!startScannerSystemCamera()){
+                            cancelPendingFileChooser(REQ_FILES);
+                            toast("Không mở được Camera hệ thống; hãy dùng Chọn nhiều ảnh.");
+                        }
+                        return true;
+                    }
+                }
                 showMediaSourceDialog(REQ_FILES,multiple,isZip);
                 return true;
             }
@@ -454,6 +474,33 @@ public final class MainActivity extends Activity {
         intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         return intent;
+    }
+
+    private boolean startScannerSystemCamera(){
+        File output=null;
+        try{
+            File folder=new File(getCacheDir(),"scanner_capture");
+            if(!folder.exists()&&!folder.mkdirs())return false;
+            File[] stale=folder.listFiles();
+            if(stale!=null)for(File old:stale){
+                if(old.isFile()&&old.getName().startsWith("scan_")&&
+                   System.currentTimeMillis()-old.lastModified()>24L*60L*60L*1000L)old.delete();
+            }
+            output=File.createTempFile("scan_",".jpg",folder);
+            Uri uri=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",output);
+            Intent camera=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            camera.putExtra(MediaStore.EXTRA_OUTPUT,uri);
+            camera.setClipData(ClipData.newRawUri("HNL Mark scan",uri));
+            camera.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivityForResult(camera,REQ_FILES);
+            pendingScanCaptureUri=uri;
+            pendingScanCaptureFile=output;
+            return true;
+        }catch(Exception e){
+            if(output!=null)output.delete();
+            pendingScanCaptureUri=null;pendingScanCaptureFile=null;
+            return false;
+        }
     }
 
     private boolean startDocumentPicker(int requestCode,boolean multiple,boolean zip){
@@ -599,6 +646,16 @@ public final class MainActivity extends Activity {
         }
         if(code!=REQ_FILES&&code!=REQ_NATIVE_GALLERY)return;
         List<Uri> selected=getPickedUris(resultCode,data);
+        if(code==REQ_FILES&&pendingScanCaptureUri!=null){
+            // Camera apps generally return RESULT_OK with *null* Intent data.
+            // Do not return an empty/failed JPEG as a successful scan.
+            if(resultCode==RESULT_OK&&pendingScanCaptureFile!=null&&pendingScanCaptureFile.length()>0){
+                selected.clear();selected.add(pendingScanCaptureUri);
+            }else if(pendingScanCaptureFile!=null){
+                pendingScanCaptureFile.delete();
+            }
+            pendingScanCaptureUri=null;pendingScanCaptureFile=null;
+        }
         if(code==REQ_FILES){
             ValueCallback<Uri[]> callback=fileCallback;
             fileCallback=null;

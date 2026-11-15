@@ -31,6 +31,7 @@ import {PhotoPreview} from '../watermark/PhotoPreview';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
+import {formattedPhotoSerial} from '../../services/photoSerial';
 import {isRenderableStamp} from '../../services/stampRenderer';
 import {supportedVideoMime} from '../../services/videoFormat';
 import {describeMicFailure} from '../../services/audioDiagnostics';
@@ -80,6 +81,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const photoCaptureLock=useRef(false);
   const [isPhotoCapturing,setIsPhotoCapturing]=useState(false);
   const [previewCode,setPreviewCode]=useState(()=>createTimemarkCode());
+  const capturePreviewCode=watermarkConfig.showPhotoCode
+    ?formattedPhotoSerial(watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq):previewCode;
 
   // Video state
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -363,9 +366,10 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
           createdAt:at.toISOString(),resolutionLabel:`${output.width} × ${output.height}`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:shotAddress,
-          coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?previewCode:createTimemarkCode(),
+          coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?capturePreviewCode:(watermarkConfig.showPhotoCode
+            ?formattedPhotoSerial(watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq+i):createTimemarkCode()),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,dateTimeIso:at.toISOString(),autoTime:false,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,photoCodeSeq:watermarkConfig.photoCodeSeq+i,dateTimeIso:at.toISOString(),autoTime:false,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);
         setPreviewCode(createTimemarkCode());
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
@@ -397,7 +401,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       if(streamRef.current!==stream||!stream.active){
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;
       }
-      const photoCode=previewCode;
+      const photoCode=capturePreviewCode;
       // The export raster is normalized once at record start.
       const stampConfig={...watermarkConfig};
       const capture=await createStampedVideoCapture(live,stampConfig,
@@ -781,7 +785,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           )}
 
           {/* Watermark sits cleanly ON preview without control occlusion */}
-          <WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn} photoCode={previewCode} />
+          <WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn} photoCode={capturePreviewCode} />
 
           {/* Recording live timer */}
           {isRecording && (

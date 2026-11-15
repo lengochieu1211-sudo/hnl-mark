@@ -36,7 +36,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [lensViewport,setLensViewport]=useState<{left:number;top:number}|null>(null);
  const [working,setWorking]=useState(false),[notice,setNotice]=useState(''),[problem,setProblem]=useState('');
  const [paper,setPaper]=useState<ScanPaper>('A4'),[landscape,setLandscape]=useState(false);
- const [twoPerPage,setTwoPerPage]=useState(false),[margin,setMargin]=useState(10);
+ const [twoPerPage,setTwoPerPage]=useState(false),[idCardPrintSize,setIdCardPrintSize]=useState(false),[margin,setMargin]=useState(10);
  const [customW,setCustomW]=useState(210),[customH,setCustomH]=useState(297);
  const [draggingId,setDraggingId]=useState<string|null>(null);
  // The file input's capture=environment is only a picker hint on Android WebView.
@@ -375,7 +375,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    try{const imgs:Blob[]=[];
     for(let i=0;i<chosen.length;i++){setNotice(`Đang chuẩn bị trang ${i+1}/${chosen.length}…`);imgs.push(await getProcessed(chosen[i]));}
     if(kind==='pdf'){
-     const opts:PdfExportOptions={paper,landscape,marginMm:margin,customWidthMm:customW,customHeightMm:customH,twoPerPage};
+     const opts:PdfExportOptions={paper,landscape,marginMm:margin,customWidthMm:customW,customHeightMm:customH,twoPerPage,idCardPrintSize:twoPerPage&&idCardPrintSize};
      const result=await createScannerPdf(imgs,opts);await saveToDevice(result,`HNLMark_Scan_${Date.now()}.pdf`);
     }else if(imgs.length===1){await saveToDevice(imgs[0],`HNLMark_Scan_${tidy(chosen[0].name)}.jpg`);}else{
      const zip=new JSZip();imgs.forEach((img,i)=>zip.file(`${String(i+1).padStart(2,'0')}_${tidy(chosen[i].name)}.jpg`,img));
@@ -610,6 +610,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
        <label className="text-xs">Cao (mm)<input type="number" min={60} max={594} value={customH} onChange={e=>setCustomH(Number(e.target.value))} className="block w-full mt-1 bg-[#101E32] border border-white/15 rounded-lg h-10 px-2"/></label></div>}
      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={landscape} onChange={e=>setLandscape(e.target.checked)} className="accent-[#E2B74B]"/>Khổ giấy ngang</label>
      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={twoPerPage} onChange={e=>setTwoPerPage(e.target.checked)} className="accent-[#E2B74B]"/>Hai ảnh cạnh nhau trên một trang (CCCD mặt trước/sau)</label>
+     {twoPerPage&&<label className="flex gap-2 items-start text-xs rounded-lg border border-[#E2B74B]/30 p-2 bg-[#E2B74B]/5"><input type="checkbox" checked={idCardPrintSize} onChange={e=>setIdCardPrintSize(e.target.checked)} className="accent-[#E2B74B] mt-0.5"/><span><strong>In CCCD đúng kích thước 85,60 × 53,98 mm</strong><span className="block text-[11px] text-[#94A3B8]">Ảnh scan đã cắt đúng mép thẻ; chọn in 100% / Actual size, không chọn Fit to page.</span></span></label>}
      <div className="grid grid-cols-2 gap-2"><button disabled={working||!chosen.length} onClick={()=>void exportSelected('pdf')} className="min-h-11 rounded-xl bg-[#E2B74B] text-[#071121] font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-40"><FileText size={18}/>Xuất PDF</button>
        <button disabled={working||!chosen.length} onClick={()=>void exportSelected('images')} className="min-h-11 rounded-xl bg-[#17253D] border border-white/10 text-white text-sm flex items-center justify-center gap-2 disabled:opacity-40"><FileImage size={18}/>Lưu ảnh / ZIP</button></div>
    </div>
