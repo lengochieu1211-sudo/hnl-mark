@@ -10,9 +10,11 @@ import {IndependentStampOverlay} from './IndependentStampOverlay';
 import {isIndependentStamp} from '../../services/independentStampRenderer';
 import {watermarkFontFamily} from '../../services/watermarkFonts';
 import {loadWatermarkLogo,drawWatermarkLogo} from '../../services/watermarkLogo';
+import type {StampReferenceSize} from '../../services/stampPreviewGeometry';
 
 interface WatermarkOverlayProps {
   config: WatermarkConfig;
+  referenceSize?: StampReferenceSize;
   orientationDeg?: OrientationDeg;
   photoCode?: string;
   compact?: boolean;
@@ -50,6 +52,7 @@ export function formatWatermarkDate(iso: string, format: WatermarkConfig['dateFo
 
 export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   config,
+  referenceSize,
   orientationDeg = 0,
   photoCode: timemarkCode,
   compact = false,
@@ -57,13 +60,13 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   onDragPositionChange,
   containerRef,
 }) => {
-  if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode} />;
-  if(isSimpleStamp(config.templateId))return <SimpleStampOverlay config={config} orientationDeg={orientationDeg}/>;
+  if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode}  referenceSize={referenceSize}/>;
+  if(isSimpleStamp(config.templateId))return <SimpleStampOverlay config={config} orientationDeg={orientationDeg} referenceSize={referenceSize}/>;
   if(config.templateId === 'none') return null;
   // All non-draggable previews use the same Canvas pixels as photo/video export.
   // Keep the existing draggable DOM controls in the photo editor.
   if(!draggable&&isIndependentStamp(config.templateId))
-    return <IndependentStampOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode}/>;
+    return <IndependentStampOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode} referenceSize={referenceSize}/>;
 
   const template =
     WATERMARK_TEMPLATES.find((t) => t.id === config.templateId) ?? WATERMARK_TEMPLATES[10];
