@@ -5,8 +5,7 @@ from PIL import Image
 import sys
 root=Path(__file__).resolve().parents[1]
 s=lambda file:(root/file).read_text(encoding='utf-8')
-assert "versionName '2.5.45-studio-test'" in s('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2545'" in s('android/app/build.gradle')
+__import__('version_contract').assert_build_identity()
 assert 'dock&&!apk' in s('camera-controls.js')
 assert 'getDigitalZoom' in s('camera-controls.js')
 assert 'drawSource' in s('app.js') and 'drawSource' in s('video.js')
