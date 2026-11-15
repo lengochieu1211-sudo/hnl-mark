@@ -476,7 +476,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
             <div className="flex items-center gap-3">
               <input
                 type="range"
-                min={8}
+                min={10}
                 max={32}
                 value={config.fontSizePx}
                 onChange={(e) => onChangeConfig({ fontSizePx: Number(e.target.value) })}
