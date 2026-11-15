@@ -13,7 +13,8 @@ icon=read('android/scripts/make_launcher_icon.py')
 assert 'createStampedVideoCapture(' in cam
 assert 'canvas.captureStream(fps)' in video and 'drawConfiguredStamp(ctx' in video
 assert 'new MediaStream([...capture.stream.getVideoTracks()' in cam
-assert 'getUserMedia({audio:true,video:false})' in cam
+assert 'reopenVideoWithMicrophone(' in cam
+assert 'getUserMedia({video:false,audio:true})' in read('studio-ui/src/services/cameraMicCapture.ts')
 assert 'recorder.pause()' in cam and 'recorder.resume()' in cam
 assert "aria-label={isPaused?'Tiếp tục quay video':'Tạm dừng quay video'}" in cam
 assert 'track.applyConstraints' in cam and 'pointsOfInterest' in cam

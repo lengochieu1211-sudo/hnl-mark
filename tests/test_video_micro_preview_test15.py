@@ -6,7 +6,7 @@ read=lambda p:(root/p).read_text(encoding='utf-8')
 cam=read('studio-ui/src/components/camera/CameraApkScreen.tsx')
 gradle=read('android/app/build.gradle')
 emu=read('.github/workflows/android-emulator-smoke.yml')
-for marker in ('getUserMedia({video,audio:false})','getUserMedia({audio:true,video:false})',
+for marker in ('getUserMedia({video,audio:false})','reopenVideoWithMicrophone(',
                'startPendingRef.current=true','setIsRecordingStarting(true)',
                'if(streamRef.current!==stream||!stream.active)',
                'supportedVideoMime(watermarkConfig.videoFormat',

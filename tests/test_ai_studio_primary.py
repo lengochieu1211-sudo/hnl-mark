@@ -66,5 +66,6 @@ assert 'Timemark Verified' in renderer and '100% Chân thực' in renderer
 assert "g.fillText('mark'" in renderer and "g.fillText('Time'" in renderer
 assert 'createTimemarkPhoto' in export and 'saveToDevice(blob,filename)' in export
 assert "getUserMedia({video,audio:false})" in cam
-assert "getUserMedia({audio:true,video:false})" in cam
+assert "reopenVideoWithMicrophone(" in cam
+assert "getUserMedia({video:false,audio:true})" in rd('studio-ui/src/services/cameraMicCapture.ts')
 print('PASS: AI Studio only, legacy Timemark drawn/exported inline, audio fault isolated')
