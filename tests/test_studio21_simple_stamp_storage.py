@@ -28,7 +28,7 @@ assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,cfg,0,code,logo)' in 
 assert 'Ngày giờ / Tùy chỉnh (4)' in ui and 'Vị trí chữ dấu thời gian' in ui
 assert "locationSource: 'manual'" in tpl and 'readPhotoExifGps(mediaFile)' in read('studio-ui/src/App.tsx')
 assert 'getCurrentPosition' in read('studio-ui/src/services/watermarkLocation.ts')
-assert 'GPS từ ảnh đã chọn' in ui and 'Lấy GPS từ điện thoại' in ui
+assert 'GPS từ ảnh đã chọn' in ui and 'Lấy GPS và tra địa chỉ' in ui
 assert 'ACCESS_FINE_LOCATION' in read('android/app/src/main/AndroidManifest.xml')
 assert 'onGeolocationPermissionsShowPrompt' in native
 assert 'supportedVideoMime(watermarkConfig.videoFormat' in camera
