@@ -16,8 +16,10 @@ paintStampPreview(canvas,{clientWidth:360,clientHeight:270},
 assert.equal(canvas.width,720);
 assert.equal(canvas.height,540);
 assert.deepEqual(painted,{w:4032,h:3024});
-assert.equal(applied[0][0],720/4032);
-assert.equal(applied[0][3],540/3024);
+assert.equal(applied[0][0],Math.max(720/4032,540/3024));
+assert.equal(applied[0][3],applied[0][0]);
+assert.equal(applied[0][4],(720-4032*applied[0][0])/2);
+assert.equal(applied[0][5],(540-3024*applied[0][0])/2);
 for(const name of ['OriginalTimemarkOverlay','SimpleStampOverlay','IndependentStampOverlay']){
  const c=src('studio-ui/src/components/watermark/'+name+'.tsx');
  assert.match(c,/paintStampPreview\(canvas,parent,referenceSize/);
@@ -36,7 +38,7 @@ assert.match(stamps,/max=\{32\}/);
 assert.match(stamps,/max=\{1\}/);
 const timemark=src('studio-ui/src/services/timemarkRenderer.ts');
 assert.doesNotMatch(timemark,/bgOpacity>=\.9/);
-assert.match(timemark,/if\(config.bgOpacity>0\)/);
+assert.match(timemark,/config.timemarkBackgroundEnabled===true && config.bgOpacity>0/);
 const independent=src('studio-ui/src/services/independentStampRenderer.ts');
 assert.doesNotMatch(independent,/Math.max\(\.7,cfg.bgOpacity\)/);
 assert.doesNotMatch(independent,/Math.max\(\.55,cfg.bgOpacity\)/);
