@@ -1,7 +1,7 @@
 {
   "name": "hnl-mark-studio-native",
   "private": true,
-  "version": "2.5.37-studio",
+  "version": "2.5.38-studio",
   "type": "module",
   "scripts": {
     "build": "vite build",

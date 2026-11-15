@@ -35,6 +35,7 @@ import {formattedPhotoSerial} from '../../services/photoSerial';
 import {isRenderableStamp} from '../../services/stampRenderer';
 import {supportedVideoMime} from '../../services/videoFormat';
 import {describeMicFailure} from '../../services/audioDiagnostics';
+import {openCameraWithMicrophone,isLiveMicrophone} from '../../services/cameraMicCapture';
 import {readDeviceGps,mediaWatermarkConfig,nearbyGpsAddress} from '../../services/watermarkLocation';
 import {normalizeStampAngle,resolveStampOrientation} from '../../services/stampOrientation';
 import {capturedPhotoTurn,orientCapturedCanvas} from '../../services/capturedPhotoOrientation';
@@ -131,6 +132,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [audioUnavailable,setAudioUnavailable] = useState(false);
   const [allowSilentRecording,setAllowSilentRecording]=useState(false);
   const [audioIssue,setAudioIssue]=useState('');
+  const [microphoneReady,setMicrophoneReady]=useState(false);
   useEffect(()=>{
     const apply=(data?:{angle?:number;displayAngle?:number})=>{
       const {angle,displayAngle}=data||{};
@@ -151,7 +153,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     return ()=>window.removeEventListener('hnl-studio:orientation',changed);
   },[]);
   useEffect(()=>{
-    let closed=false;setCameraReady(false);setCameraError('');setAudioUnavailable(false);
+    let closed=false;setCameraReady(false);setCameraError('');setAudioUnavailable(false);setMicrophoneReady(false);
     const start=async()=>{
       try{
         if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera WebView không khả dụng trên thiết bị này.');
@@ -161,9 +163,20 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           frameRate:{ideal:videoSettings.fps}};
         // Open camera independently from the microphone. A failed Android audio source
         // must never take away the camera preview or make VIDEO mode a black screen.
-        const stream=await navigator.mediaDevices.getUserMedia({video,audio:false});
+        // VIDEO: ask Android for camera + microphone together, not two WebView
+        // capture sessions competing for the same hardware during recording.
+        // PHOTO stays camera-only. A mic failure falls back to video preview.
+        const opened=mode==='video'
+          ?await openCameraWithMicrophone(navigator.mediaDevices,video)
+          :{stream:await navigator.mediaDevices.getUserMedia({video,audio:false}),hasLiveMicrophone:false};
+        const stream=opened.stream;
         if(closed){stream.getTracks().forEach(t=>t.stop());return;}
         streamRef.current=stream;
+        if(mode==='video'){
+          setMicrophoneReady(opened.hasLiveMicrophone);
+          setAudioUnavailable(!opened.hasLiveMicrophone);
+          setAudioIssue(opened.microphoneError?describeMicFailure(opened.microphoneError):'');
+        }else{setMicrophoneReady(false);setAudioIssue('');}
         if(liveRef.current){liveRef.current.srcObject=stream;await liveRef.current.play().catch(()=>{});}
         setCameraReady(true);setAndroidCameraActive(true);
       }catch(e){if(!closed)setCameraError(e instanceof Error?e.message:String(e));}
@@ -176,7 +189,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       setAndroidCameraActive(false);
     };
     // Resolution change requires reopening camera; never modify a stream in use for recording.
-  },[lens,videoSettings.resolution,videoSettings.fps,cameraRetryKey]);
+  },[lens,mode,videoSettings.resolution,videoSettings.fps,cameraRetryKey]);
 
 
   // GPS is prefetched ONLY when the user opted in. It must never delay the shutter.
@@ -385,19 +398,23 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       const stream=streamRef.current;if(!stream||!stream.active)throw Error('Camera chưa sẵn sàng');
       if(typeof MediaRecorder==='undefined')throw Error('WebView không hỗ trợ MediaRecorder');
       let audio:MediaStream|null=null;
-      try{
-        audio=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
-        if(!audio.getAudioTracks().some(t=>t.readyState==='live'))throw Error('Không có đường tiếng hoạt động');
-        audioStreamRef.current=audio;
-        setAudioUnavailable(false);setAudioIssue('');
-      }catch(e){
-        audio?.getTracks().forEach(t=>t.stop());
-        audioStreamRef.current=null;setAudioUnavailable(true);
-        const message=describeMicFailure(e);setAudioIssue(message);
-        triggerTransientToast('Micro: '+message);
-        // Fail closed: a silent clip must require explicit opt-in from the user.
-        if(!allowSilentRecording)throw Error(message+' Nếu cần video không tiếng, bật tùy chọn trong cài đặt quay.');
-      }
+      if(!isLiveMicrophone(stream)){
+        // Only use the old audio-only path as a fallback; it can be rejected by
+        // MIUI when another video-only session already owns the camera device.
+        try{
+          audio=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+          if(!isLiveMicrophone(audio))throw Error('Không có đường tiếng hoạt động');
+          audioStreamRef.current=audio;
+          setMicrophoneReady(true);setAudioUnavailable(false);setAudioIssue('');
+        }catch(e){
+          audio?.getTracks().forEach(t=>t.stop());
+          audioStreamRef.current=null;setMicrophoneReady(false);setAudioUnavailable(true);
+          const message=describeMicFailure(e);setAudioIssue(message);
+          triggerTransientToast('Micro: '+message);
+          // Fail closed: a silent clip must require explicit opt-in.
+          if(!allowSilentRecording)throw Error(message+' Hãy bấm Thử lại micro; chỉ bật quay không tiếng khi thật sự muốn.');
+        }
+      }else{setMicrophoneReady(true);setAudioUnavailable(false);setAudioIssue('');}
       if(streamRef.current!==stream||!stream.active){
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;
       }
@@ -408,8 +425,15 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         ()=>autoStampOrientationRef.current,()=>physicalPhotoAngleRef.current,
         photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps,aspectRatio);
       stampedCaptureRef.current=capture;
-      const hasAudio=!!audioStreamRef.current?.getAudioTracks().some(t=>t.readyState==='live');
-      const recStream=new MediaStream([...capture.stream.getVideoTracks(),...(hasAudio?audioStreamRef.current!.getAudioTracks():[])]);
+      const activeMicrophone=isLiveMicrophone(stream)?stream:audioStreamRef.current;
+      const hasAudio=isLiveMicrophone(activeMicrophone);
+      const recStream=new MediaStream([...capture.stream.getVideoTracks(),...(hasAudio?activeMicrophone!.getAudioTracks():[])]);
+      // A microphone may be disconnected while recording. Keep the recorded
+      // video frames, but notify that its audio cannot be guaranteed.
+      if(hasAudio)for(const track of recStream.getAudioTracks())track.addEventListener('ended',()=>{
+        setMicrophoneReady(false);setAudioUnavailable(true);
+        setAudioIssue('Micro đã ngắt khi đang quay. Video có thể mất tiếng từ thời điểm này.');
+      },{once:true});
       const type=supportedVideoMime(watermarkConfig.videoFormat||'auto',hasAudio);
       const rec=new MediaRecorder(recStream,{mimeType:type,videoBitsPerSecond:videoSettings.quality==='Tối đa'?8000000:videoSettings.quality==='Cao'?5000000:2500000});
       recorderRef.current=rec;chunksRef.current=[];
@@ -723,6 +747,14 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             <input type="checkbox" checked={allowSilentRecording} onChange={e=>setAllowSilentRecording(e.target.checked)} className="mt-0.5 accent-[#E2B74B]" />
             <span>Cho phép quay không tiếng khi micro lỗi (mặc định tắt). Nếu không bật, ứng dụng sẽ báo nguyên nhân và không tạo video câm.</span>
           </label>
+          <div className="flex items-center justify-between gap-2">
+            <p role="status" className={`text-xs ${microphoneReady?'text-emerald-300':'text-amber-200'}`}>
+              {microphoneReady?'Micro đã kết nối với camera (chưa kiểm chứng file có tiếng)':'Micro chưa sẵn sàng'}
+            </p>
+            <button type="button" disabled={isRecording||isRecordingStarting||isFinalizing||!cameraReady}
+              onClick={()=>{setAudioIssue('');setCameraRetryKey(v=>v+1);}}
+              className="shrink-0 min-h-9 px-2 rounded-lg border border-[#E2B74B]/40 text-xs text-[#E2B74B] disabled:opacity-40">Thử lại micro</button>
+          </div>
           {audioIssue&&<p role="alert" className="text-xs text-red-200">{audioIssue}</p>}
           <div className="space-y-1.5">
             <div className="text-[11px] text-[#94A3B8]">Mức nén &amp; Bitrate</div>

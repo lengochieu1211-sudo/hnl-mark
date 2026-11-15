@@ -68,6 +68,9 @@ jobs:
           node --experimental-strip-types tests/test_studio35_orientation_canvas.mjs
           python3 tests/test_studio36_scanner_ui.py
           node --experimental-strip-types tests/test_studio36_scanner_magnifier.mjs
+          node --experimental-strip-types tests/test_studio40_camera_mic_focus.mjs
+          python3 tests/test_studio40_scanner_live_ui.py
+          node --experimental-strip-types tests/test_studio40_scanner_live_edges.mjs
           python3 tests/test_studio38_scanner_wiring.py
           node --experimental-strip-types tests/test_studio38_scanner_edits.mjs
           TZ=Asia/Ho_Chi_Minh node --experimental-strip-types tests/test_studio38_date_audio_media.mjs

@@ -3,10 +3,12 @@ import {createPortal} from 'react-dom';
 import JSZip from 'jszip';
 import {ArrowDown,ArrowLeft,ArrowUp,Camera,Download,FileImage,FileText,Folder,FolderPlus,ImagePlus,Loader2,Move,RotateCcw,RotateCw,FlipHorizontal,FlipVertical,Save,ScanLine,Trash2,Upload,X} from 'lucide-react';
 import {saveToDevice} from '../../services/deviceBridge';
+import {scannerTapOnVideo} from '../../services/scannerFocusGeometry';
+import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scannerLiveBlendQuad,type LiveFrameRect} from '../../services/scannerLiveEdges';
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
  DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,newScanId,putScan,putScanFolder,
- removeScan,restoreScanBatch,updateScanBatch,suggestDocumentEdges,validCorners,scannerOrientedPreview,
+ removeScan,restoreScanBatch,updateScanBatch,suggestDocumentEdges,detectDocumentEdges,validCorners,scannerOrientedPreview,
  type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';
 import {scanQuadAfterOp,normalizeScanOps,safeScanOps,safeScanColor,DEFAULT_SCAN_COLOR,type ScanImageOp,type ScanColorAdjust} from '../../services/scannerEdits';
@@ -59,6 +61,10 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const scanSessionIdsRef=useRef<string[]>([]);
  const scanVideoRef=useRef<HTMLVideoElement>(null),scanStreamRef=useRef<MediaStream|null>(null);
  const scanCaptureLock=useRef(false);
+ const scanPreviewViewportRef=useRef<HTMLDivElement>(null);
+ const [scanLiveCorners,setScanLiveCorners]=useState<ScanCorners|null>(null);
+ const [scanLiveFrameRect,setScanLiveFrameRect]=useState<LiveFrameRect|null>(null);
+ const [scanLiveStatus,setScanLiveStatus]=useState<'searching'|'tracking'|'unavailable'>('searching');
  const scannerZoomTo=async(value:number)=>{
   const zoom=Math.max(1,Math.min(scanZoomMax,Math.round(value*10)/10));
   scanZoomRef.current=zoom;setScanZoom(zoom);
@@ -81,23 +87,27 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  };
  const scannerFocusAt=async(event:React.MouseEvent<HTMLVideoElement>)=>{
   if(scanDidPinchRef.current||!scanCameraReady)return;
-  const video=event.currentTarget,rect=video.getBoundingClientRect();
-  // object-contain creates letterboxes: map the *content*, not the full element.
-  const scale=Math.min(rect.width/Math.max(video.videoWidth,1),rect.height/Math.max(video.videoHeight,1));
-  const w=video.videoWidth*scale,h=video.videoHeight*scale;
-  const x=(event.clientX-rect.left-(rect.width-w)/2)/w;
-  const y=(event.clientY-rect.top-(rect.height-h)/2)/h;
-  if(x<0||x>1||y<0||y>1)return;
-  setScanFocusPoint({x,y});window.setTimeout(()=>setScanFocusPoint(null),1100);
+  const video=event.currentTarget;
+  const sensorPoint=scannerTapOnVideo(event,video.getBoundingClientRect(),video.videoWidth,video.videoHeight);
+  if(!sensorPoint)return; // Don't focus on black letterboxes.
+  const {x,y}=sensorPoint;
+  // The ring belongs to the whole clipped viewport, not the smaller raw
+  // object-contain rectangle. This also works with CSS digital zoom.
+  const parentRect=video.parentElement?.getBoundingClientRect();
+  if(parentRect?.width&&parentRect.height){
+   setScanFocusPoint({x:(event.clientX-parentRect.left)/parentRect.width,
+     y:(event.clientY-parentRect.top)/parentRect.height});
+   window.setTimeout(()=>setScanFocusPoint(null),1100);
+  }
   const track=scanStreamRef.current?.getVideoTracks()[0];
   if(!track){return;}
   const caps=track.getCapabilities?.() as MediaTrackCapabilities&{pointsOfInterest?:unknown;focusMode?:string[]} | undefined;
-  if(!caps||(!caps.pointsOfInterest&&!caps.focusMode?.includes('single-shot'))){
+  if(!caps||!caps.pointsOfInterest){
    setScanCameraNotice('Camera đang dùng lấy nét tự động; WebView không hỗ trợ chọn điểm AF.');return;
   }
   try{
-   const constraint={pointsOfInterest:[{x,y}],focusMode:'single-shot'} as unknown as MediaTrackConstraintSet;
-   await track.applyConstraints({advanced:[constraint]});setScanCameraNotice('Đã gửi yêu cầu lấy nét vào điểm chạm.');
+   const constraint={pointsOfInterest:[{x,y}],...(caps.focusMode?.includes('single-shot')?{focusMode:'single-shot'}:{})} as unknown as MediaTrackConstraintSet;
+   await track.applyConstraints({advanced:[constraint]});setScanCameraNotice('Đã yêu cầu lấy nét tại điểm chạm; camera chưa xác nhận kết quả AF.');
   }catch{setScanCameraNotice('Máy không hỗ trợ lấy nét theo điểm; vẫn dùng AF tự động.');}
  };
  const scannerPinchStart=(event:React.TouchEvent<HTMLDivElement>)=>{
@@ -163,6 +173,63 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    if(scanVideoRef.current)scanVideoRef.current.srcObject=null;
   };
  },[scanCameraOpen,cameraFacing]);
+
+ // Analyze a small downsampled live frame about once per second. Both detector
+ // passes work entirely offline. No edge is shown as "found" until two nearby
+ // estimates agree. Stop on screen close / camera swap / camera not ready.
+ useEffect(()=>{
+  setScanLiveCorners(null);setScanLiveFrameRect(null);setScanLiveStatus('searching');
+  if(!scanCameraOpen||!scanCameraReady)return;
+  let disposed=false,timeout=0,previous:ScanCorners|null=null,streak=0,misses=0;
+  const canvas=document.createElement('canvas');
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  if(!ctx){setScanLiveStatus('unavailable');return;}
+  const check=()=>{
+   if(disposed)return;
+   const video=scanVideoRef.current,viewport=scanPreviewViewportRef.current;
+   let nextDelay=1150;
+   if(video&&viewport&&video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
+    const display=scannerLiveContainRect(viewport.clientWidth,viewport.clientHeight,video.videoWidth,video.videoHeight);
+    if(display)setScanLiveFrameRect(old=>old&&Math.abs(old.left-display.left)<.5&&Math.abs(old.top-display.top)<.5&&Math.abs(old.width-display.width)<.5&&Math.abs(old.height-display.height)<.5?old:display);
+    try{
+     const factor=Math.min(1,320/Math.max(video.videoWidth,video.videoHeight));
+     const width=Math.max(80,Math.round(video.videoWidth*factor)),height=Math.max(80,Math.round(video.videoHeight*factor));
+     if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height;}
+     const crop=scannerLiveSourceCrop(video.videoWidth,video.videoHeight,scanZoomNativeRef.current?1:scanZoomRef.current);
+     ctx.filter=scanExposureNativeRef.current?'none':`brightness(${Math.max(.35,1+scanExposureRef.current*.2)})`;
+     ctx.drawImage(video,crop.left,crop.top,crop.width,crop.height,0,0,width,height);
+     ctx.filter='none';
+     const start=performance.now();
+     const found=detectDocumentEdges(ctx.getImageData(0,0,width,height),scanDocumentType);
+     if(performance.now()-start>400)nextDelay=1900;
+     if(found.confidence==='estimated'&&validCorners(found.corners)){
+      misses=0;
+      if(previous&&scannerLiveQuadDelta(previous,found.corners)<.085){
+       streak++;
+       if(streak>=2){
+        setScanLiveCorners(old=>old?scannerLiveBlendQuad(old,found.corners):found.corners);
+        setScanLiveStatus('tracking');
+       }
+      }else{
+       streak=1;setScanLiveCorners(null);setScanLiveStatus('searching');
+      }
+      previous=found.corners;
+     }else{
+      previous=null;streak=0;misses++;
+      if(misses>=2){setScanLiveCorners(null);setScanLiveStatus('searching');}
+     }
+    }catch(error){
+     previous=null;streak=0;misses++;
+     if(misses>=2){setScanLiveCorners(null);setScanLiveStatus('unavailable');}
+     console.warn('Scanner live edges unavailable; manual capture remains available:',error);
+     nextDelay=2100;
+    }
+   }
+   if(!disposed)timeout=window.setTimeout(check,nextDelay);
+  };
+  timeout=window.setTimeout(check,500);
+  return()=>{disposed=true;window.clearTimeout(timeout);};
+ },[scanCameraOpen,scanCameraReady,cameraFacing,scanDocumentType]);
 
  useEffect(()=>{let alive=true;Promise.all([listScans(),listScanFolders()]).then(([p,f])=>{if(alive){setPages(p);setFolders(f);}}).catch(e=>{if(alive)setProblem('Không mở được thư viện quét: '+String(e));});return()=>{alive=false;abortProcessing.current?.abort();};},[]);
  const displayUrls=useMemo(()=>Object.fromEntries(pages.map(p=>[p.id,URL.createObjectURL(p.processed||p.original)])),[pages]);
@@ -473,14 +540,24 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
          <input type="range" aria-label="Bù sáng camera scan" min="-2" max="2" step="0.5" value={scanExposure}
           onChange={e=>void scannerExposureTo(Number(e.target.value))} className="w-full accent-[#E2B74B]"/></label>
       </div>
-      <div className="relative flex-1 min-h-0 mx-3 rounded-2xl border border-white/15 bg-black overflow-hidden flex items-center justify-center touch-none"
+      <div ref={scanPreviewViewportRef} className="relative flex-1 min-h-0 mx-3 rounded-2xl border border-white/15 bg-black overflow-hidden flex items-center justify-center touch-none"
         onTouchStart={scannerPinchStart} onTouchMove={scannerPinchMove} onTouchEnd={scannerPinchEnd} onTouchCancel={scannerPinchEnd}>
         <video ref={scanVideoRef} autoPlay muted playsInline aria-label="Khung camera quét trực tiếp"
           onClick={e=>void scannerFocusAt(e)} className="w-full h-full object-contain"
           style={{transform:!scanNativeZoom?`scale(${scanZoom})`:undefined,filter:!scanNativeExposure?`brightness(${Math.max(.35,1+scanExposure*.2)})`:undefined,transformOrigin:'center center'}}/>
         {scanFocusPoint&&<span aria-hidden="true" className="absolute rounded-full border-2 border-[#E2B74B] size-11 pointer-events-none"
           style={{left:`${scanFocusPoint.x*100}%`,top:`${scanFocusPoint.y*100}%`,transform:'translate(-50%,-50%)'}}/>}
-        <div aria-hidden="true" className={`pointer-events-none absolute border border-dashed border-[#E2B74B]/65 ${scanDocumentType==='id-card'?'w-[86%] max-h-[80%] aspect-[1.585] rounded-2xl':scanDocumentType==='paper'?'h-[80%] max-w-[80%] aspect-[0.707] rounded-lg':'inset-[8%] rounded-xl'}`}/>
+        {!scanLiveCorners&&<div aria-hidden="true" data-hnl-scan-guide="true" className={`pointer-events-none absolute border border-dashed border-[#E2B74B]/65 ${scanDocumentType==='id-card'?'w-[86%] max-h-[80%] aspect-[1.585] rounded-2xl':scanDocumentType==='paper'?'h-[80%] max-w-[80%] aspect-[0.707] rounded-lg':'inset-[8%] rounded-xl'}`}/>}
+        {scanLiveCorners&&scanLiveFrameRect&&<svg data-hnl-scan-live-edges="true" aria-label="Đã nhận diện bốn mép tài liệu trên camera" viewBox="0 0 1000 1000" preserveAspectRatio="none"
+          className="absolute pointer-events-none z-[3] overflow-visible"
+          style={{left:scanLiveFrameRect.left,top:scanLiveFrameRect.top,width:scanLiveFrameRect.width,height:scanLiveFrameRect.height}}>
+          <polygon points={scanLiveCorners.map(p=>`${p.x*1000},${p.y*1000}`).join(' ')}
+            fill="rgba(52,211,153,.10)" stroke="#34D399" strokeWidth="7" vectorEffect="non-scaling-stroke"/>
+          {scanLiveCorners.map((p,i)=><circle key={i} cx={p.x*1000} cy={p.y*1000} r="17" fill="#34D399" stroke="#071121" strokeWidth="5" vectorEffect="non-scaling-stroke"/>)}
+        </svg>}
+        <span aria-live="off" className={`absolute z-[4] left-3 bottom-3 rounded-lg px-2 py-1 text-xs pointer-events-none ${scanLiveStatus==='tracking'?'bg-emerald-900/85 text-emerald-100':'bg-black/65 text-amber-100'}`}>
+          {scanLiveStatus==='tracking'?'Đã phát hiện 4 góc · kiểm tra mép trước khi chụp':scanLiveStatus==='unavailable'?'Chưa quét mép trực tiếp được · vẫn chụp thủ công':'Đưa đủ bốn cạnh giấy vào khung để nhận diện'}
+        </span>
         {!scanCameraReady&&!scanCameraError&&<span className="absolute text-sm text-white bg-black/70 rounded-lg px-3 py-2">Đang mở camera…</span>}
         {scanCameraError&&<div role="alert" className="absolute inset-x-3 bottom-3 rounded-xl bg-[#531A21]/95 p-3 text-sm">
           <p>{scanCameraError}</p>
