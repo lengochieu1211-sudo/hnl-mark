@@ -12,6 +12,7 @@ import { TEMPLATE_CATALOG_GROUPS, WATERMARK_TEMPLATES, type TemplateCatalogCateg
 import { DEMO_IMAGES } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {PhotoPreview} from '../watermark/PhotoPreview';
+import {VideoStampPreview} from '../watermark/VideoStampPreview';
 import { AccordionSection } from '../common/AccordionSection';
 import { HnlLogoPlaceholder } from '../common/HnlBrandMark';
 import {FONT_OPTIONS,watermarkFontFamily} from '../../services/watermarkFonts';
@@ -166,7 +167,7 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
 
       {/* Live Preview Banner (Updates immediately on template/setting changes) */}
       <div className="relative h-44 sm:h-52 w-full rounded-2xl overflow-hidden bg-[#04070E] border border-white/[0.09]">
-        {activeMedia.kind==='photo'?<PhotoPreview media={activeMedia} config={effectiveConfig}/>:<video src={activeMedia.url} controls playsInline className="w-full h-full object-contain"/>}
+        {activeMedia.kind==='photo'?<PhotoPreview media={activeMedia} config={effectiveConfig}/>:<VideoStampPreview media={activeMedia} config={effectiveConfig}/>}
         {subTab==='customize'&&config.logoPosition==='custom'&&
           (config.templateId==='timemark'?config.timemarkLogoEnabled:config.showLogo)&&
           <div aria-label="Kéo để đổi vị trí logo" role="slider" aria-valuenow={config.logoCustomPos?.xPct??85}
