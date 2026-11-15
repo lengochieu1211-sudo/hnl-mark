@@ -92,7 +92,7 @@ export function drawOriginalTimemark(
  const white=config.textColor||'#ffffff',gold=config.accentColor||'#ffcf48';
  g.save();g.textAlign='left';g.textBaseline='alphabetic';g.lineJoin='round';
  // Every opacity value must affect the output (0 means no background).
-  if(config.bgOpacity>0){
+  if(config.timemarkBackgroundEnabled===true && config.bgOpacity>0){
     g.fillStyle=`rgba(4,10,17,${Math.min(.7,Math.max(0,config.bgOpacity)*.65)})`;
    rect(g,x-base*.28,y-base*.35,maxW+base*.5,blockH+base*.45,base*.22);g.fill();
  }
