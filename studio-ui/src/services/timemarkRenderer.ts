@@ -74,8 +74,20 @@ export function drawOriginalTimemark(
  const locH=address?Math.max(base*1.52,fAddress*1.45):0;
  const gap=address?base*.22:0;
  const blockH=firstH+gap+locH+comments.length*base*1.08;
- const x=clamp(.32*W-W*.295,padx,Math.max(padx,W-W*.83-padx));
- const y=clamp(.898*H-blockH*.5,pady,Math.max(pady,H-blockH-pady));
+ // Keep the approved bottom-left layout when unchanged.
+ // The position control moves the main date/time block, not the Verified code.
+ let x=clamp(.32*W-W*.295,padx,Math.max(padx,W-W*.83-padx));
+ let y=clamp(.898*H-blockH*.5,pady,Math.max(pady,H-blockH-pady));
+ switch(config.positionPreset){
+  case 'top-left':x=padx;y=pady;break;
+  case 'top-right':x=W*.42;y=pady;break;
+  case 'bottom-right':x=W*.42;y=H-blockH-pady-base*3;break;
+  case 'bottom-center':x=W*.19;break;
+  case 'custom':x=W*(config.customPos?.xPct??6)/100-W*.24;
+    y=H*(config.customPos?.yPct??76)/100-blockH/2;break;
+ }
+ x=clamp(x,padx,Math.max(padx,W-base*11-padx));
+ y=clamp(y,pady,Math.max(pady,H-blockH-pady));
  const maxW=Math.max(10,Math.min(W*.78,W-x-padx));
  const white=config.textColor||'#ffffff',gold=config.accentColor||'#ffcf48';
  g.save();g.textAlign='left';g.textBaseline='alphabetic';g.lineJoin='round';
