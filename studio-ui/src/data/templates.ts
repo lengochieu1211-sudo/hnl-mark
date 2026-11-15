@@ -258,6 +258,7 @@ export const DEFAULT_WATERMARK_CONFIG: WatermarkConfig = {
   textColor: '#F8FAFC',
   accentColor: '#E2B74B',
   bgOpacity: 0.72,
+  timemarkBackgroundEnabled: false,
   showLogo: true,
   logoSide: 'left',
   timemarkLogoEnabled: false,
