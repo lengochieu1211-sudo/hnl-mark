@@ -39,7 +39,7 @@ assert.match(mark,/g\.fillText\('mark',right/);
 assert.match(mark,/g\.fillText\('Time',right-markWidth/);
 assert.match(mark,/g\.fillText\('100% Chân thực'/);
 assert.match(mark,/Timemark Verified/);
-assert.match(camera,/referenceSize=\{cameraStampReference\}/);
+assert.doesNotMatch(camera,/referenceSize=\{cameraStampReference\}/);
 assert.match(video,/const fillScale=Math\.max\(canvas\.width\/oriented\.width,canvas\.height\/oriented\.height\)/,
  'Video canvas must preserve uniform sensor pixel ratio during rotation');
 assert.match(video,/ctx\.scale\(fillScale,fillScale\)/);

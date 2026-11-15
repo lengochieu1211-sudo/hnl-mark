@@ -38,8 +38,8 @@ import {describeMicFailure} from '../../services/audioDiagnostics';
 import {openCameraWithMicrophone,isLiveMicrophone} from '../../services/cameraMicCapture';
 import {readDeviceGps,mediaWatermarkConfig,nearbyGpsAddress} from '../../services/watermarkLocation';
 import {normalizeStampAngle,resolveStampOrientation} from '../../services/stampOrientation';
-import {capturedPhotoTurn,orientCapturedCanvas,orientedFrameSize} from '../../services/capturedPhotoOrientation';
-import {cropCapturedCanvas,cameraCenterCrop,outputAspect} from '../../services/cameraFrameGeometry';
+import {capturedPhotoTurn,orientCapturedCanvas} from '../../services/capturedPhotoOrientation';
+import {cropCapturedCanvas} from '../../services/cameraFrameGeometry';
 import {isAndroidApk} from '../../services/deviceBridge';
 
 interface CameraApkScreenProps {
@@ -489,18 +489,10 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     return { width: '100%', height: '100%' };
   };
 
-  // Preview canvas must use the same cropped native raster that toBlob exports.
-  // Otherwise font clamping on CSS pixels inflates/shrinks Timemark at save.
-  const videoW=liveRef.current?.videoWidth||0,videoH=liveRef.current?.videoHeight||0;
-  const previewRasterTurn=videoW>0&&videoH>0&&isAndroidApk()
-    ?capturedPhotoTurn(videoW,videoH,physicalPhotoAngleRef.current,autoStampOrientationRef.current):0;
-  const orientedRaster=orientedFrameSize(videoW,videoH,previewRasterTurn);
-  const framedRaster=orientedRaster.width>0&&orientedRaster.height>0
-    ?cameraCenterCrop(orientedRaster.width,orientedRaster.height,
-      outputAspect(aspectRatio,orientedRaster.width,orientedRaster.height)):undefined;
-  const cameraStampReference=framedRaster
-    ?{width:Math.max(1,Math.round(framedRaster.width)),height:Math.max(1,Math.round(framedRaster.height))}
-    :undefined;
+  // TEST45: restore the approved TEST35 live camera watermark geometry.
+  // Draw at the viewfinder's visible size; do not normalize typography to
+  // camera sensor pixels. JPEG/video export still use their own full raster.
+  // Uniform canvas scaling still guards against distortion during rotation.
   const watermarkTurn: OrientationDeg = normalizeStampAngle(orientationDeg);
   const iconRotationStyle: React.CSSProperties = {
     transform: isLandscapeViewport ? 'none' : `rotate(${orientationDeg}deg)`,
@@ -832,7 +824,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
 
           {/* Watermark sits cleanly ON preview without control occlusion */}
           <WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn}
-            photoCode={capturePreviewCode} referenceSize={cameraStampReference}/>
+            photoCode={capturePreviewCode}/>
 
           {/* Recording live timer */}
           {isRecording && (
