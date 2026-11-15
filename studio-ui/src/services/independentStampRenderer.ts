@@ -38,7 +38,7 @@ function line(g:CanvasRenderingContext2D,text:string,x:number,y:number,max:numbe
 }
 function colorBackground(g:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,opacity:number,r:number){
  if(opacity<=0)return;
- g.fillStyle=`rgba(9,19,36,${clamp(opacity,.08,.93)})`;
+ g.fillStyle=`rgba(9,19,36,${clamp(opacity,0,1)})`;
  g.beginPath();g.roundRect(x,y,w,h,Math.min(r,w/3,h/3));g.fill();
 }
 function locate(config:WatermarkConfig,W:number,H:number,w:number,h:number,pad:number){
@@ -73,7 +73,7 @@ function paintBody(g:CanvasRenderingContext2D,W:number,H:number,cfg:WatermarkCon
    const h=(lines+1)*lineH+p*2;
    // CSS preview uses full-width footer regardless of selected corner.
    const y=H-h;
-   colorBackground(g,0,y,W,h,Math.max(.7,cfg.bgOpacity),0);
+   colorBackground(g,0,y,W,h,cfg.bgOpacity,0);
    set(fontSize*.95,700,white);line(g,cfg.customTitle||template.name,outer+p,y+p+lineH*.65,W*.45);
    set(fontSize*.93,700,accent);line(g,date.full,W-outer-p,y+p+lineH*.65,W*.49,'right');
    set(fontSize*.85,400,'#E2E8F0');line(g,loc,outer+p,y+p+lineH*1.75,W-2*(outer+p));
@@ -82,7 +82,7 @@ function paintBody(g:CanvasRenderingContext2D,W:number,H:number,cfg:WatermarkCon
    const w=Math.min(W-outer*2,Math.max(W*.39,fontSize*16));
    const h=lineH*2.9+p*2;
    const {x,y}=locate(cfg,W,H,w,h,outer);
-   colorBackground(g,x,y,w,h,Math.max(.55,cfg.bgOpacity),fontSize*.65);
+   colorBackground(g,x,y,w,h,cfg.bgOpacity,fontSize*.65);
    set(fontSize*1.35,800,accent);line(g,date.time,x+p,y+p+lineH*.70,w-2*p);
    set(fontSize*.89,500,white);line(g,date.date+(serial?' · '+serial:''),x+p,y+p+lineH*1.78,w-2*p);
    set(fontSize*.75,400,'#CBD5E1');line(g,loc,x+p,y+p+lineH*2.6,w-2*p);
