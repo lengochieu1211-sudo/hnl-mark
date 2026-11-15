@@ -274,20 +274,25 @@ export default function App() {
   /** Per-photo settings must be persisted on that item's own record, never in
    * the global template. Keep captured original source and undo stale stamps. */
   const updateSelectedStampConfig=(patch:Partial<WatermarkConfig>)=>{
-    if(patch.perPhotoOverrideEnabled!==undefined||patch.photoCodeSeq!==undefined||patch.photoCodePrefix!==undefined||
-       !watermarkConfig.perPhotoOverrideEnabled||!activeMedia||activeMedia.id==='no-media'){
+    if(patch.perPhotoOverrideEnabled!==undefined||patch.photoCodeSeq!==undefined||patch.photoCodePrefix!==undefined){
       updateWatermarkConfig(patch);return;
     }
+    if(!activeMedia||activeMedia.id==='no-media'){updateWatermarkConfig(patch);return;}
+    // Shared mode also changes future captures; preserve a per-media override for
+    // the selected original so its immutable captureWatermark cannot mask edits.
+    if(!watermarkConfig.perPhotoOverrideEnabled)updateWatermarkConfig(patch);
     if(activeMedia.kind==='video'&&activeMedia.isStamped&&!activeMedia.stampedBlob){
       alert('Video ghi bằng camera đã chèn dấu trực tiếp, chưa có bản raw không dấu để thay đổi mẫu. Hãy giữ nguyên bản gốc.');return;
     }
     persistMediaRevision(activeMedia.id,m=>{
       let url=m.url;
-      if(m.kind==='photo'&&m.rawBlob&&m.stampedBlob){
+      // Invalidate previously encoded imported video as well as photo previews.
+      if(m.rawBlob&&m.stampedBlob){
         url=URL.createObjectURL(m.rawBlob);
         const old=m.url;window.setTimeout(()=>URL.revokeObjectURL(old),10000);
       }
-      return {...m,watermarkOverride:{...m.watermarkOverride,...patch},stampedBlob:undefined,url};
+      return {...m,watermarkOverride:{...m.watermarkOverride,...patch},
+        stampedBlob:undefined,stampedConfig:undefined,url};
     });
   };
   const selectedStampConfig=activeMedia?{...mediaWatermarkConfig(watermarkConfig,activeMedia),perPhotoOverrideEnabled:watermarkConfig.perPhotoOverrideEnabled}:watermarkConfig;
