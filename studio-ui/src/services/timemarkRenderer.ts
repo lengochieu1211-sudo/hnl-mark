@@ -79,8 +79,9 @@ export function drawOriginalTimemark(
  const maxW=Math.max(10,Math.min(W*.78,W-x-padx));
  const white=config.textColor||'#ffffff',gold=config.accentColor||'#ffcf48';
  g.save();g.textAlign='left';g.textBaseline='alphabetic';g.lineJoin='round';
- if(config.bgOpacity>0&&config.bgOpacity>=.9){
-   g.fillStyle=`rgba(4,10,17,${Math.min(.7,config.bgOpacity*.45)})`;
+ // Every opacity value must affect the output (0 means no background).
+  if(config.bgOpacity>0){
+    g.fillStyle=`rgba(4,10,17,${Math.min(.7,Math.max(0,config.bgOpacity)*.65)})`;
    rect(g,x-base*.28,y-base*.35,maxW+base*.5,blockH+base*.45,base*.22);g.fill();
  }
  g.shadowColor='rgba(0,0,0,.74)';g.shadowBlur=base*.19;g.shadowOffsetY=base*.095;
