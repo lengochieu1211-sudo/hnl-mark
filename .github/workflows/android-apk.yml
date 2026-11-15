@@ -65,6 +65,8 @@ jobs:
           node --experimental-strip-types tests/test_studio34_location_logic.mjs
           python3 tests/test_studio35_ui_and_orientation_contract.py
           node --experimental-strip-types tests/test_studio35_orientation_canvas.mjs
+          python3 tests/test_studio36_scanner_ui.py
+          node --experimental-strip-types tests/test_studio36_scanner_magnifier.mjs
           python3 tests/test_logo_fonts_test20.py
           python3 tests/test_document_scanner_source.py
           python3 tests/test_studio22_timemark_catalog.py

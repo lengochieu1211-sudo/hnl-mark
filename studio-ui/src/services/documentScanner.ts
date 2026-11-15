@@ -35,6 +35,25 @@ export const putScan=(p:ScanPage)=>transact<void>('pages','readwrite',(s,done)=>
 export const removeScan=(id:string)=>transact<void>('pages','readwrite',(s,done)=>{s.delete(id);done();});
 export const putScanFolder=(f:ScanFolder)=>transact<void>('folders','readwrite',(s,done)=>{s.put(f);done();});
 export const removeScanFolder=(id:string)=>transact<void>('folders','readwrite',(s,done)=>{s.delete(id);done();});
+/** Restore every scanned page and folder in ONE IndexedDB transaction. If any
+ * image fails to be stored (quota, ID collision, corruption), the transaction
+ * rolls back completely and existing user scans remain untouched. */
+export async function restoreScanBatch(folders:ScanFolder[],pages:ScanPage[]):Promise<void>{
+ const db=await database();
+ return new Promise<void>((resolve,reject)=>{
+  const tx=db.transaction(['folders','pages'],'readwrite');
+  tx.oncomplete=()=>{db.close();resolve();};
+  tx.onabort=()=>{db.close();reject(tx.error||new Error('Khôi phục scan thất bại; đã hoàn tác toàn bộ dữ liệu mới'));};
+  tx.onerror=()=>{};
+  try{
+   const folderStore=tx.objectStore('folders'),pageStore=tx.objectStore('pages');
+   // add, not put: never overwrite pre-existing items on a rare ID collision.
+   for(const folder of folders)folderStore.add(folder);
+   for(const page of pages)pageStore.add(page);
+  }catch(error){try{tx.abort();}catch{/* transaction already finished */}}
+ });
+}
+
 
 async function openBitmap(blob:Blob):Promise<ImageBitmap>{
  if(!blob.size)throw Error('Ảnh đầu vào trống');
