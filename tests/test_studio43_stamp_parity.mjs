@@ -43,4 +43,8 @@ assert.doesNotMatch(independent,/Math.max\(\.55,cfg.bgOpacity\)/);
 const video=src('studio-ui/src/components/watermark/VideoStampPreview.tsx');
 assert.match(video,/1280\/Math.max/);
 assert.match(video,/burnedCameraVideo/);
+const camera=src('studio-ui/src/components/camera/CameraApkScreen.tsx');
+assert.match(camera,/const cameraStampReference=framedRaster/);
+assert.match(camera,/referenceSize=\\{cameraStampReference\\}/);
+assert.match(camera,/cropCapturedCanvas\\(orientCapturedCanvas\\(canvas,quarter\\),aspectRatio\\)/);
 console.log('PASS TEST43: export-raster preview geometry, settings precedence, background opacity and video stamp preview');
