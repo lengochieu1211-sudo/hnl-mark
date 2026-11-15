@@ -34,7 +34,7 @@ assert 'new MediaRecorder(output' in enc and 'await completed' in enc
 assert "slice(String(reader.result).lastIndexOf(',')+1)" in read('studio-ui/src/services/deviceBridge.ts')
 assert "slice(String(reader.result).lastIndexOf(',')+1)" in read('android/android-app.js')
 assert 'URL.revokeObjectURL(src)' in enc and 'video.remove()' in enc
-assert 'stamp' in backup and '_stamped.${stampedBlob.type.startsWith' in backup
+assert 'stamp' in backup and '_stamped.${mediaExtension(stampedBlob.type,item.kind)}' in backup
 assert 'const cleanCode=String(rawCode).replace(/^HNL(?:[-_: ]+)/i' in mark
 assert 'const baseline=clamp(y+firstH*.90' in mark
 assert 'if(config.showLogo&&logo' not in mark
