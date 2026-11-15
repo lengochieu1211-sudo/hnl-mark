@@ -23,8 +23,11 @@ export function scannerPointAtPointer(pointer:ScannerViewportPoint,rect:ScannerR
 export function scannerCornerWithOffset(
  pointer:ScannerViewportPoint,rect:ScannerRect,offset:ScannerNormalizedPoint
 ):ScannerNormalizedPoint{
- const raw=scannerPointAtPointer(pointer,rect);
- return {x:clamp(raw.x+offset.x,.001,.999),y:clamp(raw.y+offset.y,.001,.999)};
+ if(!(rect.width>0&&rect.height>0))throw Error('Ảnh scan chưa có kích thước hiển thị');
+ // Do not clamp the finger before applying the grab offset. A finger dragged
+ // outside the image must still let a corner reach the nearest image border.
+ return {x:clamp((pointer.clientX-rect.left)/rect.width+offset.x,.001,.999),
+         y:clamp((pointer.clientY-rect.top)/rect.height+offset.y,.001,.999)};
 }
 
 /** Exact canvas draw placement: the sampled image point must land at the crosshair

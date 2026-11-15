@@ -36,6 +36,12 @@ for(const [w,h] of [[320,640],[360,740],[854,393],[740,360],[1200,800]]){
   scenarios++;
  }
 }
+// Dragging well outside the SVG must clamp the actual corner to the boundary,
+// even when the finger started off-center inside a large touch target.
+const rect={left:20,top:80,width:300,height:450};
+const offset={x:.055,y:-.04};
+assert.deepEqual(scannerCornerWithOffset({clientX:-150,clientY:-150},rect,offset),{x:.001,y:.001});
+assert.deepEqual(scannerCornerWithOffset({clientX:1000,clientY:2000},rect,offset),{x:.999,y:.999});
 // The old CSS background-position algorithm pulled border samples toward the center:
 // at x=.02 and 4.5x zoom, the apparent crosshair sampled ~12.7% not 2%.
 const oldCssSample=(x,zoom)=>((.5+(zoom-1)*x)/zoom);
