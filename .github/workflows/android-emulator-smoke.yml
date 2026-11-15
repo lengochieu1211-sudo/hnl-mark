@@ -35,7 +35,7 @@ jobs:
           npm install --prefix studio-ui --no-audit --no-fund
       - name: Derive isolated TEST package from Gradle
         run: |
-          TEST_CODE="$(sed -n 's/.*versionCode[[:space:]]*\\([0-9][0-9]*\\).*/\\1/p' android/app/build.gradle | head -n 1)"
+          TEST_CODE="$(awk '$1=="versionCode" {print $2; exit}' android/app/build.gradle)"
           test -n "$TEST_CODE"
           echo "HNL_TEST_PACKAGE=vn.hnl.xaydung.hnlmark.trial${TEST_CODE}" >> "$GITHUB_ENV"
       - name: Enable hardware virtualization for Android Emulator
@@ -43,7 +43,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Run Android TEST46 APK in clean API 35 emulator
+      - name: Run Android TEST48 APK in clean API 35 emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
