@@ -30,7 +30,8 @@ import {restoreProjectZip} from './services/projectBackup';
 import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
 import {mediaExtension} from './services/mediaExtensions';
 import { createTimemarkPhoto,createTimemarkCode } from './services/timemarkRenderer';
-import {formattedPhotoSerial,nextPhotoSerialSequence} from './services/photoSerial';
+import {nextPhotoSerialSequence} from './services/photoSerial';
+import {captureStampCode} from './services/timemarkSerial';
 import {isRenderableStamp} from './services/stampRenderer';
 import {mediaWatermarkConfig,readPhotoExifGps} from './services/watermarkLocation';
 
@@ -147,9 +148,8 @@ export default function App() {
       title:file.name.replace(/\.[^/.]+$/,'')||'Tệp mới chọn',kind:detectedType.startsWith('video/')?'video':'photo',
       origin:'newly-picked',url:URL.createObjectURL(mediaFile),rawBlob:mediaFile,createdAt:now.toISOString(),
       resolutionLabel:detectedType.startsWith('video/')?'Video thiết bị':'Ảnh thiết bị',
-      sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:exifCoords||'',photoCode:watermarkConfig.showPhotoCode
-        ?formattedPhotoSerial(watermarkConfig.photoCodePrefix,nextPhotoSerialSequence(startingSerial,imported))
-        :createTimemarkCode(),
+      sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:exifCoords||'',photoCode:captureStampCode(watermarkConfig.templateId,watermarkConfig.showPhotoCode,
+        watermarkConfig.photoCodePrefix,nextPhotoSerialSequence(startingSerial,imported),createTimemarkCode()),
       customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
       // Persist EACH original before adding to UI; native picker processes sequentially.
       await storeMedia(item);all.push(item);imported++;

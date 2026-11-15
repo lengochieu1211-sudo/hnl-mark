@@ -11,6 +11,7 @@ import {drawWatermarkLogo,loadWatermarkLogo} from './watermarkLogo';
 import {drawSimpleStamp,isSimpleStamp} from './simpleStampRenderer';
 import {drawIndependentStamp,isIndependentStamp} from './independentStampRenderer';
 import {createEditedCanvas} from './smartErase';
+import {visibleTimemarkCode} from './timemarkSerial';
 import type {ImageEdits} from '../types/hnl';
 
 const clamp = (v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
@@ -135,11 +136,9 @@ export function drawOriginalTimemark(
  g.restore();
  // Original separate vertical code, in bounds even after 90°/180° rotation.
  if(config.showPhotoCode){
- // Older saved IDs remain untouched in storage; only their displayed code is
- // normalized to 14 characters. Never truncate the "Timemark Verified" caption.
- const fallbackCode=`${Math.max(0,date.getTime()).toString(36).toUpperCase().padStart(9,'0').slice(-9)}${Math.max(0,config.photoCodeSeq||0).toString(36).toUpperCase().padStart(5,'0').slice(-5)}`;
- const rawCode=codeOverride||fallbackCode;
- const cleanCode=String(rawCode).replace(/^HNL(?:[-_: ]+)/i,'').replace(/[^A-Za-z0-9]/g,'').toUpperCase().slice(0,14).padEnd(14,'0');
+ // Preserve TEST36 14-character IDs. TEST39/40 HNL-0001 labels were never
+ // 14 characters; render them as stored, not as HNL00010000000.
+ const cleanCode=visibleTimemarkCode(codeOverride,date.getTime(),config.photoCodeSeq);
  const label=`${cleanCode} Timemark Verified`;
  const f=base*.58;
  g.save();g.textBaseline='middle';g.textAlign='center';g.font=font(f,400,config.fontKey);

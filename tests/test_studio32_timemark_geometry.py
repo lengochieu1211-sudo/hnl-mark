@@ -8,7 +8,7 @@ app=(root/'studio-ui/src/App.tsx').read_text('utf-8')
 assert "const timePart=Date.now().toString(36).toUpperCase().padStart(9,'0').slice(-9);" in mark
 assert "const randomPart=values[0].toString(36).toUpperCase().padStart(7,'0').slice(-5);" in mark
 assert "return timePart+randomPart;" in mark, "9 + 5 = 14 characters"
-assert ".toUpperCase().slice(0,14).padEnd(14,'0')" in mark, "old IDs are normalized only at display time"
+assert 'visibleTimemarkCode(codeOverride,date.getTime(),config.photoCodeSeq)' in mark, 'vertical IDs stay readable without zero padding'
 assert "const label=`${cleanCode} Timemark Verified`;" in mark
 assert "g.scale(labelScale,1);g.fillText(label,0,0)" in mark, "the Verified suffix must not ellipsize"
 assert "const pairedHeight=Math.max(1,textBottom-textTop);" in mark

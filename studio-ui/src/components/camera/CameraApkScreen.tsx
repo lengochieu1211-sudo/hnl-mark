@@ -31,7 +31,7 @@ import {PhotoPreview} from '../watermark/PhotoPreview';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
-import {formattedPhotoSerial} from '../../services/photoSerial';
+import {captureStampCode} from '../../services/timemarkSerial';
 import {isRenderableStamp} from '../../services/stampRenderer';
 import {supportedVideoMime} from '../../services/videoFormat';
 import {describeMicFailure} from '../../services/audioDiagnostics';
@@ -82,8 +82,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const photoCaptureLock=useRef(false);
   const [isPhotoCapturing,setIsPhotoCapturing]=useState(false);
   const [previewCode,setPreviewCode]=useState(()=>createTimemarkCode());
-  const capturePreviewCode=watermarkConfig.showPhotoCode
-    ?formattedPhotoSerial(watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq):previewCode;
+  const capturePreviewCode=captureStampCode(
+    watermarkConfig.templateId,watermarkConfig.showPhotoCode,
+    watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq,previewCode);
 
   // Video state
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -379,8 +380,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
           createdAt:at.toISOString(),resolutionLabel:`${output.width} × ${output.height}`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:shotAddress,
-          coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?capturePreviewCode:(watermarkConfig.showPhotoCode
-            ?formattedPhotoSerial(watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq+i):createTimemarkCode()),
+          coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?capturePreviewCode:captureStampCode(
+            watermarkConfig.templateId,watermarkConfig.showPhotoCode,
+            watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq+i,createTimemarkCode()),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
           orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,photoCodeSeq:watermarkConfig.photoCodeSeq+i,dateTimeIso:at.toISOString(),autoTime:false,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);

@@ -21,8 +21,8 @@ assert 'listTrashedMedia' in app and 'restoreTrashedMedia' in app
 assert 'onRestoreTrash={handleRestoreTrash}' in app and 'onPurgeExpiredTrash={handlePurgeExpiredTrash}' in app
 assert 'Thùng rác / Khôi phục' in lib and 'Dọn các tệp quá 7 ngày' in lib
 assert 'window.confirm' in lib and 'onRestoreTrash([it.id])' in lib
-assert 'formattedPhotoSerial(watermarkConfig.photoCodePrefix' in cam
-assert 'formattedPhotoSerial(watermarkConfig.photoCodePrefix' in app
+assert 'captureStampCode(' in cam
+assert 'captureStampCode(' in app
 assert 'photoCodeSeq:nextPhotoSerialSequence' in app
 assert 'idCardPrintSize:twoPerPage&&idCardPrintSize' in scan
 assert 'In CCCD đúng kích thước 85,60 × 53,98 mm' in scan

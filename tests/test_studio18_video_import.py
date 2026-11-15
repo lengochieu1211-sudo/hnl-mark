@@ -35,7 +35,7 @@ assert "slice(String(reader.result).lastIndexOf(',')+1)" in read('studio-ui/src/
 assert "slice(String(reader.result).lastIndexOf(',')+1)" in read('android/android-app.js')
 assert 'URL.revokeObjectURL(src)' in enc and 'video.remove()' in enc
 assert 'stamp' in backup and '_stamped.${mediaExtension(stampedBlob.type,item.kind)}' in backup
-assert 'const cleanCode=String(rawCode).replace(/^HNL(?:[-_: ]+)/i' in mark
+assert 'visibleTimemarkCode(codeOverride,date.getTime(),config.photoCodeSeq)' in mark
 assert 'const baseline=clamp(y+firstH*.90' in mark
 assert 'if(config.showLogo&&logo' not in mark
 assert 'orientationDeg:0, captureWatermark:' in cam
@@ -43,6 +43,6 @@ assert '()=>physicalPhotoAngleRef.current' in cam
 assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn}' in cam
 assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert '<video key={active.id} src={active.url} playsInline controls' in roll
-assert "versionCode 2538" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2538'" in read('android/app/build.gradle')
+assert "versionCode 2539" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2539'" in read('android/app/build.gradle')
 print('PASS: TEST21 imported video player / stamping / audio / unknown WebM duration / backup / rotation')
