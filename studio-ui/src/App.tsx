@@ -46,6 +46,7 @@ export default function App() {
   const [reviewMediaId,setReviewMediaId] = useState('');
   const backRef=useRef<()=>boolean>(()=>false);
   const [libraryReady,setLibraryReady]=useState(false);
+  const [libraryLoadError,setLibraryLoadError]=useState('');
   const savedIds=useRef(new Set<string>());
   const restoreInput=useRef<HTMLInputElement|null>(null);
   const [stampsSubTab, setStampsSubTab] = useState<'templates' | 'customize' | 'editor'>('templates');
@@ -94,10 +95,28 @@ export default function App() {
       if(!alive)return;
       const newestFirst=[...items].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
       setMediaItems(newestFirst);
+      setLibraryLoadError('');
       if(newestFirst[0])setActiveMediaId(newestFirst[0].id);
-    }).catch(err=>{console.error('Không đọc được thư viện:',err);}).finally(()=>{if(alive)setLibraryReady(true);});
+    }).catch(err=>{console.error('Không đọc được thư viện:',err);if(alive)setLibraryLoadError(String(err));}).finally(()=>{if(alive)setLibraryReady(true);});
     return ()=>{alive=false};
   },[]);
+  const retryLibraryLoad=async()=>{
+    setLibraryReady(false);
+    try{
+      const recovered=(await loadMedia()).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+      setMediaItems(recovered);
+      setActiveMediaId(recovered[0]?.id||'');
+      setLibraryLoadError('');
+    }catch(error){
+      setLibraryLoadError(error instanceof Error?error.message:String(error));
+    }finally{setLibraryReady(true);}
+  };
+  const restoreLibraryZip=async(file:File)=>{
+    const restored=await restoreProjectZip(file);
+    if(!restored.length)throw Error('ZIP không chứa ảnh/video để khôi phục');
+    setMediaItems(old=>[...restored,...old]);
+    setActiveMediaId(restored[0].id);
+  };
   const importPickedFiles=async (files:File[])=>{
     if(!files.length)return;
     const all:MediaItem[]=[];
@@ -305,7 +324,7 @@ export default function App() {
               }).catch(err=>alert('Lỗi khôi phục ZIP: '+String(err)));e.currentTarget.value='';}}/>
             <button type="button" onClick={()=>restoreInput.current?.click()}
               className="min-h-9 px-3 rounded-xl bg-[#17253D] text-[#E2B74B] text-xs font-semibold">Khôi phục ZIP chứa ảnh gốc</button>
-            <span className="text-[11px] text-[#94A3B8]">Không ghi đè thư viện cũ. Thư viện TEST14 được lưu riêng để bảo vệ dữ liệu.</span>
+            <span className="text-[11px] text-[#94A3B8]">Không ghi đè thư viện cũ. Thư viện TEST được lưu riêng để bảo vệ dữ liệu.</span>
           </div>}
           <main className="flex-1 min-h-0 overflow-y-auto hnl-scroll pb-4">
             {route === 'scanner' && <DocumentScannerScreen onBack={()=>setRoute('library')} />}
@@ -343,10 +362,9 @@ export default function App() {
                 }}
                 onUpdateMediaMetadata={handleUpdateMediaMetadata}
                 onDeleteItems={handleDeleteItems}
-                onRestoreBackupJson={(restored) => {
-                  setMediaItems(restored);
-                  if (restored[0]) setActiveMediaId(restored[0].id);
-                }}
+                onRestoreBackupFile={restoreLibraryZip}
+                libraryLoadError={libraryLoadError}
+                onRetryLoad={retryLibraryLoad}
                 onTriggerExportSheet={openExportSheet}
                 onOpenCamera={() => setRoute('camera')}
               />

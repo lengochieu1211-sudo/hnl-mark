@@ -35,7 +35,9 @@ interface LibraryScreenProps {
     patch: Partial<Pick<MediaItem, 'createdAt' | 'location' | 'coordinates' | 'customNote' | 'photoCode' | 'title'>>,
   ) => void;
   onDeleteItems: (ids: string[]) => void;
-  onRestoreBackupJson: (items: MediaItem[]) => void;
+  onRestoreBackupFile: (file:File) => Promise<void>;
+  libraryLoadError?: string;
+  onRetryLoad: () => Promise<void>;
   onTriggerExportSheet: (selectedItems: MediaItem[]) => void;
   onOpenCamera: () => void;
 }
@@ -50,7 +52,9 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   onEditMediaInEditor,
   onUpdateMediaMetadata,
   onDeleteItems,
-  onRestoreBackupJson,
+  onRestoreBackupFile,
+  libraryLoadError = '',
+  onRetryLoad,
   onTriggerExportSheet,
   onOpenCamera,
 }) => {
@@ -60,7 +64,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   const [originFilter, setOriginFilter] = useState<'all' | 'saved-project' | 'newly-picked'>('all');
   const [multiSelect, setMultiSelect] = useState<boolean>(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [libraryState, setLibraryState] = useState<LibraryStateMode>('populated');
+  const [restoring,setRestoring]=useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState<boolean>(false);
 
   // Lightbox + Edit Stamp Modal
@@ -146,8 +150,15 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
     setShowActionsMenu(false);
     onTriggerExportSheet(items);
   };
-  const handleRestoreFile = (_file: File | undefined) => {
-    setStatusNotice('Dự án HNL mới dùng ZIP chứa media gốc; JSON cũ không có ảnh/video nên không được khôi phục như dữ liệu thật.');
+  const handleRestoreFile = async(file:File|undefined)=>{
+    if(!file||restoring)return;
+    setRestoring(true);setStatusNotice('Đang đọc ZIP, ảnh/video hiện có không bị xóa…');
+    try{
+      await onRestoreBackupFile(file);
+      setStatusNotice('Đã khôi phục ZIP vào thư viện, giữ nguyên dữ liệu cũ.');
+    }catch(error){
+      setStatusNotice('Không thể khôi phục ZIP: '+String(error));
+    }finally{setRestoring(false);}
   };
 
   const formatDuration = (sec?: number) => {
@@ -158,17 +169,17 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   };
 
   const effectiveState: LibraryStateMode =
-    libraryState === 'populated' && items.length === 0 ? 'empty' : libraryState;
+    libraryLoadError ? 'error' : items.length===0 ? 'empty' : 'populated';
 
   return (
     <div className="px-4 py-3 space-y-3 max-w-6xl mx-auto">
       <input
         ref={restoreInputRef}
         type="file"
-        accept="application/json"
+        accept=".zip,application/zip"
         className="hidden"
         onChange={(e) => {
-          handleRestoreFile(e.target.files?.[0]);
+          void handleRestoreFile(e.target.files?.[0]);
           e.target.value = '';
         }}
       />
@@ -236,6 +247,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             </button>
             <button
               type="button"
+              disabled={restoring}
               onClick={() => {
                 setShowActionsMenu(false);
                 restoreInputRef.current?.click();
@@ -326,29 +338,6 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           ))}
         </div>
 
-        {/* Interactive State Switcher (Populated / Empty / Loading / Error) */}
-        <div className="flex items-center gap-1 text-[11px]">
-          <span className="text-[#64748B] mr-1">Trạng thái:</span>
-          {([
-            { id: 'populated', label: 'Có ảnh' },
-            { id: 'empty', label: 'Trống' },
-            { id: 'loading', label: 'Đang tải' },
-            { id: 'error', label: 'Lỗi' },
-          ] as { id: LibraryStateMode; label: string }[]).map((st) => (
-            <button
-              key={st.id}
-              type="button"
-              onClick={() => setLibraryState(st.id)}
-              className={`px-2 py-1 rounded-md transition ${
-                libraryState === st.id
-                  ? 'bg-white/15 text-[#F8FAFC] font-medium'
-                  : 'text-[#64748B] hover:text-[#94A3B8]'
-              }`}
-            >
-              {st.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       {statusNotice && (
@@ -405,12 +394,12 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           <div className="space-y-1">
             <h2 className="text-sm font-semibold text-[#F8FAFC]">Không thể đọc bộ nhớ thư viện dự án</h2>
             <p className="text-xs text-[#94A3B8] max-w-sm mx-auto">
-              Quyền truy cập tệp cục bộ đang bị tạm khóa hoặc tệp chỉ mục bị gián đoạn (Trạng thái kiểm thử lỗi).
+              {libraryLoadError||'Đã xảy ra lỗi đọc thư viện. Ảnh/video cũ vẫn giữ nguyên.'}
             </p>
           </div>
           <button
             type="button"
-            onClick={() => setLibraryState('populated')}
+            onClick={() => {void onRetryLoad();}}
             className="min-h-[44px] px-4 rounded-xl bg-[#17253D] hover:bg-[#1F3150] text-xs font-semibold text-[#E2B74B] inline-flex items-center gap-1.5"
           >
             <RefreshCw className="w-4 h-4" />

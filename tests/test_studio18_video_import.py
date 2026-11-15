@@ -43,6 +43,6 @@ assert 'physicalPhotoAngleRef.current,photoCode,lens' in cam
 assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn}' in cam
 assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert '<video key={active.id} src={active.url} playsInline controls' in roll
-assert "versionCode 2532" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2532'" in read('android/app/build.gradle')
+assert "versionCode 2533" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2533'" in read('android/app/build.gradle')
 print('PASS: TEST21 imported video player / stamping / audio / unknown WebM duration / backup / rotation')
