@@ -8,7 +8,8 @@ import {
   WatermarkFontKey,
   WatermarkPositionPreset,
 } from '../../types/hnl';
-import { TEMPLATE_CATALOG_GROUPS, WATERMARK_TEMPLATES, type TemplateCatalogCategory } from '../../data/templates';
+import { DEFAULT_WATERMARK_CONFIG, TEMPLATE_CATALOG_GROUPS, WATERMARK_TEMPLATES, type TemplateCatalogCategory } from '../../data/templates';
+import {buildStampDetailResetPatch} from '../../services/watermarkDetailDefaults';
 import { DEMO_IMAGES } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {PhotoPreview} from '../watermark/PhotoPreview';
@@ -279,6 +280,21 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
       {/* TAB 2: 11 ACCORDION SETTINGS GROUPS (Compact 13-14px inputs) */}
       {subTab === 'customize' && (
         <div className="rounded-2xl bg-[#0D1626] border border-white/[0.08] px-3.5 py-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 py-3 border-b border-white/10">
+            <div>
+              <p className="text-[13px] font-semibold text-[#F8FAFC]">Định dạng dấu</p>
+              <p className="text-[11px] text-[#94A3B8]">Khôi phục màu, chữ, vị trí và hiển thị; giữ nguyên nội dung, mẫu dấu và ảnh/video.</p>
+            </div>
+            <button type="button" aria-label="Khôi phục mặc định tùy chỉnh dấu"
+              disabled={activeMedia.kind==='video'&&!!activeMedia.isStamped&&!activeMedia.stampedBlob}
+              onClick={()=>{
+                if(window.confirm('Đưa định dạng dấu về mặc định? Ngày giờ, vị trí, ghi chú, logo riêng, mẫu đang chọn và ảnh/video vẫn được giữ nguyên.'))
+                  onChangeConfig(buildStampDetailResetPatch(DEFAULT_WATERMARK_CONFIG,activeTemplate.accentHex));
+              }}
+              className="min-h-10 rounded-xl border border-[#E2B74B]/45 px-3 text-xs font-semibold text-[#E2B74B] hover:bg-[#E2B74B]/10 disabled:opacity-40 disabled:cursor-not-allowed">
+              ↺ Khôi phục mặc định
+            </button>
+          </div>
           {config.templateId==='custom-stamp'&&(
             <section className="py-3 space-y-3 border-b border-white/10" aria-label="Dấu tùy chỉnh: bật tắt nội dung">
               <div className="text-sm font-semibold text-[#E2B74B]">Nội dung dấu tùy chỉnh</div>

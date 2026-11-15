@@ -11,7 +11,8 @@ export type CameraMicOpenResult = {
 };
 const stopAll=(stream:MediaStream|undefined)=>stream?.getTracks().forEach(track=>track.stop());
 export function isLiveMicrophone(stream:MediaStream|null|undefined):boolean {
- return !!stream?.getAudioTracks().some(track=>track.readyState==='live'&&track.enabled);
+ // A live/enabled track can still be hardware-muted by Android/MIUI.
+ return !!stream?.getAudioTracks().some(track=>track.readyState==='live'&&track.enabled&&!track.muted);
 }
 export async function openCameraWithMicrophone(
  devices:Pick<MediaDevices,'getUserMedia'>,video:MediaTrackConstraints
