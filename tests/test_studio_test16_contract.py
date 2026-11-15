@@ -30,6 +30,6 @@ assert 'Tệp gốc và sao lưu · Tùy chọn nâng cao' in exp
 assert 'stampedBlob:item.stampedBlob' in storage
 assert 'stampedName' in backup and "zip.file(stampedName,stampedBlob" in backup
 assert 'LEGACY_RATIO = 0.98' in icon and 'BACKGROUND_RGB' not in icon
-assert 'versionCode 2546' in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2546'" in read('android/app/build.gradle')
+__import__('version_contract').assert_build_identity()
+assert 'android.permission.MODIFY_AUDIO_SETTINGS' in read('android/app/src/main/AndroidManifest.xml')
 print('PASS: TEST21 stamped photo/video, protected originals, pause/resume, spot metering and icon')

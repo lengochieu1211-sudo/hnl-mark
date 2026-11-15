@@ -30,12 +30,15 @@ assert "setAllowFileAccess(false)" in java
 assert 'trusted(req.getUrl())' in java
 assert "android.permission.CAMERA" in manifest
 assert "android.permission.RECORD_AUDIO" in manifest
+assert "android.permission.MODIFY_AUDIO_SETTINGS" in manifest  # Required for WebView audio routing on affected devices.
+assert 'PermissionRequest.RESOURCE_AUDIO_CAPTURE' in java
+assert 'Manifest.permission.RECORD_AUDIO' in java
 assert "android:usesCleartextTraffic=\"false\"" in manifest
 assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"fullUser\"" in manifest
-assert "versionCode 2546" in gradle and "versionName '2.5.46-studio-test'" in gradle
+assert "versionCode 2547" in gradle and "versionName '2.5.47-studio-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -89,7 +92,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.46-studio-test'" in bridge
+assert "version:'2.5.47-studio-test'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
@@ -158,8 +161,8 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial2546'" in gradle
-assert "HNLMark STUDIO 46" in gradle
+assert "applicationIdSuffix '.trial2547'" in gradle
+assert "HNLMark STUDIO 47" in gradle
 assert 'android:label="@string/hnlmark_application_name"' in manifest
 assert "TEST v2.5.23" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss

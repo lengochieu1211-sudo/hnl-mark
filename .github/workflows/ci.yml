@@ -88,6 +88,7 @@ jobs:
           node --experimental-strip-types tests/test_studio47_microphone_recovery.mjs
           node --experimental-strip-types tests/test_studio48_microphone_reset.mjs
           node --experimental-strip-types tests/test_studio48_quick_stamp.mjs
+          node --experimental-strip-types tests/test_studio49_android_mic_permission.mjs
           node --experimental-strip-types tests/test_studio41_timemark_code.mjs
           python3 tests/test_studio41_timemark_wiring.py
           node --experimental-strip-types tests/test_studio39_pdf_cccd.mjs
