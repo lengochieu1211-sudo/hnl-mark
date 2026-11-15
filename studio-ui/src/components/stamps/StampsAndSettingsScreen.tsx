@@ -475,8 +475,8 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
             <div className="flex items-center gap-3">
               <input
                 type="range"
-                min={10}
-                max={20}
+                min={8}
+                max={32}
                 value={config.fontSizePx}
                 onChange={(e) => onChangeConfig({ fontSizePx: Number(e.target.value) })}
                 className="flex-1 accent-[#E2B74B] h-1.5"
@@ -514,8 +514,8 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                 <span className="text-[12.5px] text-[#94A3B8] shrink-0">Độ đậm nền dấu</span>
                 <input
                   type="range"
-                  min={0.2}
-                  max={0.95}
+                  min={0}
+                  max={1}
                   step={0.05}
                   value={config.bgOpacity}
                   onChange={(e) => onChangeConfig({ bgOpacity: Number(e.target.value) })}
