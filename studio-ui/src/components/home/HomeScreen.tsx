@@ -41,7 +41,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeTemplate =
-    WATERMARK_TEMPLATES.find((t) => t.id === watermarkConfig.templateId) ?? WATERMARK_TEMPLATES[10];
+    WATERMARK_TEMPLATES.find((t) => t.id === watermarkConfig.templateId) ?? WATERMARK_TEMPLATES.find(t=>t.id==='timemark')!;
+  // Use the public catalog, including original Timemark and the basic date/time
+  // presets; the first six independent entries previously hid those controls.
+  const quickTemplates = TEMPLATE_CATALOG_GROUPS.filter(group=>group.category!=='none')
+    .slice(0,6).map(group=>WATERMARK_TEMPLATES.find(t=>t.id===group.templateIds[0]))
+    .filter((tpl):tpl is (typeof WATERMARK_TEMPLATES)[number]=>!!tpl);
 
   // Drag handle to resize preview height smoothly
   const handleResizeDragStart = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -224,9 +229,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           }
         >
           <div className="flex items-center gap-2 overflow-x-auto pb-1 hnl-scroll">
-            {WATERMARK_TEMPLATES.filter((t) => t.group === 'hnl-independent')
-              .slice(0, 6)
-              .map((tpl) => {
+            {quickTemplates.map((tpl) => {
                 const selected = tpl.id === watermarkConfig.templateId;
                 return (
                   <button

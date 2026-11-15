@@ -13,7 +13,8 @@ import {
   ViewportPreset,
   WatermarkConfig,
 } from './types/hnl';
-import { DEFAULT_WATERMARK_CONFIG, VIEWPORT_PRESETS } from './data/templates';
+import { DEFAULT_WATERMARK_CONFIG, VIEWPORT_PRESETS, WATERMARK_TEMPLATES } from './data/templates';
+import {quickTemplateSelectionPatch} from './services/quickTemplateSelection';
 import { DEFAULT_IMAGE_EDITS, INITIAL_MEDIA_ITEMS } from './data/mockMedia';
 import { HnlLogoPlaceholder } from './components/common/HnlBrandMark';
 import { CameraApkScreen } from './components/camera/CameraApkScreen';
@@ -461,7 +462,7 @@ export default function App() {
             {route === 'home' && (
               <HomeScreen
                 activeMedia={activeMedia ?? emptyPreview}
-                watermarkConfig={watermarkConfig}
+                watermarkConfig={selectedStampConfig}
                 mediaCount={mediaItems.length}
                 onOpenCamera={() => setRoute('camera')}
                 onOpenLibrary={() => setRoute('library')}
@@ -474,7 +475,15 @@ export default function App() {
                   setRoute('stamps');
                 }}
                 onPickLocalMedia={handlePickLocalMedia}
-                onSelectTemplate={(templateId) => updateWatermarkConfig({ templateId })}
+                onSelectTemplate={(templateId) => {
+                  const template=WATERMARK_TEMPLATES.find(t=>t.id===templateId);
+                  if(!template)return;
+                  if(activeMedia?.kind==='video'&&activeMedia.isStamped&&!activeMedia.stampedBlob){
+                    alert('Video này đã chèn dấu trực tiếp và không có bản không dấu để chỉnh lại. Mẫu đã lưu vẫn được giữ nguyên.');
+                    return;
+                  }
+                  updateSelectedStampConfig(quickTemplateSelectionPatch(template));
+                }}
               />
             )}
 

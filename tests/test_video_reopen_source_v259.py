@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test 9 static contract: video lifecycle recovery and view-only APK controls."""
 from pathlib import Path
+import re
 r=Path(__file__).resolve().parents[1]
 read=lambda x:(r/x).read_text(encoding='utf-8')
 v=read('video.js');p=read('app.js');camera=read('camera-controls.js')
@@ -18,6 +19,10 @@ assert '--apk-photo-preview-height' in css
 assert 'preview-zoom-v259.css' in bundle and 'preview-zoom-v259.js' in bundle
 assert 'grid-template-columns:repeat(2,minmax(0,1fr))' in polish
 assert 'video-canvas-wrap::after{content:none' in polish
-assert "versionCode 2545" in read('android/app/build.gradle')
-assert "applicationIdSuffix '.trial2545'" in read('android/app/build.gradle')
+# Version-agnostic safety contract: new test APKs must be isolated by their
+# exact versionCode, never pin a historical trial suffix in regression tests.
+gradle=read('android/app/build.gradle')
+version=re.search(r'\bversionCode\s+(\d+)\b',gradle)
+assert version and int(version.group(1))>0
+assert f"applicationIdSuffix '.trial{version.group(1)}'" in gradle
 print('PASS: video close/reopen flow, pinch camera, zoomable preview, crop/library alignment')
