@@ -364,6 +364,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
             <button
               type="button"
               onClick={() => {
+                if(!window.confirm(`Xóa ${selectedIds.length} ảnh/video khỏi thư viện ứng dụng? Hành động này không thể hoàn tác. Hãy sao lưu ZIP trước nếu cần.`))return;
                 onDeleteItems(selectedIds);
                 setSelectedIds([]);
               }}
@@ -376,18 +377,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
         </div>
       )}
 
-      {/* 4 Library States */}
-      {effectiveState === 'loading' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 py-2">
-          {[1, 2, 3, 4].map((idx) => (
-            <div
-              key={idx}
-              className="aspect-[4/3] rounded-2xl bg-[#111C30] animate-pulse border border-white/[0.05]"
-            />
-          ))}
-        </div>
-      )}
-
+      {/* Data-backed library states; loading is handled in App while IndexedDB is read. */}
       {effectiveState === 'error' && (
         <div className="py-12 px-4 rounded-2xl bg-[#0D1626] border border-[#EF4444]/25 text-center space-y-3">
           <AlertTriangle className="w-9 h-9 text-[#EF4444] mx-auto" />
