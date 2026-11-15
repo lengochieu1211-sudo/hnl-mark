@@ -1,27 +1,62 @@
-/** Prefer a single WebView getUserMedia request for VIDEO+MIC.
- * Several Android camera providers cannot start a separate audio-only capture
- * once a video-only stream already owns the camera. If audio fails, keep the
- * preview usable, but never silently claim the video will have audio.
+/** Prefer one video+audio WebView session. Some Android WebViews reject mixed
+ * getUserMedia even when RECORD_AUDIO was granted: recover audio BEFORE opening
+ * the video-only preview, while the camera device is released.
+ * Keep microphone streams separate when necessary; never silently promise sound.
  */
-export type CameraMicOpenResult = {stream:MediaStream;hasLiveMicrophone:boolean;microphoneError?:unknown};
+export type CameraMicOpenResult = {
+ stream:MediaStream;
+ hasLiveMicrophone:boolean;
+ microphoneStream?:MediaStream;
+ microphoneError?:unknown;
+};
+const stopAll=(stream:MediaStream|undefined)=>stream?.getTracks().forEach(track=>track.stop());
+export function isLiveMicrophone(stream:MediaStream|null|undefined):boolean {
+ return !!stream?.getAudioTracks().some(track=>track.readyState==='live'&&track.enabled);
+}
 export async function openCameraWithMicrophone(
  devices:Pick<MediaDevices,'getUserMedia'>,video:MediaTrackConstraints
 ):Promise<CameraMicOpenResult>{
  let combined:MediaStream|undefined;
  try{
   combined=await devices.getUserMedia({video,audio:true});
-  const videoLive=combined.getVideoTracks().some(t=>t.readyState==='live');
-  const audioLive=combined.getAudioTracks().some(t=>t.readyState==='live');
-  if(videoLive&&audioLive)return {stream:combined,hasLiveMicrophone:true};
-  throw Object.assign(new Error('Thiếu luồng âm thanh hoặc hình từ WebView'),{name:'NotReadableError'});
- }catch(error){
-  // The mixed capture cannot be used. Release it before requesting video-only;
-  // don't let a failed microphone make the entire camera preview disappear.
-  combined?.getTracks().forEach(track=>track.stop());
-  const videoOnly=await devices.getUserMedia({video,audio:false});
-  return {stream:videoOnly,hasLiveMicrophone:false,microphoneError:error};
+  if(combined.getVideoTracks().some(t=>t.readyState==='live')&&isLiveMicrophone(combined))
+   return {stream:combined,hasLiveMicrophone:true};
+  throw Object.assign(new Error('Luồng camera hoặc micro chưa hoạt động'),{name:'NotReadableError'});
+ }catch(combinedError){
+  stopAll(combined);
+  // Important: ask for the microphone while NO camera track is occupying MIUI.
+  // Audio-only after video-only can consistently fail with NotReadableError.
+  let microphoneStream:MediaStream|undefined;
+  let microphoneError:unknown=combinedError;
+  try{
+   microphoneStream=await devices.getUserMedia({video:false,audio:true});
+   if(!isLiveMicrophone(microphoneStream))
+    throw Object.assign(new Error('Không có luồng micro hoạt động'),{name:'NotReadableError'});
+  }catch(error){
+   stopAll(microphoneStream);microphoneStream=undefined;microphoneError=error;
+  }
+  try{
+   const stream=await devices.getUserMedia({video,audio:false});
+   return {stream,hasLiveMicrophone:!!microphoneStream,microphoneStream,
+    microphoneError:microphoneStream?undefined:microphoneError};
+  }catch(videoError){
+   // Some providers cannot open a second camera session while audio-only is
+   // active. Release audio and retry normal camera preview rather than blacking out.
+   stopAll(microphoneStream);
+   if(microphoneStream){
+    const stream=await devices.getUserMedia({video,audio:false});
+    return {stream,hasLiveMicrophone:false,microphoneError:videoError};
+   }
+   throw videoError;
+  }
  }
 }
-export function isLiveMicrophone(stream:MediaStream|null|undefined):boolean{
- return !!stream?.getAudioTracks().some(track=>track.readyState==='live'&&track.enabled);
+/** Last-chance recovery at record press: release camera-only BEFORE retrying
+ * the combined permission/capture request. Never run two camera owners in parallel.
+ */
+export async function reopenVideoWithMicrophone(
+ devices:Pick<MediaDevices,'getUserMedia'>,video:MediaTrackConstraints,current:MediaStream
+):Promise<CameraMicOpenResult>{
+ stopAll(current);
+ return openCameraWithMicrophone(devices,video);
 }

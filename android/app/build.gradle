@@ -9,16 +9,16 @@ android {
         applicationId 'vn.hnl.xaydung.hnlmark'
         minSdk 29
         targetSdk 35
-        versionCode 2544
-        versionName '2.5.44-studio-test'
+        versionCode 2545
+        versionName '2.5.45-studio-test'
     }
     buildTypes {
         debug {
             debuggable true
             // Parallel installation: NEVER uninstall a previous HNLMark
             // while its offline photo library has not been ZIP-backed up.
-            applicationIdSuffix '.trial2544'
-            resValue 'string', 'hnlmark_application_name', 'HNLMark STUDIO 44'
+            applicationIdSuffix '.trial2545'
+            resValue 'string', 'hnlmark_application_name', 'HNLMark STUDIO 45'
         }
         release {
             resValue 'string', 'hnlmark_application_name', 'HNLMark'

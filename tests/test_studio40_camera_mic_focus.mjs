@@ -11,7 +11,7 @@ assert.deepEqual(calls,[{video,audio:true}]);assert.equal(result.stream,success)
 let failed=Object.assign(new Error('in use'),{name:'NotReadableError'});calls=[];
 const fallback=stream([track('video')],[]);
 result=await openCameraWithMicrophone({getUserMedia:async c=>{calls.push(c);if(c.audio===true)throw failed;return fallback;}},video);
-assert.deepEqual(calls,[{video,audio:true},{video,audio:false}]);
+assert.deepEqual(calls,[{video,audio:true},{video:false,audio:true},{video,audio:false}]);
 assert.equal(result.hasLiveMicrophone,false);assert.equal(result.microphoneError,failed);
 assert.equal(result.stream,fallback);assert.equal(isLiveMicrophone(fallback),false);
 // Broken streams are always stopped before trying a new camera-only capture.
