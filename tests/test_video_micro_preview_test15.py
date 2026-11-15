@@ -12,7 +12,7 @@ for marker in ('getUserMedia({video,audio:false})','getUserMedia({audio:true,vid
                'supportedVideoMime(watermarkConfig.videoFormat',
                'recordStartedAtRef.current=Date.now()','Date.now()-recordStartedAtRef.current',
                'if(live.srcObject!==source)live.srcObject=source',
-               'disabled={isRecordingStarting || isFinalizing}'):
+               'disabled={isRecordingStarting || isFinalizing || isPhotoCapturing}'):
     assert marker in cam,marker
 assert "versionCode 2535" in gradle and "applicationIdSuffix '.trial2535'" in gradle
 assert 'RECORD_AUDIO ignore' in emu and 'mic-denied-video-attempt.png' in emu
