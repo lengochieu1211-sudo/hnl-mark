@@ -4,7 +4,13 @@ const fs=require('node:fs');const vm=require('node:vm');const path=require('node
 let ts;try{ts=require('../studio-ui/node_modules/typescript');}catch{ts=require('typescript');}
 const src=fs.readFileSync(path.join(__dirname,'../studio-ui/src/services/documentScanner.ts'),'utf8');
 const js=ts.transpileModule(src,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
-const mod={exports:{}};vm.runInNewContext(js,{module:mod,exports:mod.exports,Uint8Array,Int32Array,Uint8ClampedArray,Math,Map,Set,Date,console,Number,Error,Array});
+// Keep the headless detector VM aligned with the real offline scanner module.
+const editsSource=fs.readFileSync(path.join(__dirname,'../studio-ui/src/services/scannerEdits.ts'),'utf8');
+const editsJs=ts.transpileModule(editsSource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
+const editsModule={exports:{}};
+vm.runInNewContext(editsJs,{module:editsModule,exports:editsModule.exports,Math,Map,Set,Date,console,Number,Error,Array});
+const localRequire=(name)=>{if(name==='./scannerEdits')return editsModule.exports;throw new Error('Unexpected detector import '+name);};
+const mod={exports:{}};vm.runInNewContext(js,{require:localRequire,module:mod,exports:mod.exports,Uint8Array,Int32Array,Uint8ClampedArray,Math,Map,Set,Date,console,Number,Error,Array});
 const {detectDocumentEdges}=mod.exports;
 const W=360,H=300;
 const pointInside=(px,py,p)=>{let inside=false;for(let i=0,j=p.length-1;i<p.length;j=i++)if(((p[i][1]>py)!==(p[j][1]>py))&&(px<(p[j][0]-p[i][0])*(py-p[i][1])/(p[j][1]-p[i][1])+p[i][0]))inside=!inside;return inside;};
