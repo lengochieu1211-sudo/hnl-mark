@@ -41,10 +41,10 @@ console.log('PASS: inverse stamp correction for Redmi 90/-90 + 4 unlocked + 4 lo
 
 // TEST33: rotate the camera RASTER as a unit before stamping/encoding video.
 import {capturedPhotoTurn,orientedFrameSize} from '../studio-ui/src/services/capturedPhotoOrientation.ts';
-assert.equal(capturedPhotoTurn(720,1280,90,-90),-90);
-assert.equal(capturedPhotoTurn(720,1280,270,90),90);
-assert.equal(capturedPhotoTurn(720,1280,90,0),-90);
-assert.equal(capturedPhotoTurn(720,1280,270,0),90);
+assert.equal(capturedPhotoTurn(720,1280,90,-90),90);
+assert.equal(capturedPhotoTurn(720,1280,270,90),-90);
+assert.equal(capturedPhotoTurn(720,1280,90,0),90);
+assert.equal(capturedPhotoTurn(720,1280,270,0),-90);
 assert.equal(capturedPhotoTurn(1280,720,90,-90),0);
 assert.equal(capturedPhotoTurn(1280,720,270,90),0);
 assert.equal(capturedPhotoTurn(720,1280,0,0),0);

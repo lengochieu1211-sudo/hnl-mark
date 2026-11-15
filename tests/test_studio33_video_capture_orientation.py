@@ -12,5 +12,5 @@ assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode
 assert 'orientationDeg:0,captureWatermark:stampConfig' in cam
 assert 'physicalPhotoAngleRef.current,photoCode,lens' in cam
 assert 'resolutionLabel:`${capture.width} × ${capture.height}' in cam
-assert 'return physical===90?-90:physical===-90?90:90;' in photo
+assert 'return physical===90?90:physical===-90?-90:90;' in photo
 print('PASS TEST33: video frame geometry and watermark baked upright; original photo preserved')

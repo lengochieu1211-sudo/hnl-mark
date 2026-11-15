@@ -16,8 +16,11 @@ export function capturedPhotoTurn(width:number,height:number,physicalAngle:numbe
   // rotated only the text, producing a sideways tag on portrait JPEGs.
   return 0;
  }
- if(liveStampAngle===90||liveStampAngle===-90)return liveStampAngle;
- return physical===90?-90:physical===-90?90:90;
+ // Redmi/WebView may expose sensor-oriented pixels even though the live
+ // watermark was counter-rotated correctly on screen. In that case pixels
+ // must turn opposite the stamp; otherwise saved JPEGs invert by 180 degrees.
+ if(liveStampAngle===90||liveStampAngle===-90)return -liveStampAngle as OrientationDeg;
+ return physical===90?90:physical===-90?-90:90;
 }
 export function orientedFrameSize(width:number,height:number,turn:OrientationDeg):{width:number;height:number}{
  const quarter=turn===90||turn===-90;
