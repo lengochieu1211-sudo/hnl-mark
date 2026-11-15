@@ -2,19 +2,20 @@
 import JSZip from 'jszip';
 import type {MediaItem} from '../types/hnl';
 import {storeMediaBatchNew} from './mediaStorage';
+import {mediaExtension} from './mediaExtensions';
 interface Entry {name:string;mime:string;size:number;stampedName?:string;sourceIsStamped?:boolean;meta:Omit<MediaItem,'rawBlob'|'stampedBlob'|'url'>}
 const MAX_ARCHIVE_BYTES=512*1024*1024;
 export async function createProjectZip(items:MediaItem[]):Promise<Blob>{
  const zip=new JSZip();const manifest:{app:string,format:number,createdAt:string,items:Entry[]}={app:'HNLMark',format:1,createdAt:new Date().toISOString(),items:[]};let total=0;
  for(const item of items){const blob=item.rawBlob||await(await fetch(item.url)).blob();if(!blob.size)throw Error('Ảnh/video gốc trống: '+item.title);
  total+=blob.size;if(total>MAX_ARCHIVE_BYTES)throw Error('Dự án vượt 512MB, hãy chia ra các ZIP nhỏ để không tràn bộ nhớ.');
- const ext=blob.type.startsWith('video/')?(blob.type.includes('mp4')?'mp4':'webm'):blob.type.includes('png')?'png':'jpg';
+ const ext=mediaExtension(blob.type,item.kind,item.title);
  const name=`media/${manifest.items.length.toString().padStart(4,'0')}.${ext}`;
  const {rawBlob,stampedBlob,url,...meta}=item;void rawBlob;void url;
  let stampedName: string|undefined;
  if(stampedBlob?.size){
    total+=stampedBlob.size;if(total>MAX_ARCHIVE_BYTES)throw Error('Dự án vượt 512MB, chia ZIP nhỏ hơn.');
-   stampedName=`media/${manifest.items.length.toString().padStart(4,'0')}_stamped.${stampedBlob.type.startsWith('video/')?(stampedBlob.type.includes('mp4')?'mp4':'webm'):'jpg'}`;
+   stampedName=`media/${manifest.items.length.toString().padStart(4,'0')}_stamped.${mediaExtension(stampedBlob.type,item.kind)}`;
    zip.file(stampedName,stampedBlob,{compression:'STORE'});
  }
  zip.file(name,blob,{compression:'STORE'});manifest.items.push({name,mime:blob.type,size:blob.size,stampedName,sourceIsStamped:item.kind==='video'&&item.isStamped===true&&!stampedBlob,meta});
@@ -29,7 +30,7 @@ export async function restoreProjectZip(zipBlob:Blob):Promise<MediaItem[]>{
  if(manifest.app!=='HNLMark'||manifest.format!==1||!Array.isArray(manifest.items)||manifest.items.length>300)throw Error('Cấu trúc dự án không hợp lệ');
  const prepared:MediaItem[]=[];let sum=0;
  for(const entry of manifest.items){
- if(!/^media\/\d{4}\.(jpg|png|mp4|webm)$/.test(entry.name))throw Error('Tên tệp không hợp lệ');
+ if(!/^media\/\d{4}\.(jpg|jpeg|png|webp|heic|heif|avif|gif|mp4|webm|mov|m4v|3gp|ogv)$/.test(entry.name))throw Error('Tên tệp không hợp lệ');
  if(!entry.mime?.match(/^(image|video)\//)||!Number.isSafeInteger(entry.size)||entry.size<=0||entry.size>MAX_ARCHIVE_BYTES)throw Error('Tệp media sai định dạng');
  const data=zip.file(entry.name);if(!data)throw Error('Thiếu '+entry.name);
  const bytes=await data.async('uint8array');sum+=bytes.byteLength;if(bytes.byteLength!==entry.size||sum>MAX_ARCHIVE_BYTES)throw Error('Kích thước media không hợp lệ');
@@ -39,7 +40,7 @@ export async function restoreProjectZip(zipBlob:Blob):Promise<MediaItem[]>{
  if(entry.stampedName){
    if(!/^media\/\d{4}_stamped\.(jpg|mp4|webm)$/.test(entry.stampedName))throw Error('Tệp dấu sai tên');
    const file=zip.file(entry.stampedName);if(!file)throw Error('Thiếu ảnh có dấu');
-   stamped=new Blob([await file.async('arraybuffer')],{type:entry.stampedName.endsWith('.mp4')?'video/mp4':entry.stampedName.endsWith('.webm')?'video/webm':'image/jpeg'});
+   stamped=new Blob([await file.async('arraybuffer')],{type:entry.stampedName.endsWith('.mp4')?'video/mp4':entry.stampedName.endsWith('.webm')?'video/webm':entry.stampedName.endsWith('.png')?'image/png':entry.stampedName.endsWith('.webp')?'image/webp':'image/jpeg'});
    sum+=stamped.size;if(sum>MAX_ARCHIVE_BYTES)throw Error('Vượt giới hạn giải nén');
  }
  if(!entry.meta||typeof entry.meta!=='object'||!['photo','video'].includes(entry.meta.kind)||

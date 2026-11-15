@@ -1,14 +1,15 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import JSZip from 'jszip';
-import {ArrowDown,ArrowLeft,ArrowUp,Camera,Download,FileImage,FileText,Folder,FolderPlus,ImagePlus,Loader2,Move,RotateCcw,Save,ScanLine,Trash2,Upload,X} from 'lucide-react';
+import {ArrowDown,ArrowLeft,ArrowUp,Camera,Download,FileImage,FileText,Folder,FolderPlus,ImagePlus,Loader2,Move,RotateCcw,RotateCw,FlipHorizontal,FlipVertical,Save,ScanLine,Trash2,Upload,X} from 'lucide-react';
 import {saveToDevice} from '../../services/deviceBridge';
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
  DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,newScanId,putScan,putScanFolder,
- removeScan,restoreScanBatch,updateScanBatch,suggestDocumentEdges,validCorners,
+ removeScan,restoreScanBatch,updateScanBatch,suggestDocumentEdges,validCorners,scannerOrientedPreview,
  type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';
+import {scanQuadAfterOp,normalizeScanOps,safeScanOps,safeScanColor,DEFAULT_SCAN_COLOR,type ScanImageOp,type ScanColorAdjust} from '../../services/scannerEdits';
 
 type Props={onBack:()=>void};
 const FILTERS:{id:ScanFilter;name:string}[]=[
@@ -28,6 +29,8 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [editingId,setEditingId]=useState<string|null>(null),[showResult,setShowResult]=useState(false);
  const [cornerDraft,setCornerDraft]=useState<ScanCorners>(emptyCorners());
  const [filterDraft,setFilterDraft]=useState<ScanFilter>('enhance');
+ const [scanOpsDraft,setScanOpsDraft]=useState<ScanImageOp[]>([]);
+ const [scanColorDraft,setScanColorDraft]=useState<ScanColorAdjust>({...DEFAULT_SCAN_COLOR});
  const [scanDocumentType,setScanDocumentType]=useState<ScanDocumentType>('auto');
  const [dragFocus,setDragFocus]=useState<ScanPoint|null>(null);
  const [lensViewport,setLensViewport]=useState<{left:number;top:number}|null>(null);
@@ -45,10 +48,77 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [scanCameraError,setScanCameraError]=useState('');
  const [scanCameraBusy,setScanCameraBusy]=useState(false);
  const [scanCameraNotice,setScanCameraNotice]=useState('');
+ const [scanZoom,setScanZoom]=useState(1),[scanZoomMax,setScanZoomMax]=useState(4),[scanNativeZoom,setScanNativeZoom]=useState(false);
+ const [scanExposure,setScanExposure]=useState(0),[scanNativeExposure,setScanNativeExposure]=useState(false);
+ const [scanFocusPoint,setScanFocusPoint]=useState<{x:number;y:number}|null>(null);
+ const scanZoomRef=useRef(1),scanExposureRef=useRef(0),scanZoomNativeRef=useRef(false),scanExposureNativeRef=useRef(false);
+ const scanPinchRef=useRef<{distance:number;zoom:number}|null>(null),scanDidPinchRef=useRef(false);
+ const scanLastPinchRef=useRef(0);
+ const scanCameraCapabilities=useRef<{exposure?:{min:number;max:number;step?:number}}|null>(null);
  const [scanSessionIds,setScanSessionIds]=useState<string[]>([]);
  const scanSessionIdsRef=useRef<string[]>([]);
  const scanVideoRef=useRef<HTMLVideoElement>(null),scanStreamRef=useRef<MediaStream|null>(null);
  const scanCaptureLock=useRef(false);
+ const scannerZoomTo=async(value:number)=>{
+  const zoom=Math.max(1,Math.min(scanZoomMax,Math.round(value*10)/10));
+  scanZoomRef.current=zoom;setScanZoom(zoom);
+  if(!scanZoomNativeRef.current)return;
+  const track=scanStreamRef.current?.getVideoTracks()[0];
+  if(!track)return;
+  try{await track.applyConstraints({advanced:[{zoom} as MediaTrackConstraintSet]});}
+  catch{scanZoomNativeRef.current=false;setScanNativeZoom(false);setScanCameraNotice('Zoom phần cứng không khả dụng, đã chuyển sang phóng to ảnh quét.');}
+ };
+ const scannerExposureTo=async(value:number)=>{
+  const ev=Math.max(-2,Math.min(2,Math.round(value*2)/2));
+  scanExposureRef.current=ev;setScanExposure(ev);
+  if(!scanExposureNativeRef.current)return;
+  const track=scanStreamRef.current?.getVideoTracks()[0];
+  const caps=scanCameraCapabilities.current?.exposure;
+  if(!track||!caps)return;
+  const nativeValue=Math.max(caps.min,Math.min(caps.max,ev));
+  try{await track.applyConstraints({advanced:[{exposureCompensation:nativeValue} as MediaTrackConstraintSet]});}
+  catch{scanExposureNativeRef.current=false;setScanNativeExposure(false);setScanCameraNotice('Bù sáng cảm biến không hỗ trợ; dùng bù sáng khi xuất JPEG.');}
+ };
+ const scannerFocusAt=async(event:React.MouseEvent<HTMLVideoElement>)=>{
+  if(scanDidPinchRef.current||!scanCameraReady)return;
+  const video=event.currentTarget,rect=video.getBoundingClientRect();
+  // object-contain creates letterboxes: map the *content*, not the full element.
+  const scale=Math.min(rect.width/Math.max(video.videoWidth,1),rect.height/Math.max(video.videoHeight,1));
+  const w=video.videoWidth*scale,h=video.videoHeight*scale;
+  const x=(event.clientX-rect.left-(rect.width-w)/2)/w;
+  const y=(event.clientY-rect.top-(rect.height-h)/2)/h;
+  if(x<0||x>1||y<0||y>1)return;
+  setScanFocusPoint({x,y});window.setTimeout(()=>setScanFocusPoint(null),1100);
+  const track=scanStreamRef.current?.getVideoTracks()[0];
+  if(!track){return;}
+  const caps=track.getCapabilities?.() as MediaTrackCapabilities&{pointsOfInterest?:unknown;focusMode?:string[]} | undefined;
+  if(!caps||(!caps.pointsOfInterest&&!caps.focusMode?.includes('single-shot'))){
+   setScanCameraNotice('Camera đang dùng lấy nét tự động; WebView không hỗ trợ chọn điểm AF.');return;
+  }
+  try{
+   const constraint={pointsOfInterest:[{x,y}],focusMode:'single-shot'} as unknown as MediaTrackConstraintSet;
+   await track.applyConstraints({advanced:[constraint]});setScanCameraNotice('Đã gửi yêu cầu lấy nét vào điểm chạm.');
+  }catch{setScanCameraNotice('Máy không hỗ trợ lấy nét theo điểm; vẫn dùng AF tự động.');}
+ };
+ const scannerPinchStart=(event:React.TouchEvent<HTMLDivElement>)=>{
+  if(event.touches.length!==2)return;
+  const [a,b]=[event.touches[0],event.touches[1]];
+  scanPinchRef.current={distance:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY),zoom:scanZoomRef.current};
+  scanDidPinchRef.current=true;
+ };
+ const scannerPinchMove=(event:React.TouchEvent<HTMLDivElement>)=>{
+  if(event.touches.length!==2||!scanPinchRef.current)return;
+  event.preventDefault();
+  const now=Date.now();if(now-scanLastPinchRef.current<55)return;
+  scanLastPinchRef.current=now;
+  const [a,b]=[event.touches[0],event.touches[1]];
+  const distance=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+  void scannerZoomTo(scanPinchRef.current.zoom*distance/Math.max(1,scanPinchRef.current.distance));
+ };
+ const scannerPinchEnd=(event:React.TouchEvent<HTMLDivElement>)=>{
+  if(event.touches.length<2){scanPinchRef.current=null;
+   window.setTimeout(()=>{scanDidPinchRef.current=false;},250);}
+ };
 
  const importInput=useRef<HTMLInputElement>(null),cameraInput=useRef<HTMLInputElement>(null),restoreInput=useRef<HTMLInputElement>(null);
  const abortProcessing=useRef<AbortController|null>(null),dragPoint=useRef<number|null>(null),dragPointerId=useRef<number|null>(null);
@@ -71,7 +141,19 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
     video.srcObject=stream;
     // Some Android WebViews do not auto-start a dynamically mounted <video>.
     await video.play();
-    if(!canceled)setScanCameraReady(true);
+    if(!canceled){
+     const track=stream.getVideoTracks()[0];
+     const caps=track?.getCapabilities?.() as MediaTrackCapabilities&{zoom?:{min:number;max:number;step?:number};exposureCompensation?:{min:number;max:number;step?:number}} | undefined;
+     const nativeZoom=!!caps?.zoom&&caps.zoom.max>1;
+     scanZoomNativeRef.current=nativeZoom;setScanNativeZoom(nativeZoom);
+     setScanZoomMax(nativeZoom?Math.min(8,caps!.zoom!.max):4);
+     scanZoomRef.current=1;setScanZoom(1);
+     const nativeEv=!!caps?.exposureCompensation;
+     scanExposureNativeRef.current=nativeEv;setScanNativeExposure(nativeEv);
+     scanCameraCapabilities.current={exposure:caps?.exposureCompensation};
+     scanExposureRef.current=0;setScanExposure(0);
+     setScanCameraReady(true);
+    }
    }catch(error){if(!canceled)setScanCameraError('Không mở được camera: '+String(error));}
   };
   void open();
@@ -88,6 +170,19 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const editing=pages.find(p=>p.id===editingId);
  const originalUrl=useMemo(()=>editing?URL.createObjectURL(editing.original):'',[editing?.id,editing?.original]);
  useEffect(()=>()=>{if(originalUrl)URL.revokeObjectURL(originalUrl);},[originalUrl]);
+ const [previewScan,setPreviewScan]=useState<{key:string;url:string}|null>(null);
+ const scanViewKey=`${editing?.id||''}:${scanOpsDraft.join(',')}`;
+ useEffect(()=>{
+  if(!editing||!scanOpsDraft.length){setPreviewScan(null);return;}
+  let canceled=false,uri='';
+  setPreviewScan(null);
+  void scannerOrientedPreview(editing.original,scanOpsDraft).then(blob=>{
+   if(canceled)return;
+   uri=URL.createObjectURL(blob);setPreviewScan({key:scanViewKey,url:uri});
+  }).catch(error=>{if(!canceled)setProblem('Không thể xoay/lật ảnh xem trước: '+String(error));});
+  return()=>{canceled=true;if(uri)URL.revokeObjectURL(uri);};
+ },[editing?.id,editing?.original,scanViewKey]);
+ const orientedSourceUrl=scanOpsDraft.length?(previewScan?.key===scanViewKey?previewScan.url:''):originalUrl;
  const processedUrl=editing?displayUrls[editing.id]:undefined;
  const visible=useMemo(()=>pages.filter(p=>currentFolder==='*'||p.folderId===currentFolder).sort((a,b)=>a.order-b.order||a.createdAt-b.createdAt),[pages,currentFolder]);
  const chosen=visible.filter(p=>selection.includes(p.id));
@@ -110,7 +205,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    }
    if(!created.length)throw Error('Không có ảnh JPEG/PNG/WebP hợp lệ để quét');
    setPages(prev=>[...prev,...created]);setSelection(created.map(p=>p.id));setEditingId(created[0].id);
-   setCornerDraft(created[0].corners.map(p=>({...p})) as ScanCorners);setFilterDraft(created[0].filter);setShowResult(false);
+   setCornerDraft(created[0].corners.map(p=>({...p})) as ScanCorners);setFilterDraft(created[0].filter);setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
    setNotice(`Đã giữ ${created.length} ảnh gốc trong ứng dụng. Kéo 4 điểm để chỉnh mép giấy.`);
   });
  };
@@ -127,7 +222,11 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   try{
    const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
    const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không thể tạo khung ảnh scan');
-   ctx.drawImage(video,0,0,canvas.width,canvas.height);
+   const zoom=scanZoomNativeRef.current?1:scanZoomRef.current;
+   const srcW=video.videoWidth/zoom,srcH=video.videoHeight/zoom;
+   if(!scanExposureNativeRef.current)ctx.filter=`brightness(${Math.max(.35,1+scanExposureRef.current*.2)})`;
+   ctx.drawImage(video,(video.videoWidth-srcW)/2,(video.videoHeight-srcH)/2,srcW,srcH,0,0,canvas.width,canvas.height);
+   ctx.filter='none';
    const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(
     b=>b&&b.size?resolve(b):reject(Error('Camera không xuất được ảnh JPEG')),'image/jpeg',.94));
    const id=newScanId(),date=Date.now();
@@ -150,7 +249,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
     setScanCameraOpen(false);
     setSelection([id]);setEditingId(id);
     setCornerDraft(saved.corners.map(p=>({...p})) as ScanCorners);
-    setFilterDraft(saved.filter);setShowResult(false);
+    setFilterDraft(saved.filter);setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
     setNotice('Đã chụp 1 trang. Kéo 4 góc rồi bấm Làm phẳng & lưu bản scan.');
    }
   }catch(error){setScanCameraError('Không lưu được ảnh quét. Chưa xóa dữ liệu cũ: '+String(error));}
@@ -170,7 +269,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setSelection(ids);
    const first=pages.find(p=>p.id===ids[0]);
    if(first){setEditingId(first.id);setCornerDraft(first.corners.map(p=>({...p})) as ScanCorners);
-    setFilterDraft(first.filter);setShowResult(false);}
+    setFilterDraft(first.filter);setScanOpsDraft(safeScanOps(first.transformOps));setScanColorDraft(safeScanColor(first.colorAdjust));setShowResult(false);}
    setNotice(`Đã lưu ${ids.length} trang gốc. Có thể chỉnh 4 góc từng trang rồi xuất PDF hoặc ảnh.`);
   }
  };
@@ -197,7 +296,15 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setFolders(prev=>prev.filter(p=>p.id!==f.id));setCurrentFolder('');setNotice('Đã xóa thư mục, giữ nguyên tất cả ảnh');
   });
  };
- const editPage=(page:ScanPage)=>{if(working)return;setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setFilterDraft(page.filter);setShowResult(false);setProblem('');};
+ const editPage=(page:ScanPage)=>{if(working)return;setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setFilterDraft(page.filter);setScanOpsDraft(safeScanOps(page.transformOps));setScanColorDraft(safeScanColor(page.colorAdjust));setShowResult(false);setProblem('');};
+ const transformScan=(op:ScanImageOp)=>{
+  if(working||dragPointerId.current!==null)return;
+  setCornerDraft(old=>scanQuadAfterOp(old,op));
+  setScanOpsDraft(old=>normalizeScanOps([...old,op]));setShowResult(false);
+ };
+ const updateScanColor=(key:keyof ScanColorAdjust,value:number)=>{
+  setScanColorDraft(prev=>({...prev,[key]:value}));setShowResult(false);
+ };
  const endCornerDrag=(pointerId:number)=>{
   if(dragPointerId.current!==pointerId)return;
   dragPoint.current=null;dragPointerId.current=null;setDragFocus(null);setLensViewport(null);
@@ -237,25 +344,26 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   context.setTransform(dpr,0,0,dpr,0,0);
   context.fillStyle='#071121';context.fillRect(0,0,size,size);
   context.imageSmoothingEnabled=true;context.imageSmoothingQuality='high';
+  context.filter=`brightness(${scanColorDraft.brightness}%) contrast(${scanColorDraft.contrast}%) saturate(${scanColorDraft.saturation}%)`;
   const at=scannerLoupeImageRect(dragFocus,preview.width,preview.height);
   context.drawImage(img,at.left,at.top,at.width,at.height);
- },[dragFocus,originalUrl,editingId]);
+ },[dragFocus,orientedSourceUrl,editingId,scanColorDraft]);
  useEffect(()=>{dragPoint.current=null;dragPointerId.current=null;setDragFocus(null);setLensViewport(null);},[editingId,showResult]);
  const applyEdit=async()=>{if(!editing)return;if(!validCorners(cornerDraft)){setProblem('Bốn góc đang giao nhau hoặc quá sát nhau. Hãy kéo lại.');return;}
   await task('Đang làm phẳng và lọc ảnh…',async()=>{const controller=new AbortController();abortProcessing.current=controller;
-   try{const blob=await flattenDocument(editing.original,cornerDraft,filterDraft,controller.signal);
-    const next:ScanPage={...editing,processed:blob,corners:cornerDraft,filter:filterDraft,detectionConfidence:'estimated'};await putScan(next);
+   try{const blob=await flattenDocument(editing.original,cornerDraft,filterDraft,controller.signal,{operations:scanOpsDraft,adjustments:scanColorDraft});
+    const next:ScanPage={...editing,processed:blob,corners:cornerDraft,filter:filterDraft,transformOps:[...scanOpsDraft],colorAdjust:{...scanColorDraft},detectionConfidence:'estimated'};await putScan(next);
     setPages(prev=>prev.map(p=>p.id===next.id?next:p));setShowResult(true);setNotice('Đã làm phẳng ảnh và lưu bản scan; ảnh gốc giữ nguyên.');
    }finally{abortProcessing.current=null;}
   });
  };
  const getProcessed=async(p:ScanPage):Promise<Blob>=>{
   if(p.processed)return p.processed;
-  const processed=await flattenDocument(p.original,p.corners,p.filter,abortProcessing.current?.signal);
+  const processed=await flattenDocument(p.original,p.corners,p.filter,abortProcessing.current?.signal,{operations:p.transformOps,adjustments:p.colorAdjust});
   const next={...p,processed};await putScan(next);
   setPages(old=>old.map(item=>item.id===p.id?next:item));return processed;
  };
- const editingHasUnsavedCorners=!!editing&&(cornerDraft.some((p,i)=>Math.abs(p.x-editing.corners[i].x)>1e-6||Math.abs(p.y-editing.corners[i].y)>1e-6)||filterDraft!==editing.filter);
+ const editingHasUnsavedCorners=!!editing&&(cornerDraft.some((p,i)=>Math.abs(p.x-editing.corners[i].x)>1e-6||Math.abs(p.y-editing.corners[i].y)>1e-6)||filterDraft!==editing.filter||JSON.stringify(scanOpsDraft)!==JSON.stringify(safeScanOps(editing.transformOps))||JSON.stringify(scanColorDraft)!==JSON.stringify(safeScanColor(editing.colorAdjust)));
  const exportSelected=async(kind:'pdf'|'images')=>{if(!chosen.length)return;
   if(editingHasUnsavedCorners&&chosen.some(p=>p.id===editingId)){
    setProblem('Bốn góc hoặc bộ lọc của ảnh đang chỉnh chưa được lưu. Hãy bấm “Làm phẳng & lưu bản scan” trước khi xuất.');
@@ -320,7 +428,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    if(restoredBytes>250*1024*1024)throw Error('Tổng dung lượng giải nén vượt giới hạn 250 MB');
    const corners=(page.corners&&Array.isArray(page.corners)&&page.corners.length===4&&validCorners(page.corners)?page.corners:emptyCorners());
    const newPage:ScanPage={id:newScanId(),folderId:folderMap.get(page.folderId)||'',name:tidy(page.name),original,processed,
-    filter:FILTERS.some(x=>x.id===page.filter)?page.filter:'color',corners,order:Number(page.order)||Date.now(),createdAt:Date.now()};
+    filter:FILTERS.some(x=>x.id===page.filter)?page.filter:'color',corners,transformOps:safeScanOps(page.transformOps),colorAdjust:safeScanColor(page.colorAdjust),order:Number(page.order)||Date.now(),createdAt:Date.now()};
    newPages.push(newPage);
   }
   // A single readwrite transaction ensures all-or-nothing restoration and no overwrite.
@@ -357,9 +465,21 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         <button type="button" disabled={scanCameraBusy} onClick={()=>setScanMode('continuous')} aria-pressed={scanMode==='continuous'}
           className={`min-h-10 rounded-lg px-4 text-xs font-semibold border disabled:opacity-50 ${scanMode==='continuous'?'bg-[#E2B74B] text-[#06101E] border-[#E2B74B]':'bg-[#14243B] text-white border-white/15'}`}>Liên tục</button>
       </div>
-      <div className="relative flex-1 min-h-0 mx-3 rounded-2xl border border-white/15 bg-black overflow-hidden flex items-center justify-center">
+      <div className="shrink-0 px-3 pb-2 grid grid-cols-2 gap-3 text-[11px] text-[#CBD5E1]">
+        <label className="flex flex-col gap-1"><span>Zoom {scanZoom.toFixed(1)}× {scanNativeZoom?'· camera':'· số'}</span>
+         <input type="range" aria-label="Zoom camera scan" min="1" max={scanZoomMax} step="0.1" value={scanZoom}
+          onChange={e=>void scannerZoomTo(Number(e.target.value))} className="w-full accent-[#E2B74B]"/></label>
+        <label className="flex flex-col gap-1"><span>Độ sáng {scanExposure>0?'+':''}{scanExposure.toFixed(1)} {scanNativeExposure?'EV':'mức'}</span>
+         <input type="range" aria-label="Bù sáng camera scan" min="-2" max="2" step="0.5" value={scanExposure}
+          onChange={e=>void scannerExposureTo(Number(e.target.value))} className="w-full accent-[#E2B74B]"/></label>
+      </div>
+      <div className="relative flex-1 min-h-0 mx-3 rounded-2xl border border-white/15 bg-black overflow-hidden flex items-center justify-center touch-none"
+        onTouchStart={scannerPinchStart} onTouchMove={scannerPinchMove} onTouchEnd={scannerPinchEnd} onTouchCancel={scannerPinchEnd}>
         <video ref={scanVideoRef} autoPlay muted playsInline aria-label="Khung camera quét trực tiếp"
-          className="w-full h-full object-contain"/>
+          onClick={e=>void scannerFocusAt(e)} className="w-full h-full object-contain"
+          style={{transform:!scanNativeZoom?`scale(${scanZoom})`:undefined,filter:!scanNativeExposure?`brightness(${Math.max(.35,1+scanExposure*.2)})`:undefined,transformOrigin:'center center'}}/>
+        {scanFocusPoint&&<span aria-hidden="true" className="absolute rounded-full border-2 border-[#E2B74B] size-11 pointer-events-none"
+          style={{left:`${scanFocusPoint.x*100}%`,top:`${scanFocusPoint.y*100}%`,transform:'translate(-50%,-50%)'}}/>}
         <div aria-hidden="true" className={`pointer-events-none absolute border border-dashed border-[#E2B74B]/65 ${scanDocumentType==='id-card'?'w-[86%] max-h-[80%] aspect-[1.585] rounded-2xl':scanDocumentType==='paper'?'h-[80%] max-w-[80%] aspect-[0.707] rounded-lg':'inset-[8%] rounded-xl'}`}/>
         {!scanCameraReady&&!scanCameraError&&<span className="absolute text-sm text-white bg-black/70 rounded-lg px-3 py-2">Đang mở camera…</span>}
         {scanCameraError&&<div role="alert" className="absolute inset-x-3 bottom-3 rounded-xl bg-[#531A21]/95 p-3 text-sm">
@@ -428,7 +548,8 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
      <div className="max-w-xl mx-auto rounded-xl overflow-hidden bg-black border border-white/15">
        {showResult&&editing.processed?<img src={processedUrl} className="block w-full max-h-[55vh] object-contain" alt="Ảnh tài liệu đã làm phẳng"/>:
        <div ref={stageRef} className="relative w-fit max-w-full mx-auto">
-         <img ref={sourceImageRef} src={originalUrl} alt="Ảnh gốc cần chỉnh bốn góc" className="block max-w-full max-h-[52vh] w-auto h-auto" draggable={false}/>
+         <img ref={sourceImageRef} src={orientedSourceUrl} alt="Ảnh gốc cần chỉnh bốn góc" className="block max-w-full max-h-[52vh] w-auto h-auto" draggable={false}
+           style={{filter:`brightness(${scanColorDraft.brightness}%) contrast(${scanColorDraft.contrast}%) saturate(${scanColorDraft.saturation}%)`}}/>
          <svg className="absolute inset-0 w-full h-full touch-none" viewBox="0 0 1000 1000" preserveAspectRatio="none" onPointerMove={handlePointerMove} onPointerUp={e=>endCornerDrag(e.pointerId)} onPointerCancel={e=>endCornerDrag(e.pointerId)}>
            <polygon points={cornerDraft.map(p=>`${p.x*1000},${p.y*1000}`).join(' ')} fill="rgba(226,183,75,.12)" stroke="#E2B74B" strokeWidth="5" strokeDasharray="12 6"/>
            {cornerDraft.map((p,i)=><g key={i}>
@@ -457,6 +578,25 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
        setNotice(found.confidence==='estimated'?'Đã nhận diện tứ giác; hãy xem kỹ từng góc rồi lưu.':'Độ tin cậy thấp; đã giữ khung gần toàn ảnh để tránh cắt mất góc.');
       })} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center disabled:opacity-50"><ScanLine size={15}/>Nhận diện mép</button>
        <button onClick={()=>{setCornerDraft(emptyCorners());setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
+     <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
+       <p className="text-xs text-[#CBD5E1] font-semibold">Xoay / lật ảnh quét (giữ ảnh gốc)</p>
+       <div className="grid grid-cols-4 gap-2">
+        <button type="button" disabled={working} onClick={()=>transformScan('ccw')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><RotateCcw size={15}/>Trái 90°</button>
+        <button type="button" disabled={working} onClick={()=>transformScan('cw')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><RotateCw size={15}/>Phải 90°</button>
+        <button type="button" disabled={working} onClick={()=>transformScan('flip-h')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><FlipHorizontal size={15}/>Lật ngang</button>
+        <button type="button" disabled={working} onClick={()=>transformScan('flip-v')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><FlipVertical size={15}/>Lật dọc</button>
+       </div>
+       <p className="text-[10px] text-[#94A3B8]">Bốn điểm mép giấy chuyển theo ảnh. Bấm Lưu bản scan để ghi ảnh đã chỉnh; bản gốc không thay đổi.</p>
+     </div>
+     <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
+       <div className="flex justify-between items-center"><p className="text-xs font-semibold">Chỉnh màu ảnh scan</p><button disabled={working} onClick={()=>setScanColorDraft({...DEFAULT_SCAN_COLOR})} className="text-[11px] text-[#E2B74B]">Đặt lại màu</button></div>
+       {([['brightness','Độ sáng'],['contrast','Tương phản'],['saturation','Độ bão hòa']] as const).map(([key,label])=><label key={key} className="flex gap-3 items-center text-xs">
+        <span className="w-[105px] shrink-0">{label} {scanColorDraft[key]}%</span>
+        <input aria-label={label+' ảnh scan'} type="range" min="0" max="200" step="5" value={scanColorDraft[key]}
+          onChange={e=>updateScanColor(key,Number(e.target.value))} className="flex-1 accent-[#E2B74B] min-w-0"/>
+       </label>)}
+       <p className="text-[10px] text-[#94A3B8]">Xem trước màu gần đúng. Bản xuất sau khi bấm Làm phẳng & lưu sử dụng cùng các giá trị đã chọn.</p>
+     </div>
      <div className="flex flex-wrap gap-2">{FILTERS.map(f=><button key={f.id} onClick={()=>{setFilterDraft(f.id);setShowResult(false);}} className={`px-3 min-h-9 rounded-lg text-xs border ${filterDraft===f.id?'border-[#E2B74B] text-[#E2B74B] bg-[#E2B74B]/10':'border-white/10 bg-[#14223A]'}`}>{f.name}</button>)}</div>
      <button disabled={working||!validCorners(cornerDraft)} onClick={()=>void applyEdit()} className="min-h-11 w-full rounded-xl bg-[#E2B74B] text-[#071121] font-semibold flex items-center justify-center gap-2 disabled:opacity-40"><Save size={18}/>Làm phẳng & lưu bản scan</button>
    </div>}

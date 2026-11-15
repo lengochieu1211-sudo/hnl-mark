@@ -31,8 +31,8 @@ export function logoGeometry(width:number,height:number,config:WatermarkConfig,s
  else if(p==='bottom-right'){x=width-pad-w/2;y=height-pad-h/2;}
  else if(p==='bottom-center'){x=width/2;y=height-pad-h/2;}
  else if(p==='custom'){
-   x=width*clamp(Number(config.logoCustomPos?.xPct)||50,0,100)/100;
-   y=height*clamp(Number(config.logoCustomPos?.yPct)||15,0,100)/100;
+   x=width*clamp(Number.isFinite(config.logoCustomPos?.xPct)?Number(config.logoCustomPos!.xPct):50,0,100)/100;
+   y=height*clamp(Number.isFinite(config.logoCustomPos?.yPct)?Number(config.logoCustomPos!.yPct):15,0,100)/100;
  }
  return {x:clamp(x,w/2,width-w/2)-w/2,y:clamp(y,h/2,height-h/2)-h/2,w,h};
 }

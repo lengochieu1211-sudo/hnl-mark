@@ -33,6 +33,7 @@ import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
 import {isRenderableStamp} from '../../services/stampRenderer';
 import {supportedVideoMime} from '../../services/videoFormat';
+import {describeMicFailure} from '../../services/audioDiagnostics';
 import {readDeviceGps,mediaWatermarkConfig,nearbyGpsAddress} from '../../services/watermarkLocation';
 import {normalizeStampAngle,resolveStampOrientation} from '../../services/stampOrientation';
 import {capturedPhotoTurn,orientCapturedCanvas} from '../../services/capturedPhotoOrientation';
@@ -94,7 +95,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [showVideoQualityPopup, setShowVideoQualityPopup] = useState<boolean>(false);
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
     resolution: '1080p',
-    fps: 60,
+    fps: 30,
     quality: 'Cao',
   });
   const [lastRecordedVideo, setLastRecordedVideo] = useState<MediaItem | null>(null);
@@ -125,6 +126,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [cameraReady,setCameraReady] = useState(false);
   const [cameraRetryKey,setCameraRetryKey] = useState(0);
   const [audioUnavailable,setAudioUnavailable] = useState(false);
+  const [allowSilentRecording,setAllowSilentRecording]=useState(false);
+  const [audioIssue,setAudioIssue]=useState('');
   useEffect(()=>{
     const apply=(data?:{angle?:number;displayAngle?:number})=>{
       const {angle,displayAngle}=data||{};
@@ -382,11 +385,14 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         audio=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
         if(!audio.getAudioTracks().some(t=>t.readyState==='live'))throw Error('Không có đường tiếng hoạt động');
         audioStreamRef.current=audio;
-        setAudioUnavailable(false);
+        setAudioUnavailable(false);setAudioIssue('');
       }catch(e){
         audio?.getTracks().forEach(t=>t.stop());
         audioStreamRef.current=null;setAudioUnavailable(true);
-        triggerTransientToast('Micro không khả dụng. Bật quyền Micro cho HNL Mark trong Cài đặt Android.');
+        const message=describeMicFailure(e);setAudioIssue(message);
+        triggerTransientToast('Micro: '+message);
+        // Fail closed: a silent clip must require explicit opt-in from the user.
+        if(!allowSilentRecording)throw Error(message+' Nếu cần video không tiếng, bật tùy chọn trong cài đặt quay.');
       }
       if(streamRef.current!==stream||!stream.active){
         audioStreamRef.current?.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;return;
@@ -419,7 +425,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         if(!blob.size){triggerTransientToast('Không ghi được video.');setIsFinalizing(false);return;}
         const date=new Date(),item:MediaItem={id:`video-${Date.now()}`,title:`Video HNL ${date.toLocaleString('vi-VN')}`,
           kind:'video',origin:'newly-picked',rawBlob:blob,url:URL.createObjectURL(blob),createdAt:date.toISOString(),
-          durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000)),resolutionLabel:`${capture.width} × ${capture.height} · tối đa ${videoSettings.fps} FPS`,
+          durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000)),resolutionLabel:`${capture.width} × ${capture.height} · tối đa ${Math.min(30,videoSettings.fps)} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
           photoCode,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
           orientationDeg:0,captureWatermark:stampConfig,isStamped:isRenderableStamp(stampConfig.templateId)&&stampConfig.templateId!=='none',edits:{...DEFAULT_IMAGE_EDITS}};
@@ -691,7 +697,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           <div className="space-y-1.5">
             <div className="text-[11px] text-[#94A3B8]">Tốc độ khung hình (FPS)</div>
             <div className="grid grid-cols-3 gap-1.5">
-              {([24, 30, 60] as VideoFps[]).map((fps) => (
+              {([24, 30] as VideoFps[]).map((fps) => (
                 <button
                   key={fps}
                   type="button"
@@ -708,6 +714,12 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             </div>
           </div>
 
+          <p className="text-[11px] text-[#94A3B8]">Canvas chèn dấu hiện ghi tối đa 30 FPS. Không quảng cáo 60 FPS khi chưa có encoder hỗ trợ.</p>
+          <label className="flex gap-2 items-start rounded-xl bg-[#17253D] p-2.5 text-xs text-[#E2B74B]">
+            <input type="checkbox" checked={allowSilentRecording} onChange={e=>setAllowSilentRecording(e.target.checked)} className="mt-0.5 accent-[#E2B74B]" />
+            <span>Cho phép quay không tiếng khi micro lỗi (mặc định tắt). Nếu không bật, ứng dụng sẽ báo nguyên nhân và không tạo video câm.</span>
+          </label>
+          {audioIssue&&<p role="alert" className="text-xs text-red-200">{audioIssue}</p>}
           <div className="space-y-1.5">
             <div className="text-[11px] text-[#94A3B8]">Mức nén &amp; Bitrate</div>
             <div className="grid grid-cols-3 gap-1.5">

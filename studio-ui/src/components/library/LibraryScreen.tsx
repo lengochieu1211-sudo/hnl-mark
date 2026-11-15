@@ -23,6 +23,7 @@ import {
 import { LibraryStateMode, MediaItem, WatermarkConfig } from '../../types/hnl';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {PhotoPreview} from '../watermark/PhotoPreview';
+import {mediaLocalDateTime,mediaStoredDateTime} from '../../services/mediaDateTime';
 
 interface LibraryScreenProps {
   items: MediaItem[];
@@ -112,7 +113,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
     setLightboxItem(item);
     setVideoPlaybackError('');
     setEditingMetadata(false);
-    setDraftDate(item.createdAt.slice(0, 16));
+    setDraftDate(mediaLocalDateTime(item.createdAt));
     setDraftLocation(item.location);
     setDraftCoords(item.coordinates);
     setDraftNote(item.customNote);
@@ -121,7 +122,8 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
 
   const handleSaveMetadata = () => {
     if (!lightboxItem) return;
-    const normalizedIso = draftDate.length === 16 ? `${draftDate}:00` : draftDate;
+    let normalizedIso:string;
+    try{normalizedIso=mediaStoredDateTime(draftDate,lightboxItem.createdAt);}catch(error){setStatusNotice('Ngày giờ không hợp lệ: '+String(error));return;}
     onUpdateMediaMetadata(lightboxItem.id, {
       createdAt: normalizedIso,
       location: draftLocation,

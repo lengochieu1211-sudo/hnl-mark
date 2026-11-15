@@ -1,4 +1,6 @@
 /** HNL Mark offline scanner: no network, no OCR, source blobs retained unmodified. */
+import {scanOrientedSize,drawScannerOriented,adjustScanRgb,safeScanOps,safeScanColor,
+ type ScanImageOp,type ScanColorAdjust} from './scannerEdits';
 export type ScanPoint = {x:number;y:number};
 export type ScanCorners = [ScanPoint,ScanPoint,ScanPoint,ScanPoint]; // TL, TR, BR, BL
 export type ScanFilter = 'color'|'enhance'|'gray'|'bw'|'paper';
@@ -7,6 +9,7 @@ export type ScanDocumentType='auto'|'id-card'|'paper';
 export type ScanPage = {
   id:string; folderId:string; name:string; original:Blob; processed?:Blob;
   corners:ScanCorners; filter:ScanFilter; order:number; createdAt:number;
+  transformOps?:ScanImageOp[]; colorAdjust?:ScanColorAdjust;
   detectionConfidence?:ScanDetection['confidence']; documentType?:ScanDocumentType;
 };
 export type ScanFolder = {id:string;name:string;createdAt:number};
@@ -78,13 +81,28 @@ async function openBitmap(blob:Blob):Promise<ImageBitmap>{
  // createImageBitmap normalizes JPEG EXIF orientation before corner correction.
  return createImageBitmap(blob,{imageOrientation:'from-image'});
 }
-async function sourcePixels(blob:Blob,maxEdge:number):Promise<ImageData>{
+async function sourcePixels(blob:Blob,maxEdge:number,ops:ScanImageOp[]=[]):Promise<ImageData>{
  const bmp=await openBitmap(blob);try{
-  const scale=Math.min(1,maxEdge/Math.max(bmp.width,bmp.height));
-  const w=Math.max(1,Math.round(bmp.width*scale)),h=Math.max(1,Math.round(bmp.height*scale));
+  const size=scanOrientedSize(bmp.width,bmp.height,ops);
+  const scale=Math.min(1,maxEdge/Math.max(size.width,size.height));
+  const w=Math.max(1,Math.round(size.width*scale)),h=Math.max(1,Math.round(size.height*scale));
   const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
   const ctx=canvas.getContext('2d',{willReadFrequently:true});if(!ctx)throw Error('Không thể xử lý ảnh trên thiết bị');
-  ctx.drawImage(bmp,0,0,w,h);return ctx.getImageData(0,0,w,h);
+  drawScannerOriented(ctx,bmp,bmp.width,bmp.height,ops,scale);
+  return ctx.getImageData(0,0,w,h);
+ }finally{bmp.close();}
+}
+/** Preview is generated from the unmodified source; image operations do not
+ * mutate the original or the stored corner markers. */
+export async function scannerOrientedPreview(blob:Blob,ops:ScanImageOp[]):Promise<Blob>{
+ if(!ops.length)return blob;
+ const bmp=await openBitmap(blob);try{
+  const dimensions=scanOrientedSize(bmp.width,bmp.height,ops);
+  const scale=Math.min(1,1700/Math.max(dimensions.width,dimensions.height));
+  const canvas=document.createElement('canvas');canvas.width=Math.round(dimensions.width*scale);canvas.height=Math.round(dimensions.height*scale);
+  const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không mở được ảnh chỉnh hướng');
+  drawScannerOriented(ctx,bmp,bmp.width,bmp.height,ops,scale);
+  return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không tạo được ảnh xem trước')),'image/jpeg',.91));
  }finally{bmp.close();}
 }
 export type ScanDetection={corners:ScanCorners;confidence:'estimated'|'manual'};
@@ -414,9 +432,10 @@ function modifyFilter(r:number,g:number,b:number,filter:ScanFilter):[number,numb
  if(filter==='paper'){const v=clamp((lum-105)*2.1+180,0,255);return [v,v,v];}
  return [clamp((r-110)*1.18+132,0,255),clamp((g-110)*1.18+132,0,255),clamp((b-110)*1.18+132,0,255)];
 }
-export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanFilter,signal?:AbortSignal):Promise<Blob>{
+export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanFilter,signal?:AbortSignal,
+ options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust}):Promise<Blob>{
  if(!validCorners(corners))throw Error('Vùng quét không hợp lệ. Hãy chỉnh lại 4 góc.');
- const input=await sourcePixels(blob,2400);const {width:iw,height:ih,data}=input;
+ const input=await sourcePixels(blob,2400,safeScanOps(options?.operations));const {width:iw,height:ih,data}=input;
  const pix=(a:ScanPoint,b:ScanPoint)=>Math.hypot((a.x-b.x)*iw,(a.y-b.y)*ih);
  const rawW=Math.max(pix(corners[0],corners[1]),pix(corners[3],corners[2]));
  const rawH=Math.max(pix(corners[0],corners[3]),pix(corners[1],corners[2]));
@@ -435,7 +454,8 @@ export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanF
    const k00=(sy*iw+sx)*4,k10=(sy*iw+rx)*4,k01=(ry*iw+sx)*4,k11=(ry*iw+rx)*4;
    const rgb=[0,1,2].map(c=>(1-fy)*((1-fx)*data[k00+c]+fx*data[k10+c])+fy*((1-fx)*data[k01+c]+fx*data[k11+c]));
    const p=modifyFilter(rgb[0],rgb[1],rgb[2],filter),i=(y*w+x)*4;
-   out[i]=p[0];out[i+1]=p[1];out[i+2]=p[2];out[i+3]=255;
+   const adjusted=adjustScanRgb(p[0],p[1],p[2],safeScanColor(options?.adjustments));
+   out[i]=adjusted[0];out[i+1]=adjusted[1];out[i+2]=adjusted[2];out[i+3]=255;
   }
   if(y%24===0)await new Promise<void>(resolve=>setTimeout(resolve,0)); // keep Android UI responsive
  }

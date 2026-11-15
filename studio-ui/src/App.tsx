@@ -28,6 +28,7 @@ import { ViewportTesterModal } from './components/qa/ViewportTesterModal';
 import {storeMedia,loadMedia,removeMedia} from './services/mediaStorage';
 import {restoreProjectZip} from './services/projectBackup';
 import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
+import {mediaExtension} from './services/mediaExtensions';
 import { createTimemarkPhoto,createTimemarkCode } from './services/timemarkRenderer';
 import {isRenderableStamp} from './services/stampRenderer';
 import {mediaWatermarkConfig,readPhotoExifGps} from './services/watermarkLocation';
@@ -126,10 +127,12 @@ export default function App() {
   const importPickedFiles=async (files:File[])=>{
     if(!files.length)return;
     const all:MediaItem[]=[];
+    let imported=0;const failures:string[]=[];
     for(const [i,file] of files.entries()){
+      try{
       const detectedType=file.type.startsWith('image/')||file.type.startsWith('video/')?file.type:
-        /\.(mp4|m4v|mov)$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':
-        /\.(jpg|jpeg)$/i.test(file.name)?'image/jpeg':/\.png$/i.test(file.name)?'image/png':'';
+        /\.mov$/i.test(file.name)?'video/quicktime':/\.3gp$/i.test(file.name)?'video/3gpp':/\.m4v$/i.test(file.name)?'video/x-m4v':/\.mp4$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':
+        /\.(jpg|jpeg)$/i.test(file.name)?'image/jpeg':/\.png$/i.test(file.name)?'image/png':/\.webp$/i.test(file.name)?'image/webp':/\.heic$/i.test(file.name)?'image/heic':/\.heif$/i.test(file.name)?'image/heif':'';
       if(!detectedType)continue;
       const mediaFile=file.type===detectedType?file:new File([file],file.name,{type:detectedType,lastModified:file.lastModified});
       const now=new Date();
@@ -141,9 +144,12 @@ export default function App() {
       sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:exifCoords||'',photoCode:createTimemarkCode(),
       customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
       // Persist EACH original before adding to UI; native picker processes sequentially.
-      await storeMedia(item);all.push(item);
+      await storeMedia(item);all.push(item);imported++;
+      setMediaItems(old=>[item,...old]);setActiveMediaId(item.id);
+      }catch(error){failures.push(file.name+': '+String(error));}
     }
-    if(all.length){setMediaItems(old=>[...all,...old]);setActiveMediaId(all[0].id);setRoute('library');}
+    if(all.length){setRoute('library');}
+    if(failures.length)alert(`Đã nhập ${imported}/${files.length} tệp. Các tệp lỗi vẫn còn nguyên trên máy:\n${failures.slice(0,3).join('\n')}`);
   };
   const pickerRef=useRef(importPickedFiles);
   pickerRef.current=importPickedFiles;
@@ -197,8 +203,8 @@ export default function App() {
     setMediaItems(prev=>[item,...prev]);
     setActiveMediaId(item.id);
     setWatermarkConfig(prev=>({...prev,photoCodeSeq:prev.photoCodeSeq+1}));
-    if(isAndroidApk()&&item.stampedBlob&&item.isStamped){
-      try{await saveToDevice(item.stampedBlob,`HNLMark_Timemark_${Date.now()}.jpg`);}
+    if(isAndroidApk()&&item.stampedBlob&&(item.isStamped||(newPhoto.captureWatermark||watermarkConfig).templateId==='none')){
+      try{await saveToDevice(item.stampedBlob,`HNLMark_${item.isStamped?'Timemark':'NoStamp'}_${Date.now()}.jpg`);}
       catch(e){alert('Ảnh có dấu còn trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
     }
   };
@@ -209,8 +215,7 @@ export default function App() {
     setMediaItems(prev=>[newVideo,...prev]);
     setActiveMediaId(newVideo.id);
     if(isAndroidApk()&&newVideo.rawBlob){
-      if(!newVideo.isStamped){alert('Video chưa có dấu, chỉ được giữ trong Thư viện HNL để tránh xuất nhầm.');return;}
-      try{await saveToDevice(newVideo.rawBlob,`HNLMark_Timemark_${Date.now()}.${newVideo.rawBlob.type.includes('mp4')?'mp4':'webm'}`);}
+      try{await saveToDevice(newVideo.rawBlob,`HNLMark_${newVideo.isStamped?'Timemark':'NoStamp'}_${Date.now()}.${mediaExtension(newVideo.rawBlob.type,'video')}`);}
       catch(e){alert('Video có dấu vẫn trong Thư viện HNL nhưng chưa lưu xuống máy: '+String(e));}
     }
   };
@@ -236,6 +241,27 @@ export default function App() {
       alert('Không lưu được chỉnh sửa vào thư viện offline. Hãy kiểm tra bộ nhớ: '+String(error));
     });
   };
+
+  /** Per-photo settings must be persisted on that item's own record, never in
+   * the global template. Keep captured original source and undo stale stamps. */
+  const updateSelectedStampConfig=(patch:Partial<WatermarkConfig>)=>{
+    if(patch.perPhotoOverrideEnabled!==undefined||patch.photoCodeSeq!==undefined||patch.photoCodePrefix!==undefined||
+       !watermarkConfig.perPhotoOverrideEnabled||!activeMedia||activeMedia.id==='no-media'){
+      updateWatermarkConfig(patch);return;
+    }
+    if(activeMedia.kind==='video'&&activeMedia.isStamped&&!activeMedia.stampedBlob){
+      alert('Video ghi bằng camera đã chèn dấu trực tiếp, chưa có bản raw không dấu để thay đổi mẫu. Hãy giữ nguyên bản gốc.');return;
+    }
+    persistMediaRevision(activeMedia.id,m=>{
+      let url=m.url;
+      if(m.kind==='photo'&&m.rawBlob&&m.stampedBlob){
+        url=URL.createObjectURL(m.rawBlob);
+        const old=m.url;window.setTimeout(()=>URL.revokeObjectURL(old),10000);
+      }
+      return {...m,watermarkOverride:{...m.watermarkOverride,...patch},stampedBlob:undefined,url};
+    });
+  };
+  const selectedStampConfig=activeMedia?{...mediaWatermarkConfig(watermarkConfig,activeMedia),perPhotoOverrideEnabled:watermarkConfig.perPhotoOverrideEnabled}:watermarkConfig;
 
   const handleUpdateEdits = (mediaId: string, nextEdits: ImageEdits) => {
     persistMediaRevision(mediaId,m=>{
@@ -416,9 +442,9 @@ export default function App() {
               <StampsAndSettingsScreen
                 key={stampsSubTab}
                 activeMedia={activeMedia ?? emptyPreview}
-                config={watermarkConfig}
+                config={selectedStampConfig}
                 initialSubTab={stampsSubTab}
-                onChangeConfig={updateWatermarkConfig}
+                onChangeConfig={updateSelectedStampConfig}
                 onUpdateEdits={handleUpdateEdits}
               />
             )}

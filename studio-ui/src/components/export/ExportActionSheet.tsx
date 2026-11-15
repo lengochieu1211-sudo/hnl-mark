@@ -7,6 +7,7 @@ import {mediaWatermarkConfig} from '../../services/watermarkLocation';
 import {stampImportedVideo} from '../../services/importedVideoStamp';
 import {saveToDevice,shareFromDevice} from '../../services/deviceBridge';
 import {createProjectZip} from '../../services/projectBackup';
+import {mediaExtension} from '../../services/mediaExtensions';
 interface Props {isOpen:boolean;targetItems:MediaItem[];onClose:()=>void;watermarkConfig:WatermarkConfig;onRestoreBackup?:(file:File)=>Promise<void>;onStampedMedia?:(item:MediaItem,stamped:Blob,config:WatermarkConfig)=>Promise<void>}
 export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,watermarkConfig,onRestoreBackup,onStampedMedia})=>{
  const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(false);
@@ -25,12 +26,12 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
  const saveSelected=()=>run(async()=>{
  if(targetItems.length!==1)throw Error('Lưu từng ảnh/video; dùng Xuất nhiều để tạo ZIP.');
  const it=targetItems[0],blob=await getBlob(it);
- const ext=it.kind==='video'?(blob.type.includes('mp4')?'mp4':'webm'):(blob.type.includes('png')?'png':'jpg');
+ const ext=mediaExtension(blob.type,it.kind,it.title);
  await saveToDevice(blob,`HNLMark_Original_${Date.now()}.${ext}`);
  },'Đã lưu bản gốc vào máy; dữ liệu ảnh/video gốc không thay đổi.');
  const share=()=>run(async()=>{
  if(targetItems.length!==1)throw Error('Chia sẻ một tệp mỗi lần');const it=targetItems[0],blob=await getBlob(it);
- await shareFromDevice(blob,`HNLMark_Original_${Date.now()}.${it.kind==='video'?(blob.type.includes('mp4')?'mp4':'webm'):(blob.type.includes('png')?'png':'jpg')}`);
+ await shareFromDevice(blob,`HNLMark_Original_${Date.now()}.${mediaExtension(blob.type,it.kind,it.title)}`);
  },'Đã gửi yêu cầu mở trình chia sẻ (xác nhận gửi ở ứng dụng đích).');
  const saveStamped=(sharing:boolean)=>run(async()=>{
    if(targetItems.length!==1)throw Error('Vui lòng chọn một ảnh hoặc video.');
