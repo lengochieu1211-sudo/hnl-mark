@@ -65,6 +65,8 @@ export interface WatermarkConfig {
   textColor: string;
   accentColor: string;
   bgOpacity: number;
+  /** Original Timemark has no dark panel unless the user explicitly enables it. */
+  timemarkBackgroundEnabled?: boolean;
   showLogo: boolean;
   logoSide: 'left' | 'right';
   /** Timemark stays logo-free unless explicitly enabled. */
