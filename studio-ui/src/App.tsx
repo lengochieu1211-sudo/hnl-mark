@@ -295,7 +295,10 @@ export default function App() {
         stampedBlob:undefined,stampedConfig:undefined,url};
     });
   };
-  const selectedStampConfig=activeMedia?{...mediaWatermarkConfig(watermarkConfig,activeMedia),perPhotoOverrideEnabled:watermarkConfig.perPhotoOverrideEnabled}:watermarkConfig;
+  const selectedStampConfig=activeMedia?{
+    ...mediaWatermarkConfig({...watermarkConfig,...activeMedia.captureWatermark,...activeMedia.watermarkOverride},activeMedia),
+    perPhotoOverrideEnabled:watermarkConfig.perPhotoOverrideEnabled
+  }:watermarkConfig;
 
   const handleUpdateEdits = (mediaId: string, nextEdits: ImageEdits) => {
     persistMediaRevision(mediaId,m=>{
