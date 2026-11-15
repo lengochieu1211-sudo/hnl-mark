@@ -132,11 +132,12 @@ jobs:
             python3 -c "from PIL import Image; im=Image.open('android-smoke-evidence/studio-camera-emulator.png').convert('RGB'); assert im.width>=320 and im.height>=480; print('PASS: emulator screenshot',im.size)"
             if grep -q "Process: ${HNL_TEST_PACKAGE}" android-smoke-evidence/logcat.txt && grep -q 'FATAL EXCEPTION' android-smoke-evidence/logcat.txt; then echo 'FAIL: app crash detected'; exit 1; fi
             echo 'Emulator boot, photo saved into public Pictures/HNLMark, orientation/video screenshots captured; rotation correctness and real Xiaomi runtime are still PENDING.' > android-smoke-evidence/RESULT.txt
+            echo 'Microphone and video-with-audio not verified: emulator runs with -noaudio. File audio-track and Redmi Note 11 playback remain PENDING.' > android-smoke-evidence/AUDIO_NOT_VERIFIED.txt
       - name: Upload emulator screen and runtime logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: HNLMark-STUDIO16-EMULATOR-EVIDENCE
+          name: HNLMark-TEST48-EMULATOR-EVIDENCE
           path: android-smoke-evidence/
           if-no-files-found: warn
           retention-days: 30
