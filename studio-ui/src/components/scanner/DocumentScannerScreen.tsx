@@ -6,7 +6,7 @@ import {saveToDevice} from '../../services/deviceBridge';
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
  DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,newScanId,putScan,putScanFolder,
- removeScan,removeScanFolder,restoreScanBatch,suggestDocumentEdges,validCorners,
+ removeScan,restoreScanBatch,updateScanBatch,suggestDocumentEdges,validCorners,
  type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';
 
@@ -192,8 +192,8 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const deleteFolder=async()=>{const f=folders.find(f=>f.id===currentFolder);if(!f)return;if(!window.confirm(`Xóa thư mục “${f.name}”? Ảnh quét sẽ chuyển về Chưa phân loại, không bị xóa.`))return;
   await task('Đang chuyển tài liệu về Chưa phân loại…',async()=>{
    const affected=pages.filter(p=>p.folderId===f.id),modified=affected.map(p=>({...p,folderId:''}));
-   for(const p of modified)await putScan(p);
-   await removeScanFolder(f.id);setPages(prev=>prev.map(p=>p.folderId===f.id?{...p,folderId:''}:p));
+   await updateScanBatch(modified,f.id);
+   setPages(prev=>prev.map(p=>p.folderId===f.id?{...p,folderId:''}:p));
    setFolders(prev=>prev.filter(p=>p.id!==f.id));setCurrentFolder('');setNotice('Đã xóa thư mục, giữ nguyên tất cả ảnh');
   });
  };
@@ -279,12 +279,12 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  };
  const movePage=async(id:string,delta:number)=>{const idx=visible.findIndex(p=>p.id===id),other=visible[idx+delta];if(idx<0||!other)return;
   const a=visible[idx],b=other;
-  await task('Đang sắp xếp trang…',async()=>{await putScan({...a,order:b.order});await putScan({...b,order:a.order});
+  await task('Đang sắp xếp trang…',async()=>{await updateScanBatch([{...a,order:b.order},{...b,order:a.order}]);
    setPages(prev=>prev.map(p=>p.id===a.id?{...p,order:b.order}:p.id===b.id?{...p,order:a.order}:p));setNotice('Đã đổi thứ tự trang.');});
  };
  const dropPage=async(targetId:string)=>{if(!draggingId||targetId===draggingId)return;const all=[...visible];const from=all.findIndex(p=>p.id===draggingId),to=all.findIndex(p=>p.id===targetId);if(from<0||to<0)return;
   const [moved]=all.splice(from,1);all.splice(to,0,moved);
-  await task('Đang sắp xếp trang…',async()=>{const now=Date.now();const changes=all.map((p,i)=>({...p,order:now+i}));for(const p of changes)await putScan(p);
+  await task('Đang sắp xếp trang…',async()=>{const now=Date.now();const changes=all.map((p,i)=>({...p,order:now+i}));await updateScanBatch(changes);
    const map=new Map(changes.map(p=>[p.id,p]));setPages(prev=>prev.map(p=>map.get(p.id)||p));});setDraggingId(null);
  };
  const updatePageFolder=async(id:string,folderId:string)=>{const page=pages.find(p=>p.id===id);if(!page)return;

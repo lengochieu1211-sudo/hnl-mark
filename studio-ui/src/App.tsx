@@ -53,6 +53,12 @@ export default function App() {
 
   const [mediaItems, setMediaItems] = useState<MediaItem[]>(INITIAL_MEDIA_ITEMS);
   const [activeMediaId, setActiveMediaId] = useState<string>('');
+  const mediaSnapshotRef=useRef<MediaItem[]>(INITIAL_MEDIA_ITEMS);
+  const pendingMediaRef=useRef(new Map<string,MediaItem>());
+  const mediaWriteQueueRef=useRef(new Map<string,Promise<void>>());
+  // The displayed media and persisted media share the same revision stream.
+  useEffect(()=>{mediaSnapshotRef.current=mediaItems;},[mediaItems]);
+
   const [watermarkConfig, setWatermarkConfig] = useState<WatermarkConfig>(()=>{
     let saved:Partial<WatermarkConfig>={};
     try { saved=JSON.parse(localStorage.getItem('hnlmark-watermark-settings-v1')||'{}') as Partial<WatermarkConfig>; }
@@ -214,11 +220,31 @@ export default function App() {
     importPickedFiles(Array.from(files)).catch(e=>alert('Không thể nhập ảnh/video: '+String(e)));
   };
 
+  const persistMediaRevision=(id:string,transform:(item:MediaItem)=>MediaItem)=>{
+    const current=pendingMediaRef.current.get(id)||mediaSnapshotRef.current.find(item=>item.id===id);
+    if(!current)return;
+    const updated=transform(current);
+    pendingMediaRef.current.set(id,updated);
+    mediaSnapshotRef.current=mediaSnapshotRef.current.map(item=>item.id===id?updated:item);
+    setMediaItems(prev=>prev.map(item=>item.id===id?updated:item));
+    // A prior write may finish AFTER a new edit: commit revisions strictly in order.
+    const before=mediaWriteQueueRef.current.get(id)||Promise.resolve();
+    const write=before.catch(()=>{}).then(()=>storeMedia(updated));
+    mediaWriteQueueRef.current.set(id,write);
+    void write.catch(error=>{
+      console.error('Không lưu được thay đổi ảnh/video:',error);
+      alert('Không lưu được chỉnh sửa vào thư viện offline. Hãy kiểm tra bộ nhớ: '+String(error));
+    });
+  };
+
   const handleUpdateEdits = (mediaId: string, nextEdits: ImageEdits) => {
-    setMediaItems(prev=>prev.map(m=>{
-      if(m.id!==mediaId)return m;
-      const updated={...m,edits:nextEdits};storeMedia(updated).catch(console.error);return updated;
-    }));
+    persistMediaRevision(mediaId,m=>{
+      if(m.kind!=='photo'||!m.rawBlob||!m.stampedBlob)return {...m,edits:nextEdits};
+      const previousUrl=m.url;
+      const url=URL.createObjectURL(m.rawBlob);
+      window.setTimeout(()=>URL.revokeObjectURL(previousUrl),10000);
+      return {...m,edits:nextEdits,stampedBlob:undefined,url};
+    });
   };
 
   const handleUpdateMediaMetadata = (
@@ -227,10 +253,25 @@ export default function App() {
       Pick<MediaItem, 'createdAt' | 'location' | 'coordinates' | 'customNote' | 'photoCode' | 'title'>
     >,
   ) => {
-    setMediaItems(prev=>prev.map(m=>{
-      if(m.id!==id)return m;
-      const updated={...m,...patch};storeMedia(updated).catch(console.error);return updated;
-    }));
+    persistMediaRevision(id,m=>{
+      const next={...m,...patch};
+      if(m.kind==='photo'&&m.captureWatermark){
+        next.captureWatermark={...m.captureWatermark,
+          ...(patch.createdAt?{dateTimeIso:patch.createdAt,autoTime:false}:{}),
+          ...(patch.location!==undefined?{locationText:patch.location}:{}),
+          ...(patch.coordinates!==undefined?{coordinates:patch.coordinates}:{}),
+          ...(patch.customNote!==undefined?{customNote:patch.customNote}:{})};
+        // Historical stamped pixels no longer match metadata. Future save/share
+        // re-renders from rawBlob; the original JPEG stays immutable.
+        next.stampedBlob=undefined;
+        if(m.rawBlob&&m.stampedBlob){
+          next.url=URL.createObjectURL(m.rawBlob);
+          const previousUrl=m.url;
+          window.setTimeout(()=>URL.revokeObjectURL(previousUrl),10000);
+        }
+      }
+      return next;
+    });
   };
 
   const handleDeleteItems = async(ids:string[])=>{
@@ -318,10 +359,8 @@ export default function App() {
             <button type="button" onClick={()=>setRoute('scanner')}
               className="min-h-9 px-3 rounded-xl bg-[#17253D] text-[#E2B74B] text-xs font-semibold border border-[#E2B74B]/30">Quét tài liệu / CCCD</button>
             <input ref={restoreInput} type="file" accept=".zip,application/zip" hidden
-              onChange={e=>{const file=e.target.files?.[0];if(file)restoreProjectZip(file).then(restored=>{
-                setMediaItems(old=>[...restored,...old]);if(restored[0])setActiveMediaId(restored[0].id);
-                alert('Đã khôi phục '+restored.length+' ảnh/video gốc, không xóa dữ liệu trước đó.');
-              }).catch(err=>alert('Lỗi khôi phục ZIP: '+String(err)));e.currentTarget.value='';}}/>
+              onChange={e=>{const file=e.target.files?.[0];if(file)void restoreLibraryZip(file).then(()=>alert('Đã khôi phục ZIP vào thư viện; dữ liệu cũ được giữ nguyên.'))
+                .catch(err=>alert('Lỗi khôi phục ZIP: '+String(err)));e.currentTarget.value='';}}/>
             <button type="button" onClick={()=>restoreInput.current?.click()}
               className="min-h-9 px-3 rounded-xl bg-[#17253D] text-[#E2B74B] text-xs font-semibold">Khôi phục ZIP chứa ảnh gốc</button>
             <span className="text-[11px] text-[#94A3B8]">Không ghi đè thư viện cũ. Thư viện TEST được lưu riêng để bảo vệ dữ liệu.</span>

@@ -35,6 +35,24 @@ export const putScan=(p:ScanPage)=>transact<void>('pages','readwrite',(s,done)=>
 export const removeScan=(id:string)=>transact<void>('pages','readwrite',(s,done)=>{s.delete(id);done();});
 export const putScanFolder=(f:ScanFolder)=>transact<void>('folders','readwrite',(s,done)=>{s.put(f);done();});
 export const removeScanFolder=(id:string)=>transact<void>('folders','readwrite',(s,done)=>{s.delete(id);done();});
+/** Atomic reorder/move/delete-folder transaction, including both object stores.
+ * A quota error never leaves half the pages moved to another folder. */
+export async function updateScanBatch(pages:ScanPage[],removeFolderId?:string):Promise<void>{
+ if(!pages.length&&!removeFolderId)return;
+ const db=await database();
+ return new Promise<void>((resolve,reject)=>{
+  const tx=db.transaction(['pages','folders'],'readwrite');
+  tx.oncomplete=()=>{db.close();resolve();};
+  tx.onabort=()=>{db.close();reject(tx.error||new Error('Không thể cập nhật trọn bộ trang scan'))};
+  tx.onerror=()=>{};
+  try{
+   const pageStore=tx.objectStore('pages');
+   for(const page of pages)pageStore.put(page);
+   if(removeFolderId)tx.objectStore('folders').delete(removeFolderId);
+  }catch(error){try{tx.abort();}catch{/* completed */}reject(error);}
+ });
+}
+
 /** Restore every scanned page and folder in ONE IndexedDB transaction. If any
  * image fails to be stored (quota, ID collision, corruption), the transaction
  * rolls back completely and existing user scans remain untouched. */

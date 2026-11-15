@@ -15,10 +15,10 @@ assert 'setMediaItems(old=>[...restored,...old])' in app, 'restore must append, 
 assert 'setLibraryLoadError(' in app and 'retryLibraryLoad' in app
 assert 'capturedPhotoTurn(canvas.width,canvas.height' in camera
 assert 'orientCapturedCanvas(canvas,quarter)' in camera
-assert 'const turn=capturedPhotoTurn(video.videoWidth,video.videoHeight,physicalAngle,startStampAngle)' in video
-assert 'const dimensions=orientedFrameSize(video.videoWidth,video.videoHeight,turn)' in video
+assert 'const startTurn=capturedPhotoTurn(video.videoWidth,video.videoHeight,getPhysicalAngle(),getStampAngle())' in video
+assert 'const oriented=orientedFrameSize(rawWidth,rawHeight,turn)' in video
 assert 'ctx.rotate(turn*Math.PI/180)' in video
 assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode,logo)' in video
 assert 'return 0;' in photo, 'rotation not calibrated for 180 until real-device evidence'
-assert 'await storeMedia(media);loaded.push(media)' in backup, 'known partial-restore risk; do not claim atomic'
+assert 'await storeMediaBatchNew(prepared)' in backup, 'ZIP restore must be atomic'
 print('PASS: TEST35 real ZIP restore button, true library reload/error, hidden QA controls; photo/video orientation source contracts')

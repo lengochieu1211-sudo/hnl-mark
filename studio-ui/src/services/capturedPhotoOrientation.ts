@@ -12,8 +12,10 @@ export function capturedPhotoTurn(width:number,height:number,physicalAngle:numbe
  const wantsLandscape=physical===90||physical===-90;
  const isLandscape=width>height;
  if(isLandscape===wantsLandscape){
-  // Keep an already correctly laid-out raster untouched. A prior release
-  // rotated only the text, producing a sideways tag on portrait JPEGs.
+  // Aspect ratio alone cannot identify an upside-down 180-degree frame.
+  // A portrait-locked Android display reports physical=180, stamp residual=180.
+  // With an auto-rotating display (physical=180, display=180) residual=0.
+  if(physical===180&&liveStampAngle===180)return 180;
   return 0;
  }
  // Redmi/WebView may expose sensor-oriented pixels even though the live

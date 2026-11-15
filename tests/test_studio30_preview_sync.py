@@ -25,5 +25,5 @@ assert 'const output=orientCapturedCanvas(canvas,quarter)' in cam
 assert 'orientationDeg:0, captureWatermark:' in cam
 assert '<PhotoPreview compact media={latestItem}' in cam
 assert 'resolveStampOrientation(angle,screen)' in cam # live stamp logic unchanged
-assert "applicationIdSuffix '.trial2534'" in read('android/app/build.gradle')
+assert "applicationIdSuffix '.trial2535'" in read('android/app/build.gradle')
 print('PASS TEST30 instant image color via CSS, non-destructive shared preview on 5 screens, photo-pixel orientation')

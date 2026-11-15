@@ -1,8 +1,8 @@
 /** Portable ORIGINAL-media archive. Never replaces or deletes old media. */
 import JSZip from 'jszip';
 import type {MediaItem} from '../types/hnl';
-import {storeMedia} from './mediaStorage';
-interface Entry {name:string;mime:string;size:number;stampedName?:string;meta:Omit<MediaItem,'rawBlob'|'stampedBlob'|'url'>}
+import {storeMediaBatchNew} from './mediaStorage';
+interface Entry {name:string;mime:string;size:number;stampedName?:string;sourceIsStamped?:boolean;meta:Omit<MediaItem,'rawBlob'|'stampedBlob'|'url'>}
 const MAX_ARCHIVE_BYTES=512*1024*1024;
 export async function createProjectZip(items:MediaItem[]):Promise<Blob>{
  const zip=new JSZip();const manifest:{app:string,format:number,createdAt:string,items:Entry[]}={app:'HNLMark',format:1,createdAt:new Date().toISOString(),items:[]};let total=0;
@@ -17,7 +17,7 @@ export async function createProjectZip(items:MediaItem[]):Promise<Blob>{
    stampedName=`media/${manifest.items.length.toString().padStart(4,'0')}_stamped.${stampedBlob.type.startsWith('video/')?(stampedBlob.type.includes('mp4')?'mp4':'webm'):'jpg'}`;
    zip.file(stampedName,stampedBlob,{compression:'STORE'});
  }
- zip.file(name,blob,{compression:'STORE'});manifest.items.push({name,mime:blob.type,size:blob.size,stampedName,meta});
+ zip.file(name,blob,{compression:'STORE'});manifest.items.push({name,mime:blob.type,size:blob.size,stampedName,sourceIsStamped:item.kind==='video'&&item.isStamped===true&&!stampedBlob,meta});
  }
  zip.file('manifest.json',JSON.stringify(manifest,null,2));
  return zip.generateAsync({type:'blob',compression:'STORE'});
@@ -27,14 +27,14 @@ export async function restoreProjectZip(zipBlob:Blob):Promise<MediaItem[]>{
  const zip=await JSZip.loadAsync(zipBlob);const file=zip.file('manifest.json');if(!file)throw Error('Không phải bản sao lưu HNL Mark (thiếu manifest)');
  const manifest=JSON.parse(await file.async('string')) as {app:string;format:number;items:Entry[]};
  if(manifest.app!=='HNLMark'||manifest.format!==1||!Array.isArray(manifest.items)||manifest.items.length>300)throw Error('Cấu trúc dự án không hợp lệ');
- const loaded:MediaItem[]=[];let sum=0;
+ const prepared:MediaItem[]=[];let sum=0;
  for(const entry of manifest.items){
  if(!/^media\/\d{4}\.(jpg|png|mp4|webm)$/.test(entry.name))throw Error('Tên tệp không hợp lệ');
  if(!entry.mime?.match(/^(image|video)\//)||!Number.isSafeInteger(entry.size)||entry.size<=0||entry.size>MAX_ARCHIVE_BYTES)throw Error('Tệp media sai định dạng');
  const data=zip.file(entry.name);if(!data)throw Error('Thiếu '+entry.name);
  const bytes=await data.async('uint8array');sum+=bytes.byteLength;if(bytes.byteLength!==entry.size||sum>MAX_ARCHIVE_BYTES)throw Error('Kích thước media không hợp lệ');
  const raw=new ArrayBuffer(bytes.byteLength);new Uint8Array(raw).set(bytes);
- const blob=new Blob([raw],{type:entry.mime});const id=`restored-${Date.now()}-${loaded.length}-${Math.random().toString(36).slice(2,6)}`;
+ const blob=new Blob([raw],{type:entry.mime});const id=`restored-${Date.now()}-${prepared.length}-${crypto.randomUUID()}`;
  let stamped:Blob|undefined;
  if(entry.stampedName){
    if(!/^media\/\d{4}_stamped\.(jpg|mp4|webm)$/.test(entry.stampedName))throw Error('Tệp dấu sai tên');
@@ -42,8 +42,14 @@ export async function restoreProjectZip(zipBlob:Blob):Promise<MediaItem[]>{
    stamped=new Blob([await file.async('arraybuffer')],{type:entry.stampedName.endsWith('.mp4')?'video/mp4':entry.stampedName.endsWith('.webm')?'video/webm':'image/jpeg'});
    sum+=stamped.size;if(sum>MAX_ARCHIVE_BYTES)throw Error('Vượt giới hạn giải nén');
  }
- const media={...entry.meta,id,rawBlob:blob,stampedBlob:stamped,url:URL.createObjectURL(stamped||blob)} as MediaItem;
- await storeMedia(media);loaded.push(media);
+ if(!entry.meta||typeof entry.meta!=='object'||!['photo','video'].includes(entry.meta.kind)||
+   typeof entry.meta.createdAt!=='string'||!Number.isFinite(Date.parse(entry.meta.createdAt)))
+   throw Error('Thông tin tệp trong bản sao lưu không hợp lệ');
+ const media={...entry.meta,id,rawBlob:blob,stampedBlob:stamped,url:''} as MediaItem;
+ prepared.push(media);
  }
- return loaded;
+ if(!prepared.length)throw Error('ZIP không có ảnh/video để khôi phục');
+ // Decompress and validate the ENTIRE archive before a single all-or-nothing IDB write.
+ await storeMediaBatchNew(prepared);
+ return prepared.map(media=>({...media,url:URL.createObjectURL(media.stampedBlob||media.rawBlob!)}));
 }

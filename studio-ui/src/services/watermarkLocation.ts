@@ -82,7 +82,7 @@ export async function reverseDeviceGpsAddress(coordinates:string,timeoutMs=8000)
  if(!pair)throw Error('Tọa độ GPS không hợp lệ.');
  const bridge=(window as any).HNLAndroidBridge;
  if(!bridge?.reverseGeocode)throw Error('Thiết bị này chưa hỗ trợ tra địa chỉ tự động; hãy nhập địa chỉ thủ công.');
- const token=`gps_1794704528037_jthefzj`;
+ const token=`gps_${Date.now()}_${crypto.randomUUID()}`;
  return new Promise<string>((resolve,reject)=>{
   let settled=false;
   const done=(address:string,reason?:string)=>{

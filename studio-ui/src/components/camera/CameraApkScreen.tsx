@@ -36,6 +36,7 @@ import {supportedVideoMime} from '../../services/videoFormat';
 import {readDeviceGps,mediaWatermarkConfig,nearbyGpsAddress} from '../../services/watermarkLocation';
 import {normalizeStampAngle,resolveStampOrientation} from '../../services/stampOrientation';
 import {capturedPhotoTurn,orientCapturedCanvas} from '../../services/capturedPhotoOrientation';
+import {cropCapturedCanvas} from '../../services/cameraFrameGeometry';
 import {isAndroidApk} from '../../services/deviceBridge';
 
 interface CameraApkScreenProps {
@@ -71,7 +72,12 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [aspectRatio, setAspectRatio] = useState<AspectRatioMode>(watermarkConfig.defaultAspectRatio || '4:3');
   const [orientationDeg, setOrientationDeg] = useState<OrientationDeg>(0);
   const stampOrientationRef=useRef<OrientationDeg>(0);
+  // Never derive raster rotation from the manual "rotate stamp" button.
+  const autoStampOrientationRef=useRef<OrientationDeg>(0);
   const physicalPhotoAngleRef=useRef<number>(0);
+  const latestGpsRef=useRef<{coordinates:string;timestamp:number}|null>(null);
+  const photoCaptureLock=useRef(false);
+  const [isPhotoCapturing,setIsPhotoCapturing]=useState(false);
   const [previewCode,setPreviewCode]=useState(()=>createTimemarkCode());
 
   // Video state
@@ -129,6 +135,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       const screen=typeof displayAngle==='number'?displayAngle:
         (typeof window.screen.orientation?.angle==='number'?window.screen.orientation.angle:0);
       const target=resolveStampOrientation(angle,screen);
+      autoStampOrientationRef.current=target;
       stampOrientationRef.current=target;setOrientationDeg(target);
     };
     const changed=(ev:Event)=>apply((ev as CustomEvent<{angle:number;displayAngle?:number}>).detail);
@@ -165,6 +172,20 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     // Resolution change requires reopening camera; never modify a stream in use for recording.
   },[lens,videoSettings.resolution,videoSettings.fps,cameraRetryKey]);
 
+
+  // GPS is prefetched ONLY when the user opted in. It must never delay the shutter.
+  useEffect(()=>{
+    if(watermarkConfig.locationSource!=='device'){
+      latestGpsRef.current=null;return;
+    }
+    let alive=true;
+    const refresh=()=>{void readDeviceGps(4000).then(coordinates=>{
+      if(alive)latestGpsRef.current={coordinates,timestamp:Date.now()};
+    }).catch(()=>{/* Retain a recent fix; do not block taking a photo. */});};
+    refresh();
+    const timer=window.setInterval(refresh,15000);
+    return ()=>{alive=false;window.clearInterval(timer);};
+  },[watermarkConfig.locationSource]);
 
   // A hardware Back/close during recording or commit must not silently lose video.
   useEffect(()=>{(window as any).__hnlStudioRecording=isRecording||isRecordingStarting||isFinalizing;
@@ -307,9 +328,13 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     const live=liveRef.current;
     if(!cameraReady||!live||live.readyState<2){triggerTransientToast('Camera chưa sẵn sàng; kiểm tra quyền truy cập.');return;}
     if(mode==='photo'){
+      if(photoCaptureLock.current)return;
+      photoCaptureLock.current=true;setIsPhotoCapturing(true);
+      try{
       const count=burstMode?3:1;
-      // Location lookup is opt-in; failure must never block the shutter.
-      const shotGps=watermarkConfig.locationSource==='device'?await readDeviceGps(3500).catch(()=>undefined):undefined;
+      // No await here: capture the actual frame when the shutter was pressed.
+      const fix=latestGpsRef.current;
+      const shotGps=watermarkConfig.locationSource==='device'&&fix&&Date.now()-fix.timestamp<30000?fix.coordinates:undefined;
       // A GPS-resolved address belongs to the same place, never to a new fix
       // far away or a different photo. No reverse-geocode network call on shutter.
       const shotAddress=watermarkConfig.locationSource==='device'
@@ -328,8 +353,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         // image pixels when the camera track raster has the wrong portrait/
         // landscape shape for the physical handset. No EXIF-only workaround.
         const quarter=isAndroidApk()?capturedPhotoTurn(canvas.width,canvas.height,
-          physicalPhotoAngleRef.current,stampOrientationRef.current):0;
-        const output=orientCapturedCanvas(canvas,quarter);
+          physicalPhotoAngleRef.current,autoStampOrientationRef.current):0;
+        const output=cropCapturedCanvas(orientCapturedCanvas(canvas,quarter),aspectRatio);
         const blob=await new Promise<Blob>((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(Error('Không xuất được ảnh')),'image/jpeg',.95));
         const at=new Date();const item:MediaItem={id:`cam-${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}`,
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
@@ -337,12 +362,13 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:shotAddress,
           coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?previewCode:createTimemarkCode(),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,dateTimeIso:at.toISOString(),autoTime:false,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
         await onCapturePhoto(item);
         setPreviewCode(createTimemarkCode());
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
       }
       // Quiet success: only the camera shutter flash and updated thumbnail signal a saved photo.
+      }finally{photoCaptureLock.current=false;setIsPhotoCapturing(false);}
       return;
     }
     if(isFinalizing||isRecordingStarting||startPendingRef.current)return;
@@ -368,7 +394,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       const photoCode=previewCode;
       // The export raster is normalized once at record start.
       const stampConfig={...watermarkConfig};
-      const capture=await createStampedVideoCapture(live,stampConfig,()=>stampOrientationRef.current,physicalPhotoAngleRef.current,photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps);
+      const capture=await createStampedVideoCapture(live,stampConfig,
+        ()=>autoStampOrientationRef.current,()=>physicalPhotoAngleRef.current,
+        photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps,aspectRatio);
       stampedCaptureRef.current=capture;
       const hasAudio=!!audioStreamRef.current?.getAudioTracks().some(t=>t.readyState==='live');
       const recStream=new MediaStream([...capture.stream.getVideoTracks(),...(hasAudio?audioStreamRef.current!.getAudioTracks():[])]);
@@ -494,13 +522,13 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             <button
               type="button"
               onClick={() => {
-                onSaveVideo(lastRecordedVideo);
                 setShowVideoReview(false);
+                onOpenLibrary();
               }}
               className="min-h-[44px] px-3 rounded-xl bg-[#E2B74B] hover:bg-[#ECC768] text-[#060B14] text-xs font-semibold flex items-center justify-center gap-1.5"
             >
               <Check className="w-4 h-4" />
-              Lưu thư viện
+              Xem trong thư viện
             </button>
             <button
               type="button"
@@ -911,7 +939,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {/* Center: Commercial Shutter / Record Button */}
           <button
             type="button"
-            disabled={isRecordingStarting || isFinalizing}
+            disabled={isRecordingStarting || isFinalizing || isPhotoCapturing}
              onClick={()=>{handleShutterPress().catch(e=>triggerTransientToast('Lỗi chụp/quay: '+String(e)));}}
             aria-label={
               mode === 'photo'

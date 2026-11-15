@@ -83,7 +83,7 @@ export const PhotoPreview:React.FC<{
  const ratio=photo&&photo.height>0?photo.width/photo.height:1;
  const fittedW=ready?Math.min(bounds.width,bounds.height*ratio):0;
  const fittedH=ready?fittedW/ratio:0;
- const effective=mediaWatermarkConfig(config,media);
+ const effective=mediaWatermarkConfig({...config,...media.captureWatermark,...media.watermarkOverride},media);
  const url=matching&&photo?photo.url:media.url;
  const canOverlay=ready&&photo?.original&&showStamp&&effective.templateId!=='none';
  const handleLoaded=(event:React.SyntheticEvent<HTMLImageElement>)=>{
