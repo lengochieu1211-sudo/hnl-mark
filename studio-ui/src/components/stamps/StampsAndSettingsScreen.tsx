@@ -242,9 +242,11 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
                     <div className="relative aspect-[4/3] w-full bg-[#060B14] overflow-hidden">
                       <img src={thumbBg} alt={group.title} referrerPolicy="no-referrer"
                         className="w-full h-full object-cover" />
-                      <WatermarkOverlay compact config={{...effectiveConfig,
+                      <WatermarkOverlay compact referenceSize={{width:1152,height:864}} config={{...effectiveConfig,
                         templateId:preview.id, accentColor:preview.accentHex,
-                        positionPreset:'bottom-left'}} />
+                        positionPreset:'bottom-left',
+                        ...(preview.id==='timemark'?{timemarkBackgroundEnabled:false,timemarkLogoEnabled:false}:{}),
+                      }} />
                       {selected && <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#E2B74B] text-[#060B14] flex items-center justify-center shadow">
                         <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                       </span>}
@@ -528,6 +530,24 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
               </div>
             </div>
           </AccordionSection>
+
+          {config.templateId==='timemark'&&(
+            <div className="rounded-xl border border-[#E2B74B]/30 bg-[#0D1626] p-3 space-y-2">
+              <p className="text-xs text-[#CBD5E1]">Timemark gốc: không có nền tối và logo khi chưa bật riêng.</p>
+              <label className="flex items-center gap-2 text-xs text-[#F8FAFC]">
+                <input type="checkbox" className="accent-[#E2B74B] w-4 h-4"
+                  checked={config.timemarkBackgroundEnabled===true}
+                  onChange={e=>onChangeConfig({timemarkBackgroundEnabled:e.target.checked})}/>
+                Bật nền tối phía sau chữ Timemark
+              </label>
+              <button type="button" className="min-h-9 px-3 rounded-lg border border-[#E2B74B]/50 text-[#E2B74B] text-xs font-semibold"
+                onClick={()=>onChangeConfig({fontKey:'be-vietnam',fontSizePx:13,textColor:'#F8FAFC',
+                  accentColor:'#E2B74B',bgOpacity:0.72,timemarkBackgroundEnabled:false,
+                  timemarkLogoEnabled:false,positionPreset:'bottom-left',showPhotoCode:true})}>
+                Khôi phục đúng mẫu Timemark gốc
+              </button>
+            </div>
+          )}
 
           {/* Optional Timemark logo is OFF by default; other templates preserve original toggle. */}
           <AccordionSection
