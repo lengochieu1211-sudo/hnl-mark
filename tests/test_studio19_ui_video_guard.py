@@ -22,7 +22,7 @@ assert '`${cleanCode} Timemark Verified`' in mark and '${cleanCode}  |' not in m
 assert "shield(g,f*.68,'#ffffff')" in mark
 assert 'orientationDeg:0, captureWatermark:' in cam
 assert 'orientationDeg={watermarkTurn}' in cam
-assert 'physicalPhotoAngleRef.current,photoCode,lens' in cam
+assert '()=>physicalPhotoAngleRef.current' in cam
 assert 'timestamp,0,photoCode' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert 'MAX_EDGE=1280' in video and 'const FPS=15' in video
 assert 'STALL_TIMEOUT_MS=12000' in video and 'window.clearInterval(stallInterval)' in video

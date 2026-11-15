@@ -39,7 +39,7 @@ assert 'const cleanCode=String(rawCode).replace(/^HNL(?:[-_: ]+)/i' in mark
 assert 'const baseline=clamp(y+firstH*.90' in mark
 assert 'if(config.showLogo&&logo' not in mark
 assert 'orientationDeg:0, captureWatermark:' in cam
-assert 'physicalPhotoAngleRef.current,photoCode,lens' in cam
+assert '()=>physicalPhotoAngleRef.current' in cam
 assert '<WatermarkOverlay config={watermarkConfig} orientationDeg={watermarkTurn}' in cam
 assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert '<video key={active.id} src={active.url} playsInline controls' in roll
