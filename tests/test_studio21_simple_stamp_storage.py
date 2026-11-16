@@ -21,7 +21,10 @@ for flag in ('customShowDateTime', 'customShowLocation', 'customShowNote'):
  assert flag in types and flag in simple and flag in ui,flag
 assert 'Đặt dấu tại' in ui and 'showLogo' in ui
 assert 'roundRect(x,y,w,h' in read('studio-ui/src/services/watermarkLogo.ts')
-assert 'rounded-[23%]' in read('studio-ui/src/components/common/HnlBrandMark.tsx')
+brand=read('studio-ui/src/components/common/HnlBrandMark.tsx')
+assert 'hnl-logo-512.png' in brand and "borderRadius:'14.5%'" in brand
+assert "width:'108.0169%'" in brand and "height:'108.0169%'" in brand
+assert (root/'studio-ui/public/hnl-logo-512.png').is_file()
 assert 'drawSimpleStamp(ctx,canvas.width,canvas.height,config,orientation,logo)' in photo
 assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,timestamp,0,photoCode,logo)' in read('studio-ui/src/services/stampedVideoCapture.ts')
 assert 'drawConfiguredStamp(ctx,canvas.width,canvas.height,cfg,0,code,logo)' in importvideo
