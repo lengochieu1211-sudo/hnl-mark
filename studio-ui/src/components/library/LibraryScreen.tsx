@@ -181,7 +181,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   };
 
   const effectiveState: LibraryStateMode =
-    libraryLoadError ? 'error' : items.length===0 ? 'empty' : 'populated';
+    libraryLoadError && items.length===0 ? 'error' : items.length===0 ? 'empty' : 'populated';
 
   return (
     <div className="px-4 py-3 space-y-3 max-w-6xl mx-auto">
@@ -413,6 +413,13 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
         </div>
       )}
 
+      {/* A failed legacy import must never hide media already stored by Studio. */}
+      {libraryLoadError && items.length>0 && (
+        <div role="alert" className="rounded-xl border border-amber-500/30 bg-[#241D13] px-3 py-2 text-xs text-amber-200 space-y-2">
+          <p>{libraryLoadError}</p>
+          <button type="button" onClick={()=>{void onRetryLoad();}} className="underline font-semibold">Thử chuyển lại ảnh Web cũ</button>
+        </div>
+      )}
       {/* Data-backed library states; loading is handled in App while IndexedDB is read. */}
       {effectiveState === 'error' && (
         <div className="py-12 px-4 rounded-2xl bg-[#0D1626] border border-[#EF4444]/25 text-center space-y-3">
