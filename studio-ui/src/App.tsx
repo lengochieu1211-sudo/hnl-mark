@@ -28,6 +28,7 @@ import { ExportActionSheet } from './components/export/ExportActionSheet';
 import { ViewportTesterModal } from './components/qa/ViewportTesterModal';
 import {storeMedia,loadMedia,removeMedia,listTrashedMedia,restoreTrashedMedia,purgeExpiredTrash,type TrashMediaSummary} from './services/mediaStorage';
 import {restoreProjectZip} from './services/projectBackup';
+import {migrateLegacyWebLibrary} from './services/legacyWebMigration';
 import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './services/deviceBridge';
 import {mediaExtension} from './services/mediaExtensions';
 import { createTimemarkPhoto,createTimemarkCode } from './services/timemarkRenderer';
@@ -103,11 +104,16 @@ export default function App() {
 
   const emptyPreview:MediaItem={id:'no-media',title:'Ảnh minh họa (chưa chọn ảnh)',kind:'photo',origin:'newly-picked',url:'./demo-camera-rear.jpg',createdAt:formatLocalIsoNow(),resolutionLabel:'Chưa có ảnh',sizeLabel:'—',location:'',coordinates:'',photoCode:'',customNote:'',templateId:'timemark',edits:{...DEFAULT_IMAGE_EDITS}};
   useEffect(()=>{
-    let alive=true;loadMedia().then(items=>{
+    let alive=true;
+    let migrationWarning='';
+    migrateLegacyWebLibrary().catch(error=>{
+      console.warn('Không thể chuyển thư viện Web cũ; ảnh gốc vẫn an toàn:',error);
+      migrationWarning='Chưa thể chuyển ảnh Web cũ: '+String(error)+'. Kho ảnh cũ vẫn giữ nguyên. Hãy giải phóng dung lượng và nhấn Thử tải lại.';
+    }).then(()=>loadMedia()).then(items=>{
       if(!alive)return;
       const newestFirst=[...items].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
       setMediaItems(newestFirst);
-      setLibraryLoadError('');
+      setLibraryLoadError(migrationWarning);
       if(newestFirst[0])setActiveMediaId(newestFirst[0].id);
     }).catch(err=>{console.error('Không đọc được thư viện:',err);if(alive)setLibraryLoadError(String(err));}).finally(()=>{if(alive)setLibraryReady(true);});
     return ()=>{alive=false};
@@ -116,6 +122,7 @@ export default function App() {
   const retryLibraryLoad=async()=>{
     setLibraryReady(false);
     try{
+      await migrateLegacyWebLibrary();
       const recovered=(await loadMedia()).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
       setMediaItems(recovered);
       setTrashItems(await listTrashedMedia());
