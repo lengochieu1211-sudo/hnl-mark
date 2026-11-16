@@ -16,6 +16,8 @@ assert "legacySource={oldId:row.id,edits:row.edits,stampConfig:row.stampConfig" 
 assert "!(row.blob instanceof Blob)||!row.blob.size" in migration
 assert "localStorage.setItem(DONE_KEY,'done')" in migration
 assert "await storeMediaBatchNew(incoming);" in migration
+assert "localStorage.getItem(DONE_KEY)==='done'" not in migration, 'Done flag must not suppress new old-Web photos'
+assert 'ids.has(converted.id)' in migration, 'Repeated scans must never overwrite existing media'
 assert migration.index("await storeMediaBatchNew(incoming);") < migration.index("localStorage.setItem(DONE_KEY,'done')")
 assert 'deleteDatabase(' not in migration and '.delete(' not in migration
 assert "migrateLegacyWebLibrary().catch(error" in app
