@@ -39,4 +39,12 @@ with tempfile.TemporaryDirectory(prefix='hnl_icon17_') as t:
             assert ImageChops.difference(got,expected_clean).getbbox() is None, (density,name,'RGB changed')
             # No border pixels: the launcher canvas outside its rounded logo is clear.
             assert icon.mode=='RGBA'
+    web_index=(ROOT/'studio-ui/index.html').read_text(encoding='utf8')
+    web_manifest=(ROOT/'studio-ui/public/manifest.webmanifest').read_text(encoding='utf8')
+    assert './hnl-mark-icon-192.png' in web_index and './hnl-mark-icon-192.png' in web_manifest
+    assert './hnl-mark-icon-512.png' in web_manifest
+    for web_size in (192,512):
+        web=Image.open(ROOT/f'studio-ui/public/hnl-mark-icon-{web_size}.png').convert('RGBA')
+        exp=m._centered_art(orig,web_size,round(web_size*m.LEGACY_RATIO))
+        assert ImageChops.difference(web,exp).getbbox() is None,('Web icon not APK matched',web_size)
     print('PASS: HNL palette unchanged, RGBA transparent edge, no adaptive black ring')
