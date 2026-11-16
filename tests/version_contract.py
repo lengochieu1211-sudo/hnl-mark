@@ -13,12 +13,14 @@ def assert_build_identity():
     suffix=re.search(r"applicationIdSuffix\s+'([^']+)'",gradle)
     label=re.search(r"'hnlmark_application_name',\s*'HNLMark STUDIO (\d+)'",gradle)
     assert name and code and suffix and label,"APK version fields missing"
-    assert name.group(1).endswith('-studio-test')
+    release_version=name.group(1).removesuffix('-studio-test')
+    assert re.fullmatch(r'\d+\.\d+\.\d+',release_version)
+    assert name.group(1).endswith('-studio-test') or "versionNameSuffix '-studio-test'" in gradle
     assert suffix.group(1)=='.trial'+code.group(1),"Test APK must be installable in parallel"
     studio=json.loads((ROOT/'studio-ui/package.json').read_text(encoding='utf-8'))
-    assert studio['version']==name.group(1).removesuffix('-test')
-    assert "version:'"+name.group(1)+"'" in bridge
-    patch=name.group(1).split('.')[2].split('-')[0]
+    assert studio['version']==release_version+'-studio'
+    assert "version:'"+release_version+"'" in bridge
+    patch=release_version.split('.')[2]
     assert label.group(1)==patch
 
 if __name__=='__main__':

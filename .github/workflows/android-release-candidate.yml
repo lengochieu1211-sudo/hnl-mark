@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/android-release-candidate.yml'
       - 'android/**'
+      - 'tests/version_contract.py'
   workflow_dispatch:
 
 permissions:
