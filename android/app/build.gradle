@@ -21,7 +21,7 @@ android {
             resValue 'string', 'hnlmark_application_name', 'HNLMark STUDIO 47'
         }
         release {
-            resValue 'string', 'hnlmark_application_name', 'HNLMark'
+            resValue 'string', 'hnlmark_application_name', 'HNL Mark'
             minifyEnabled false
             shrinkResources false
         }
