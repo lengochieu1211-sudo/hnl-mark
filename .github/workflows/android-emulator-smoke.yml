@@ -1,0 +1,143 @@
+name: HNLMark Android Emulator UI smoke (DEV)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/android-emulator-smoke.yml'
+      - 'studio-ui/**'
+      - 'android/**'
+      - 'tests/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  emulator-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Pillow and React UI dependencies
+        run: |
+          python3 -m pip install --disable-pip-version-check pillow==11.1.0
+          npm install --prefix studio-ui --no-audit --no-fund
+      - name: Derive isolated TEST package from Gradle
+        run: |
+          TEST_CODE="$(awk '$1=="versionCode" {print $2; exit}' android/app/build.gradle)"
+          test -n "$TEST_CODE"
+          echo "HNL_TEST_PACKAGE=vn.hnl.xaydung.hnlmark.trial${TEST_CODE}" >> "$GITHUB_ENV"
+      - name: Enable hardware virtualization for Android Emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run Android TEST48 APK in clean API 35 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: '-no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim'
+          disable-animations: true
+          script: |
+            mkdir -p android-smoke-evidence
+            python3 android/scripts/package_web.py
+            python3 android/scripts/audit_android.py
+            (cd android && gradle :app:assembleDebug --no-daemon)
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm grant ${HNL_TEST_PACKAGE} android.permission.CAMERA
+            adb shell pm grant ${HNL_TEST_PACKAGE} android.permission.RECORD_AUDIO
+            adb shell am start -W -n ${HNL_TEST_PACKAGE}/vn.hnl.xaydung.hnlmark.MainActivity
+            sleep 12
+            adb shell pidof ${HNL_TEST_PACKAGE} | tee android-smoke-evidence/pid.txt
+            adb exec-out screencap -p > android-smoke-evidence/studio-camera-emulator.png
+            # Actual Android WebView camera shutter — verify MediaStore publication.
+            adb shell input tap 540 2200
+            sleep 8
+            adb exec-out screencap -p > android-smoke-evidence/after-photo-capture.png
+            adb shell input tap 215 2200
+            sleep 3
+            adb exec-out screencap -p > android-smoke-evidence/camera-roll-review-attempt.png
+            adb shell input keyevent 4
+            sleep 3
+            # Capture a second real fake-camera frame, then swipe to older media.
+            adb shell input tap 540 2200
+            sleep 5
+            adb shell input tap 215 2200
+            sleep 3
+            adb exec-out screencap -p > android-smoke-evidence/camera-roll-two-photos.png
+            adb shell input swipe 790 1250 220 1250 350
+            sleep 2
+            adb exec-out screencap -p > android-smoke-evidence/camera-roll-swipe-older.png
+            adb shell input keyevent 4
+            sleep 3
+            # Force-stop simulates closing the APK; IndexedDB must survive relaunch.
+            adb shell am force-stop ${HNL_TEST_PACKAGE}
+            adb shell am start -W -n ${HNL_TEST_PACKAGE}/vn.hnl.xaydung.hnlmark.MainActivity
+            sleep 10
+            adb exec-out screencap -p > android-smoke-evidence/camera-after-relaunch.png
+            adb shell input tap 215 2200
+            sleep 3
+            adb exec-out screencap -p > android-smoke-evidence/camera-roll-after-relaunch.png
+            adb shell input keyevent 4
+            sleep 3
+            adb shell ls -lah /sdcard/Pictures/HNLMark > android-smoke-evidence/pictures-media.txt
+            grep -E '\.(jpg|jpeg|png)' android-smoke-evidence/pictures-media.txt
+            echo 'PASS: HNL camera photo written to Android Pictures/HNLMark' > android-smoke-evidence/photo-save-RESULT.txt
+            # Video media is observed, not presumed supported by a virtual camera/codec.
+            adb shell input tap 608 2020
+            sleep 4
+            adb exec-out screencap -p > android-smoke-evidence/video-mode.png
+            adb shell input tap 540 2200
+            sleep 3
+            adb shell input tap 540 2200
+            sleep 8
+            adb shell ls -lah /sdcard/Movies/HNLMark > android-smoke-evidence/video-media.txt 2>&1 || true
+            adb exec-out screencap -p > android-smoke-evidence/after-video-attempt.png
+            # Block mic with AppOps; do not revoke camera.
+            adb shell appops set ${HNL_TEST_PACKAGE} RECORD_AUDIO ignore
+            adb shell input tap 540 2200
+            sleep 3
+            adb exec-out screencap -p > android-smoke-evidence/mic-denied-video-attempt.png
+            adb shell input tap 540 2200
+            sleep 5
+            adb shell appops set ${HNL_TEST_PACKAGE} RECORD_AUDIO allow
+            adb exec-out screencap -p > android-smoke-evidence/after-mic-denied-stop.png
+            # Screenshot evidence is not a physical-device pass.
+            # Validate the portrait screen and both landscape directions in the emulator.
+            adb shell settings put system accelerometer_rotation 0
+            adb shell settings put system user_rotation 1
+            sleep 4
+            adb exec-out screencap -p > android-smoke-evidence/studio-landscape-right.png
+            adb shell settings put system user_rotation 3
+            sleep 4
+            adb exec-out screencap -p > android-smoke-evidence/studio-landscape-left.png
+            adb shell settings put system user_rotation 0
+            python3 -c "from PIL import Image; names=['studio-landscape-right.png','studio-landscape-left.png']; dims=[Image.open('android-smoke-evidence/'+n).size for n in names]; print('Orientation screenshots (portrait-locked WebView may remain portrait):',dims)"
+            adb logcat -d -t 1200 > android-smoke-evidence/logcat.txt
+            adb shell dumpsys window windows > android-smoke-evidence/windows.txt
+            python3 -c "from PIL import Image; im=Image.open('android-smoke-evidence/studio-camera-emulator.png').convert('RGB'); assert im.width>=320 and im.height>=480; print('PASS: emulator screenshot',im.size)"
+            if grep -q "Process: ${HNL_TEST_PACKAGE}" android-smoke-evidence/logcat.txt && grep -q 'FATAL EXCEPTION' android-smoke-evidence/logcat.txt; then echo 'FAIL: app crash detected'; exit 1; fi
+            echo 'Emulator boot, photo saved into public Pictures/HNLMark, orientation/video screenshots captured; rotation correctness and real Xiaomi runtime are still PENDING.' > android-smoke-evidence/RESULT.txt
+            echo 'Microphone and video-with-audio not verified: emulator runs with -noaudio. File audio-track and Redmi Note 11 playback remain PENDING.' > android-smoke-evidence/AUDIO_NOT_VERIFIED.txt
+      - name: Upload emulator screen and runtime logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: HNLMark-TEST48-EMULATOR-EVIDENCE
+          path: android-smoke-evidence/
+          if-no-files-found: warn
+          retention-days: 30

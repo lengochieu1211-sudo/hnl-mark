@@ -1,0 +1,49 @@
+name: HNLMark DEV source checkpoint
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archive-dev-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact DEV commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Create complete tracked-source ZIP and SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          HEAD_SHA="$(git rev-parse HEAD)"
+          SOURCE_NAME="HNLMark_FULL_SOURCE_${HEAD_SHA}.zip"
+          git archive --format=zip --output="output/${SOURCE_NAME}" HEAD
+          unzip -tqq "output/${SOURCE_NAME}"
+          (
+            cd output
+            sha256sum "${SOURCE_NAME}" > SHA256.txt
+            sha256sum -c SHA256.txt
+          )
+          {
+            printf 'Repository: lengochieu1211-sudo/hnl-mark\n'
+            printf 'Branch: dev\n'
+            printf 'Exact HEAD: %s\n' "${HEAD_SHA}"
+            printf 'Full source: %s\n' "${SOURCE_NAME}"
+            printf 'Note: archive includes tracked files at exact HEAD, not Git history.\n'
+            printf 'This is a source checkpoint, not an Android Runtime Golden certificate.\n'
+          } > output/CHECKPOINT.txt
+          test -s "output/${SOURCE_NAME}"
+          test -s output/SHA256.txt
+      - name: Publish DEV full-source checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: HNLMark-FULL-SOURCE-DEV
+          path: output/
+          if-no-files-found: error
+          retention-days: 30

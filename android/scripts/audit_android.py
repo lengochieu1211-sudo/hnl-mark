@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""HNLMark Android 2.4 static security, camera and UI audit, run in CI."""
+from pathlib import Path
+import re
+root=Path(__file__).resolve().parents[2]
+r=lambda path:(root/path).read_text(encoding="utf-8")
+java=r("android/app/src/main/java/vn/hnl/xaydung/hnlmark/MainActivity.java")
+manifest=r("android/app/src/main/AndroidManifest.xml")
+ui=r("android/android-ui.css")
+bridge=r("android/android-app.js")
+web=r("android/app/src/main/assets/www/index.html")
+controls=r("camera-controls.js")
+controls_css=r("camera-controls.css")
+photo=r("app.js")
+video=r("video.js")
+workflow=r(".github/workflows/android-apk.yml")
+gradle=r("android/app/build.gradle")
+for token in ("WebViewAssetLoader","addJavascriptInterface",
+              "onPermissionRequest","onShowFileChooser",
+              "MediaStore.ACTION_PICK_IMAGES","ACTION_GET_CONTENT",
+              "ACTION_OPEN_DOCUMENT","MediaStore.Downloads",
+              "FileProvider.getUriForFile","Intent.ACTION_SEND",
+              "FLAG_GRANT_READ_URI_PERMISSION","cameraState(",
+              "screenAngle()","onConfigurationChanged"):
+    assert token in java,token
+for fn in ("beginShare","appendShare","finishShare","abortShare",
+           "beginSave","appendSave","finishSave","abortSave"):
+    assert fn in java,fn
+assert "setAllowFileAccess(false)" in java
+assert 'trusted(req.getUrl())' in java
+assert "android.permission.CAMERA" in manifest
+assert "android.permission.RECORD_AUDIO" in manifest
+assert "android.permission.MODIFY_AUDIO_SETTINGS" in manifest  # Required for WebView audio routing on affected devices.
+assert 'PermissionRequest.RESOURCE_AUDIO_CAPTURE' in java
+assert 'Manifest.permission.RECORD_AUDIO' in java
+assert "android:usesCleartextTraffic=\"false\"" in manifest
+assert "android:exported=\"false\"" in manifest
+assert "fileprovider" in manifest
+assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
+assert "android:screenOrientation=\"fullUser\"" in manifest
+assert "versionCode 2547" in gradle and "versionName '2.5.47'" in gradle and "versionNameSuffix '-studio-test'" in gradle
+assert "androidx.core:core:" in gradle
+for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
+              "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
+    assert token in bridge,token
+assert "128*1024" in bridge
+assert "readAsDataURL" in bridge
+assert "MutationObserver" in bridge
+assert "window.HNLPhotoBridge" in photo
+assert "window.HNLVideoStudio" in video
+assert "shareCurrent" in photo and "shareCurrent" in video
+assert "HNLCameraControls.create" in photo and "HNLCameraControls.create" in video
+assert "cameraControls?.getFilter()" in photo
+assert "cameraControls?.getFilter()" in video
+for capability in ("pointsOfInterest","focusMode","exposureCompensation","zoom","torch","applyConstraints"):
+    assert capability in controls,capability
+assert "hnl-focus-ring" in controls_css
+assert "hnl-camera-exposure" in controls_css
+assert "hnl-camera-quick" in controls_css
+assert "body.hnl-android-apk.hnl-camera-live" in ui
+assert "body.hnl-android-apk.hnl-video-live" in ui
+assert "hnl-landscape-dock" in ui
+assert "video-locked-left" in ui
+assert "order:2!important" in ui
+assert "flex-direction:column!important" in ui
+assert "grid-template-columns:minmax(0,1fr) 62px minmax(0,1fr)" in ui
+assert "rotate(-90deg)" in ui and "rotate(90deg)" in ui
+assert "ShareSession" in java and "cache-path" in r("android/app/src/main/res/xml/share_paths.xml")
+assert "android-ui.css" in web
+assert "camera-controls.js" in web
+assert "camera-controls.css" in web
+assert "android-app.js" in web
+for asset in ("app.js","video.js","orientation.js","style.css","camera-controls.js","camera-controls.css","hnl-logo-192.png"):
+    assert (root/"android/app/src/main/assets/www"/asset).is_file(),asset
+assert "upload-artifact" in workflow and "assembleDebug" in workflow
+assert "node --check camera-controls.js" in workflow
+# Native shell regression: title/OFFLINE bar removed, never reintroduce.
+assert 'chromeHeader' not in java
+assert 'TextView offline' not in java
+assert 'setChromeVisible(!active)' in java
+assert 'app.addView(chromeTabs, new LinearLayout.LayoutParams(-1, dp(61)))' in java
+assert 'app.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f))' in java
+assert 'getWindow().setStatusBarColor(Color.rgb(9, 17, 30))' in java
+assert 'chromeTabs.setVisibility(View.GONE);' in java
+
+# Photo preview must remain above scrolling editing form, except live camera.
+assert 'workspace > .viewer' in ui
+assert 'order:-1!important;position:sticky!important;top:0!important' in ui
+assert '.viewer #previewCanvas' in ui and '.viewer #cameraArea #stage' in ui
+assert '.hnl-camera-live .workspace > .viewer' in ui
+assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
+assert 'hnl-android-video-editing' in ui
+assert "function syncPreviewMode()" in bridge
+assert "attributeFilter:['hidden']" in bridge
+assert "version:'2.5.47'" in bridge
+
+# User-reported Android camera + form + launcher regressions (v2.5).
+camera_ui=r("android/android-camera-v25.css")
+camera_js=r("android/android-camera-v25.js")
+select_ui=r("android/android-select-v25.css")
+select_js=r("android/android-select-v25.js")
+launcher=r("android/scripts/make_launcher_icon.py")
+for token in ('OrientationEventListener','lastPhysicalAngle','cameraOrientationListener',
+              'setTextZoom(100)'):
+    assert token in java,token
+assert 'cameraOrientationListener.enable()' in java
+assert 'cameraOrientationListener.disable()' in java
+assert 'android:icon="@mipmap/ic_launcher"' in manifest
+assert '@mipmap/ic_launcher' in manifest
+assert 'android:screenOrientation="fullUser"' in manifest
+assert 'original_full_color_image(root)' in launcher and '_cut_out_neutral_plate' not in launcher
+assert 'LEGACY_RATIO = 0.98' in launcher
+assert 'Image.new("RGBA", (canvas, canvas), (0, 0, 0, 0))' in launcher
+assert not (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()
+assert 'android:roundIcon="@mipmap/ic_launcher_round"' in manifest
+for density in ('mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi'):
+    assert (root/f"android/app/src/main/res/mipmap-{density}/ic_launcher.png").exists(),density
+for token in ('apk-camera-topbar','apk-grid-toggle','syncCameraToolbar',
+              'wrapModeLabels','apk-rotate-label'):
+    assert token in camera_js,token
+for token in ('order:0!important','order:1!important','order:2!important',
+              'grid-template-columns:minmax(0,1fr) 76px minmax(0,1fr)',
+              '#shutterButton','video-record-symbol','video-stop-symbol'):
+    assert token in camera_ui,token
+assert 'apk-select-sheet' in select_js and 'apk-select-source' in select_js
+assert "select.dispatchEvent(new Event('change',{bubbles:true}))" in select_js
+assert 'font-size:14px!important' in select_ui
+for file in ('android-camera-v25.css','android-camera-v25.js',
+             'android-select-v25.css','android-select-v25.js',
+             'android-ux-v251.css','android-ux-v251.js'):
+    assert (root/"android/app/src/main/assets/www"/file).exists(),file
+assert not (root/"android/app/src/main/res/drawable/hnlmark_foreground.png").exists()
+assert not (root/"android/app/src/main/res/drawable/hnlmark_icon.png").exists()
+
+# v2.5.1: Android launcher, orientation, camera shutter and compact UX.
+ux=r("android/android-ux-v251.js")
+uxcss=r("android/android-ux-v251.css")
+camera_core=r("android/android-camera-v25.js")
+assert 'OUTER_PADDING = 19' in launcher
+assert "icon = _centered_art(original, size, visible)" in launcher
+assert "LEGACY_RATIO = 0.98" in launcher
+assert 'no black/white border layer' in launcher
+assert not (root/"android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml").exists()
+assert "apkImportHint" not in bridge
+assert "body.hnl-android-apk .editor .library-note" in r("android/android-ui.css")
+assert "body.hnl-android-apk .editor #photoHint" in r("android/android-ui.css")
+assert "getDeviceAngle" in bridge and "hnlmark:physical-orientation" in bridge
+assert "nativeAngle=window.HNLAndroidApp?.getDeviceAngle?.()" in photo
+assert "function androidPhysicalPose()" in video
+assert "effectiveSide()" in video and "effectiveInverted()" in video
+assert "window.HNLAndroidCameraLayout?.syncPreviewOrientation?.()" in bridge
+assert "window.HNLAndroidCameraLayout" in camera_core
+assert "apk-fold-content" in ux and "apk-collapse-toggle" in ux
+assert "window.HNLAndroidSections={reveal,fold}" in ux
+assert "apkPhotoActions" in ux and "apkVideoActions" in ux
+assert "Lưu hoặc chia sẻ" in ux and "openSheet(kind,source)" in ux
+assert "window.HNLAndroidApp?.getDeviceAngle?.()" in ux
+assert "updatePreview()" in ux and "hnlmark:physical-orientation" in ux
+assert "apk-rotated-preview" in uxcss and "--apk-preview-turn" in uxcss
+assert "#videoRecord .video-record-symbol" in uxcss
+assert "#videoStop .video-stop-symbol" in uxcss
+assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
+assert "node --check android/android-ux-v251.js" in workflow
+assert "applicationIdSuffix '.trial2547'" in gradle
+assert "HNLMark STUDIO 47" in gradle
+assert 'android:label="@string/hnlmark_application_name"' in manifest
+assert "TEST v2.5.23" in ux
+assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
+assert ".video-canvas-wrap #videoCanvas.apk-rotated-preview" in uxcss
+
+# v2.5.3: top-bar preview enlargement in photo and video without export crop.
+geom=r("android/preview-geometry.js")
+preview_css=r("android/android-preview-v253.css")
+assert "window.HNLPreviewGeometry?.calculate" in ux
+assert "apkPreviewModes={photo:'auto',video:'auto'}" in ux
+assert "angle%180!==0?'large':'fit'" in ux
+assert "apk-geometry-preview" in ux and "apk-preview-toggle" in ux
+assert "mode:scale===fit?'fit':'cover'" in geom
+assert "ratio<=1.65?cover:fit" in geom
+assert "#cameraArea #stage #previewCanvas.apk-geometry-preview" in preview_css
+assert ".video-canvas-wrap #videoCanvas.apk-geometry-preview" in preview_css
+assert "preview-geometry.js" in web and "android-preview-v253.css" in web
+assert "node tests/test_android_preview_geometry.cjs" in workflow
+for name in ("preview-geometry.js","android-preview-v253.css"):
+    assert (root/"android/app/src/main/assets/www"/name).is_file(),name
+
+
+# v2.5.4: Android photo/video picker must be reachable from BOTH web input
+# and native bottom tab, and return content URI files to the same JS route.
+assert "MediaStore.ACTION_PICK_IMAGES" in java
+assert "Intent.ACTION_GET_CONTENT" in java
+assert "Intent.ACTION_OPEN_DOCUMENT" in java
+assert 'new Intent(MediaStore.ACTION_PICK_IMAGES)' in java
+assert 'pick.setType("*/*")' not in java
+assert "REQ_NATIVE_GALLERY = 402" in java
+assert "showMediaSourceDialog(REQ_NATIVE_GALLERY,true,false)" in java
+assert '"library".equals(command)' in java
+assert "getPickedUris(resultCode,data)" in java
+assert "getClipData()" in java and "getData()" in java
+assert 'addPathHandler("/picked/"' in java
+assert "pickedContents.put(token" in java
+assert "getContentResolver().openInputStream(entry.uri)" in java
+assert "window.HNLAndroidApp?.receivePickedMedia(" in java
+assert "@JavascriptInterface public void openDeviceGallery()" in java
+assert "window.HNLMediaImport={acceptFiles:(files)=>routeMediaFiles(files)}" in photo
+assert "receivePickedMedia(items)" in bridge
+assert "native?.openDeviceGallery" in bridge
+assert "new File([blob],name" in bridge
+assert "HNLMediaImport.acceptFiles(files)" in bridge
+assert "showMediaSourceDialog(REQ_FILES,multiple,isZip)" in java
+assert "startDocumentPicker(requestCode,multiple,false)" in java
+assert "cancelPendingFileChooser(requestCode)" in java
+assert '"Duyệt tệp trong máy"' in java
+
+print("PASS: offline assets, Photo Picker, FileProvider direct share, safe bridge,")
+print("      focus/EV/zoom/torch capability gates and bottom-fixed rotating icons")
+
+# TEST 2.5.7: adaptive mask, camera control dock, zoom crop, compact video UI.
+polish_css=r("android/android-polish-v257.css")
+polish_js=r("android/android-polish-v257.js")
+core_controls=r("camera-controls.js")
+assert 'OUTER_PADDING = 19' in launcher
+assert 'icon.save(folder / "ic_launcher.png")' in launcher
+assert 'dock:$(' in photo and "dock:studio.querySelector('.video-ios-controls')" in video
+assert 'getDigitalZoom' in core_controls and 'hnl-camera-dock-adjust' in core_controls
+assert 'digitalZoom' in photo and 'digitalZoom' in video
+assert "document.body.classList.add(\'apk-video-quality-open\')" in video
+assert 'grid.hidden=true' in camera_core
+assert 'apk-video-quality-open' in polish_css and 'overflow-y:auto!important' in polish_css
+assert 'font-size:13px!important' in polish_css
+assert "summary.textContent=label" in polish_js
+assert 'android-polish-v257.js' in web and 'android-polish-v257.css' in web
+assert (root/"android/app/src/main/assets/www/android-polish-v257.js").is_file()
+assert (root/"android/app/src/main/assets/www/android-polish-v257.css").is_file()
+
+assert "!select.closest('#videoQualityPanel')" in select_js
+assert '#videoQualityPanel select.apk-select-source{display:none' in polish_css
+
+# TEST 9: preview-only zoom/resize + video session reset + no launcher white plate.
+assert 'android-preview-zoom-v259.js' in web and 'android-preview-zoom-v259.css' in web
+assert 'cameraOpenGeneration' in video and "selectedMedia='photo';updateMediaPicker()" in video
+assert 'isVideoSelected' in video and 'isVideoSelected' in photo
+assert 'dock&&!apk' in core_controls and '&&caps.zoom' not in core_controls
+assert 'grid-template-columns:repeat(2,minmax(0,1fr))' in polish_css
+assert 'DENSITIES =' in launcher and 'icon.save(folder / "ic_launcher.png")' in launcher and 'ImageFilter' not in launcher
+
+# TEST42: Native picker acknowledges actual IDB import results before releasing temporary URIs.
+assert 'pickedBatchFinished(String batchId,int imported,int failed,String firstError)' in java
+assert 'pendingPickedBatches.put(batchId,tokens);' in java
+assert 'pendingPickedBatches.remove(batchId)' in java

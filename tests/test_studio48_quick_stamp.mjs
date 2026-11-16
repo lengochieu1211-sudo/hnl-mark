@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {quickTemplateSelectionPatch} from '../studio-ui/src/services/quickTemplateSelection.ts';
+const timemark=quickTemplateSelectionPatch({id:'timemark',group:'timemark-legacy',accentHex:'#E2B74B'});
+assert.deepEqual(timemark,{templateId:'timemark',accentColor:'#E2B74B'});
+const simple=quickTemplateSelectionPatch({id:'simple-datetime',group:'simple',accentHex:'#F8FAFC'});
+assert.deepEqual(simple,{templateId:'simple-datetime',accentColor:'#F8FAFC',showLogo:false});
+const custom=quickTemplateSelectionPatch({id:'custom-stamp',group:'simple',accentHex:'#E2B74B'});
+assert.deepEqual(custom,{templateId:'custom-stamp',accentColor:'#E2B74B',showLogo:true});
+const home=readFileSync(new URL('../studio-ui/src/components/home/HomeScreen.tsx',import.meta.url),'utf8');
+const app=readFileSync(new URL('../studio-ui/src/App.tsx',import.meta.url),'utf8');
+assert.match(home,/title="Chọn nhanh mẫu dấu thời gian"/);
+assert.match(home,/TEMPLATE_CATALOG_GROUPS\.filter\(group=>group\.category!=='none'\)/);
+assert.match(home,/quickTemplates\.map\(\(tpl\) =>/);
+assert.match(app,/watermarkConfig=\{selectedStampConfig\}/);
+assert.match(app,/updateSelectedStampConfig\(quickTemplateSelectionPatch\(template\)\)/);
+assert.match(app,/if\(activeMedia\?\.kind==='video'&&activeMedia\.isStamped&&!activeMedia\.stampedBlob\)/);
+for(const key of ['dateTimeIso','locationText','coordinates','customNote','logoImageDataUrl','photoCodeSeq','defaultAspectRatio'])
+ assert.equal(Object.hasOwn(simple,key),false,'Quick selection overwrites '+key);
+console.log('PASS TEST48 quick stamp: Timemark/date/time available, active media override, no stale global-only preview');

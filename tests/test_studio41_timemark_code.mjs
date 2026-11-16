@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {captureStampCode,visibleTimemarkCode} from '../studio-ui/src/services/timemarkSerial.ts';
+
+const historical='OMWHCO8UUCZ6TK';
+assert.equal(historical.length,14);
+assert.equal(captureStampCode('timemark',true,'HNL',1,historical),historical);
+assert.equal(captureStampCode('timemark',true,'HNL',999999,historical),historical);
+assert.equal(captureStampCode('timemark',false,'HNL',1,historical),historical);
+assert.equal(captureStampCode('independent-classic',true,'HNL',1,historical),'HNL-0001');
+assert.equal(captureStampCode('independent-classic',false,'HNL',1,historical),historical);
+assert.equal(visibleTimemarkCode(historical,1794700000000,1),historical);
+assert.equal(visibleTimemarkCode('HNL-0001',1794700000000,1),'HNL-0001');
+assert.equal(visibleTimemarkCode('hNL_0025',1794700000000,1),'HNL_0025');
+assert.equal(visibleTimemarkCode('  ',1794700000000,1).length,14);
+const fallback=visibleTimemarkCode(undefined,1794700000000,1);
+assert.match(fallback,/^[0-9A-Z]{14}$/);
+assert.equal(visibleTimemarkCode(undefined,1794700000000,1),fallback);
+assert.notEqual(visibleTimemarkCode(undefined,1794700000000,2),fallback);
+assert.ok(!fallback.endsWith('00000'));
+console.log('PASS TEST41: original Timemark code restored, no fake zero padding, independent serial retained');

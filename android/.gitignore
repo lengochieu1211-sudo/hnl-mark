@@ -1,0 +1,11 @@
+/.gradle/
+/build/
+/app/build/
+/app/src/main/assets/www/
+/app/src/main/res/drawable/hnlmark_icon.png
+/local.properties
+*.jks
+*.keystore
+
+/app/src/main/res/drawable/hnlmark_foreground.png
+/app/src/main/res/drawable/hnlmark_icon.png

@@ -1,7 +1,7 @@
-/* HNLMark v2.0.4 - mobile continuous camera, editable local library */
+/* HNLMark v2.0.5 - mobile continuous camera, editable local library and compact landscape dock */
 (function(){'use strict';
 const $=id=>document.getElementById(id), canvas=$('previewCanvas'), stage=$('stage'), ctx=canvas.getContext('2d',{alpha:false});
-const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Timemark',footerCaption:'100% Chân thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
+const defaultConfig={preset:'timemark',timeMode:'original',batchDate:toLocalInput(new Date()),dateFormat:'reference',timeFormat:'24',showDate:true,showTime:true,brandText:'NHẬT KÝ CÔNG TRƯỜNG',footerBrand:'Timemark',footerCaption:'100% Chân thực',showFooter:true,showSerial:true,serialMode:'auto',serialText:'',footerX:.875,footerY:.966,serialX:.981,serialY:.43,projectText:'',addressText:'',noteText:'',symbolType:'construction',logoMode:'inside',fontSize:3.2,accentColor:'#ffcf48',textColor:'#ffffff',bgOpacity:62,logoScale:100,showBackground:false,showShadow:true,outputSize:'original',outputFormat:'jpeg',quality:92,cropRatio:'free',fontFamily:'condensed',fontWeight:900,timeScale:100,dateScale:100,addressScale:100,footerScale:100,serialScale:100,dateColor:'#ffffff',addressColor:'#ffffff',footerColor:'#ffcf48',serialColor:'#ffffff',posX:.32,posY:.898,logoX:.87,logoY:.12,moveTarget:'stamp'};
 let saved={};try{saved=JSON.parse(localStorage.getItem('hnlmark-config-v1')||localStorage.getItem('hnl-photomark-config-v3')||'{}')||{};}catch(_){ }
 // Migrate old stamp labels in saved preferences AND per-photo settings, even when
 // an older one-time migration flag exists. Custom user captions/brands remain intact.
@@ -18,7 +18,7 @@ if(saved.serialMode==='custom')saved.serialMode='prefix';
 const config=Object.assign({},defaultConfig,saved); config.moveTarget='stamp';
 let editTool='move',editSelection=null,editDragging=false;const previewSnapshot=document.createElement('canvas');
 let photoSequence=0,photos=[],selected=-1,logoImg=null,logoUrl=null,logoFile=null,isRendering=0,toastTimer=null,busy=false;
-let cameraActive=false,cameraStream=null,cameraRAF=0,cameraFacing='environment',cameraRequest=0,cameraCapturing=false,cameraShotPending=false,cameraShotUniqueId=null,cameraPreviewCode='',cameraLastDraw=0,cameraOrientationKey='';
+let cameraActive=false,cameraStream=null,cameraControls=null,cameraRAF=0,cameraFacing='environment',cameraRequest=0,cameraCapturing=false,cameraShotPending=false,cameraShotUniqueId=null,cameraPreviewCode='',cameraLastDraw=0,cameraOrientationKey='';
 // Physical posture can differ from the browser viewport when Android auto-rotate is locked.
 let cameraSensorPortrait=null,cameraSensorSide=0,cameraSensorAt=0,cameraSensorCandidate='',cameraSensorSamples=0,cameraManualRotation=0;
 let cameraSensorCandidateAt=0,cameraSensorSource='',cameraMotionAt=0,cameraOrientationSide=0,cameraOrientationAt=0;
@@ -117,7 +117,7 @@ function parsedDate(s){if(!s)return null;const d=new Date(s);return Number.isFin
 function pad(n){return String(n).padStart(2,'0');}
 function fmtDate(d){const day=pad(d.getDate()),month=pad(d.getMonth()+1),year=d.getFullYear();switch(config.dateFormat){case'dd-mm-yyyy':return day+'-'+month+'-'+year;case'yyyy-mm-dd':return year+'-'+month+'-'+day;case'dd.month.yyyy':return day+'.'+month+'.'+year;case'reference':return d.getDate()+' Tháng '+(d.getMonth()+1)+', '+year;default:return day+'/'+month+'/'+year;}}
 function fmtTime(d){let h=d.getHours();if(config.timeFormat==='12')return pad(h%12||12)+':'+pad(d.getMinutes())+' '+(h>=12?'PM':'AM');return pad(h)+':'+pad(d.getMinutes())+(config.timeFormat==='24s'?':'+pad(d.getSeconds()):'');}
-function photoDate(p){return (p&&p.override?parsedDate(p.customDate):null)||(config.timeMode==='custom'?parsedDate(config.batchDate):null)||(p?p.exifDate||p.modifiedDate:new Date());}
+function photoDate(p,settings=config){return (p&&p.override?parsedDate(p.customDate):null)||(settings.timeMode==='custom'?parsedDate(settings.batchDate):null)||(p?p.exifDate||p.modifiedDate:new Date());}
 function showToast(msg){const node=$('toast');node.textContent=msg;node.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.classList.remove('show'),4400);}
 function store(){const copy=Object.assign({},config);delete copy.moveTarget;try{localStorage.setItem('hnlmark-config-v1',JSON.stringify(copy));}catch(_){ }}
 function showError(e){console.error(e);showToast(e&&e.message?e.message:String(e));}
@@ -148,7 +148,7 @@ async function appendFiles(list,opts={}){
  if(!opts.silent)showToast('Đã thêm '+images.length+' ảnh. Có thể chỉnh ngày giờ riêng rồi xuất.');
 }
 
-function removePhoto(i){if(editTool!=='move')setEditTool('move');const p=photos[i];if(!p)return;URL.revokeObjectURL(p.url);if(p.bitmap&&p.bitmap.close)p.bitmap.close();photos.splice(i,1);selected=photos.length?clamp(selected>i?selected-1:selected,0,photos.length-1):-1;renderGallery();updateSelectionUI();renderPreview();}
+function removePhoto(i){if(editTool!=='move')setEditTool('move');const p=photos[i];if(!p)return;URL.revokeObjectURL(p.url);if(p.bitmap&&p.bitmap.close)p.bitmap.close();photos.splice(i,1);selected=photos.length?clamp(selected>i?selected-1:selected,0,photos.length-1):-1;if(photos.length)selectPhoto(selected);else{renderGallery();updateSelectionUI();renderPreview();}}
 function renderGallery(){const g=$('gallery');g.replaceChildren();photos.forEach((p,i)=>{let b=document.createElement('button');b.className='gallery-card'+(i===selected?' active':'');b.type='button';b.title=p.file.name;b.addEventListener('click',()=>selectPhoto(i));const thumb=document.createElement('img');thumb.src=p.url;thumb.alt=p.file.name;thumb.loading='lazy';const name=document.createElement('span');name.textContent=p.file.name;const close=document.createElement('button');close.type='button';close.className='remove';close.textContent='×';close.title='Bỏ ảnh';close.addEventListener('click',ev=>{ev.stopPropagation();removePhoto(i);});b.append(thumb,name,close);g.appendChild(b);});$('photoCount').textContent=photos.length+' ảnh';$('photoHint').textContent=photos.length?'Chọn ảnh nhỏ để sửa và xem trước. Nút × chỉ bỏ khỏi danh sách, không xóa ảnh gốc.':'Ảnh sẽ xuất hiện tại đây. Mỗi ảnh có thể dùng giờ chụp riêng.';}
 function updateSelectionUI(){const p=previewIndex();$('overrideCheck').checked=!!p?.override;$('overrideCheck').disabled=!p;$('individualDate').disabled=!p;$('individualDate').value=p?p.customDate:'';$('individualDateRow').hidden=!(p&&p.override);$('dateSource').textContent=p?(p.override?'Ngày giờ chỉnh riêng':config.timeMode==='custom'?'Ngày giờ chung':p.exifDate?'EXIF · giờ chụp gốc':'Ngày sửa tệp · cần kiểm tra'):'Chưa chọn ảnh';$('resolvedTime').textContent=p?fmtDate(photoDate(p))+' · '+fmtTime(photoDate(p)):'—';$('previewName').textContent=p?p.file.name:'Ảnh minh họa · tải ảnh để bắt đầu';$('photoIndex').textContent=p?(selected+1)+' / '+photos.length:'Chưa có ảnh';$('previousPhoto').disabled=!p||selected===0;$('nextPhoto').disabled=!p||selected===photos.length-1;$('saveOne').disabled=!p;$('saveAll').disabled=!p;$('batchDateRow').hidden=config.timeMode!=='custom';$('serialPreview').textContent=photoSerial(p);updateImageEditor();}
 function photoEdits(p){if(!p)return null;if(!p.edits)p.edits={operations:[],filters:{brightness:0,contrast:0,saturation:0,warmth:0}};return p.edits;}
@@ -165,17 +165,28 @@ function updateImageEditor(){
 function regionValid(){return editSelection&&Math.abs(editSelection.x2-editSelection.x1)>=.016&&Math.abs(editSelection.y2-editSelection.y1)>=.016;}
 function normalizeRegion(){if(!regionValid())return null;const r=editSelection;return {x:clamp(Math.min(r.x1,r.x2),0,1),y:clamp(Math.min(r.y1,r.y2),0,1),w:clamp(Math.abs(r.x2-r.x1),0,1),h:clamp(Math.abs(r.y2-r.y1),0,1)};}
 function setEditTool(value){editTool=value;editSelection=null;canvas.classList.toggle('edit-select',value!=='move');updateImageEditor();renderPreview();}
-function stampFont(size,weight=400){const faces={condensed:'"Arial Narrow","Roboto Condensed",Arial,sans-serif',arial:'Arial,sans-serif',roboto:'Roboto,"Segoe UI",Arial,sans-serif',tahoma:'Tahoma,Arial,sans-serif',verdana:'Verdana,Arial,sans-serif',serif:'Georgia,"Times New Roman",serif',mono:'Consolas,"Courier New",monospace'};return (Number(weight)||400)+' '+Math.max(6,Math.round(size))+'px '+(faces[config.fontFamily]||faces.condensed);}
+function stampFont(size,weight=400){const faces={condensed:'"Arial Narrow","Roboto Condensed",Arial,sans-serif',arial:'Arial,sans-serif',roboto:'Roboto,"Segoe UI",Arial,sans-serif',tahoma:'Tahoma,Arial,sans-serif',verdana:'Verdana,Arial,sans-serif',serif:'Georgia,"Times New Roman",serif',mono:'Consolas,"Courier New",monospace',system:'system-ui,"Segoe UI",sans-serif',trebuchet:'"Trebuchet MS",Arial,sans-serif',impact:'Impact,"Arial Black",sans-serif',times:'"Times New Roman",Times,serif',courier:'"Courier New",Courier,monospace'};const originalWeight=Number(weight)||400,adjust=900-(Number(config.fontWeight)||900);const effectiveWeight=Math.max(400,Math.min(900,Math.round((originalWeight-adjust)/100)*100));return effectiveWeight+' '+Math.max(6,Math.round(size))+'px '+(faces[config.fontFamily]||faces.condensed);}
 function fontStack(){return stampFont(16).split('px ').slice(1).join('px ');}
-function fillForm(){const ids=['timeMode','batchDate','dateFormat','timeFormat','brandText','projectText','addressText','noteText','symbolType','logoMode','footerBrand','footerCaption','serialMode','serialText','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','outputSize','outputFormat','quality'];ids.forEach(id=>{const el=$(id);if(el)el.value=config[id];});['showDate','showTime','showBackground','showShadow','showFooter','showSerial'].forEach(id=>$(id).checked=!!config[id]);updateOutputs();updatePreset();updatePositionGrid();updateTarget();updateSelectionUI();}
-function updateOutputs(){$('fontSizeValue').textContent=Number(config.fontSize).toFixed(1)+'%';$('bgValue').textContent=config.bgOpacity+'%';$('logoScaleValue').textContent=config.logoScale+'%';$('qualityValue').textContent=config.quality+'%';$('serialPreview').textContent=photoSerial(previewIndex());$('accentLabel').textContent=config.accentColor.toUpperCase();$('textLabel').textContent=config.textColor.toUpperCase();['timeScale','dateScale','addressScale','footerScale','serialScale'].forEach(id=>{$(id+'Value').textContent=config[id]+'%';});['dateColor','addressColor','footerColor','serialColor'].forEach(id=>{$(id+'Label').textContent=config[id].toUpperCase();});}
-function updatePreset(){document.querySelectorAll('.preset').forEach(el=>el.classList.toggle('active',el.dataset.preset===config.preset));}
+function fillForm(){const ids=['timeMode','batchDate','dateFormat','timeFormat','brandText','projectText','addressText','noteText','symbolType','logoMode','footerBrand','footerCaption','serialMode','serialText','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','outputSize','outputFormat','quality','cropRatio'];ids.forEach(id=>{const el=$(id);if(el)el.value=config[id];});['showDate','showTime','showBackground','showShadow','showFooter','showSerial'].forEach(id=>$(id).checked=!!config[id]);updateOutputs();updatePreset();updatePositionGrid();updateTarget();updateSelectionUI();}
+function updateOutputs(){$('fontSizeValue').textContent=Number(config.fontSize).toFixed(1)+'%';$('bgValue').textContent=config.bgOpacity+'%';$('logoScaleValue').textContent=config.logoScale+'%';$('qualityValue').textContent=config.quality+'%';document.querySelectorAll('.image-quality-presets button').forEach(b=>b.classList.toggle('selected',+b.dataset.quality===+config.quality));$('serialPreview').textContent=photoSerial(previewIndex());$('accentLabel').textContent=config.accentColor.toUpperCase();$('textLabel').textContent=config.textColor.toUpperCase();['timeScale','dateScale','addressScale','footerScale','serialScale'].forEach(id=>{$(id+'Value').textContent=config[id]+'%';});['dateColor','addressColor','footerColor','serialColor'].forEach(id=>{$(id+'Label').textContent=config[id].toUpperCase();});}
+function updatePreset(){document.querySelectorAll('.preset').forEach(el=>el.classList.toggle('active',el.dataset.preset===config.preset));const extra=$('presetExtra');if(extra&&INDEPENDENT_PRESETS.has(config.preset))extra.open=true;}
 function updateTarget(){document.querySelectorAll('#moveTarget button').forEach(el=>el.classList.toggle('active',el.dataset.target===config.moveTarget));updatePositionGrid();}
 function updatePositionGrid(){const prefix=config.moveTarget==='logo'?'logo':config.moveTarget==='footer'?'footer':config.moveTarget==='serial'?'serial':'pos',x=config[prefix+'X'],y=config[prefix+'Y'];document.querySelectorAll('#positionGrid button').forEach(el=>el.classList.toggle('active',Math.abs(+el.dataset.x-x)<.01&&Math.abs(+el.dataset.y-y)<.01));}
 function changeConfig(name,value){config[name]=value;store();stashPhotoSettings();updateOutputs();updateSelectionUI();renderPreview();}
 function ellipsis(g,s,maxWidth){s=String(s||'').replace(/\s+/g,' ').trim();if(g.measureText(s).width<=maxWidth)return s;while(s.length&&g.measureText(s+'…').width>maxWidth)s=s.slice(0,-1);return s+'…';}
 function roundRect(g,x,y,w,h,r){r=Math.min(r,w/2,h/2);g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();}
 function emojiFor(v){return{construction:'🏗',location:'📍',camera:'📷',check:'✓',clock:'◷',none:''}[v]||'';}
+// Rounded shield with a tick, using the EXISTING vertical label color.
+function drawShieldCheck(g,size,color){
+ g.save();g.scale(size/24,size/24);
+ g.strokeStyle=color;g.lineWidth=1.9;g.lineCap='round';g.lineJoin='round';
+ g.beginPath();g.moveTo(0,-10);g.lineTo(8,-7);g.lineTo(8,-.5);
+ g.bezierCurveTo(8,4.5,4.8,8.4,0,10);
+ g.bezierCurveTo(-4.8,8.4,-8,4.5,-8,-.5);
+ g.lineTo(-8,-7);g.closePath();g.stroke();
+ g.beginPath();g.moveTo(-3.1,0);g.lineTo(-.5,2.6);g.lineTo(4.2,-2.2);g.stroke();
+ g.restore();
+}
 function drawContained(g,img,x,y,w,h){if(!img)return;const iw=img.width||img.naturalWidth,ih=img.height||img.naturalHeight;if(!iw||!ih)return;const ratio=Math.min(w/iw,h/ih);const dw=iw*ratio,dh=ih*ratio;g.drawImage(img,x+(w-dw)/2,y+(h-dh)/2,dw,dh);}
 function stampData(p){const date=photoDate(p),dateString=config.showDate?fmtDate(date):'',timeString=config.showTime?fmtTime(date):'';return{dateString,timeString,weekday:['Chủ Nhật','Thứ Hai','Thứ Ba','Thứ Tư','Thứ Năm','Thứ Sáu','Thứ Bảy'][date.getDay()],brand:textSafe(config.brandText),project:textSafe(config.projectText),location:textSafe(config.addressText),note:textSafe(config.noteText).replace(/\n/g,' · ')};}
 function photoSerial(p){
@@ -303,10 +314,11 @@ function drawVerticalSerial(g,W,H,p){
   g.translate(x,y);g.rotate(-Math.PI/2);
   if(config.showShadow){g.shadowColor='rgba(0,0,0,.84)';g.shadowBlur=f*.27;}
   g.fillStyle=config.serialColor;g.fillText(text,0,0);
-  // Minimal shield icon, placed next to serial; this is a decorative ID, not a verified mark.
-  const ix=-len*.5-f*1.65;g.save();g.translate(ix,0);g.lineWidth=Math.max(1,f*.09);
-  g.strokeStyle='rgba(255,255,255,.88)';g.beginPath();g.moveTo(-f*.42,-f*.52);g.lineTo(f*.44,-f*.52);g.lineTo(f*.52,-f*.05);g.lineTo(0,f*.55);g.lineTo(-f*.52,-f*.05);g.closePath();g.stroke();
-  g.beginPath();g.moveTo(-f*.19,-f*.02);g.lineTo(-f*.01,f*.18);g.lineTo(f*.24,-f*.18);g.stroke();g.restore();g.restore();
+  // Timemark-style shield-check at the START of the vertical photo code.
+  // Decorative only: it does not certify authenticity.
+  const ix=-len*.5-f*.84;g.save();g.translate(ix,0);
+  drawShieldCheck(g,f*1.2,config.serialColor);
+  g.restore();g.restore();
 }
 function drawStamp(g,W,H,p){const d=stampData(p),f=Math.max(9,Math.min(W,H)*Number(config.fontSize)/100),scale=f/24,pad=f*.62,inside=config.logoMode==='inside',symbol=emojiFor(config.symbolType),radius=f*.43;
 const isMinimal=config.preset==='minimal',isRibbon=config.preset==='ribbon',isSite=config.preset==='site';const font=s=>Math.round(s)+'px '+fontStack();const maxWidth=W*.90;
@@ -337,7 +349,190 @@ g.restore();return{x:px,y:py,width:sw,height:sh};}
 function drawFloatingLogo(g,W,H){if(config.logoMode!=='floating')return null;const scale=Number(config.logoScale)/100,base=Math.min(W,H)*.13*scale;let width=Math.max(40,base*1.6),height=Math.max(24,base*.7);if(logoImg){const ir=(logoImg.width||logoImg.naturalWidth)/(logoImg.height||logoImg.naturalHeight);if(ir>1){width=Math.min(W*.48,base*2*ir/2);height=width/ir;}else{height=Math.min(H*.25,base*1.1);width=height*ir;} }else{width=base*1.7;height=base*.87;}
 width=clamp(width,22,W*.53);height=clamp(height,20,H*.3);const x=clamp(config.logoX*W-width/2,2,W-width-2),y=clamp(config.logoY*H-height/2,2,H-height-2);
 g.save();if(logoImg){if(config.showBackground){g.fillStyle='rgba(255,255,255,.82)';roundRect(g,x-5,y-5,width+10,height+10,Math.min(14,W*.012));g.fill();}drawContained(g,logoImg,x,y,width,height);}else{g.fillStyle='rgba(20,37,59,'+(config.bgOpacity/100)+')';roundRect(g,x,y,width,height,Math.min(12,width*.12));g.fill();g.fillStyle=config.accentColor;g.fillRect(x,y,width*.07,height);g.fillStyle=config.textColor;g.font='900 '+Math.round(height*.51)+'px Arial,sans-serif';g.textBaseline='middle';g.fillText('HNL',x+width*.20,y+height*.52);}g.restore();return{x,y,width,height};}
-function drawOverlay(g,W,H,p){if(config.preset==='timemark'){drawReferenceStamp(g,W,H,p);drawReferenceFooter(g,W,H);drawVerticalSerial(g,W,H,p);}else{drawStamp(g,W,H,p);}drawFloatingLogo(g,W,H);}
+function drawModernStamp(g,W,H,p){
+ const d=stampData(p),style=config.preset;
+ const size=Math.max(13,Math.min(W,H)*Number(config.fontSize)/105);
+ const time=d.timeString,date=d.dateString,location=d.location;
+ const main=style==='clock'?time:style==='compact'?[time,date].filter(Boolean).join('  •  '):time;
+ const secondary=style==='clock'?'':style==='tech'?[date,d.project||'CAMERA 01'].filter(Boolean).join('  |  '):style==='cinema'?[date,d.note].filter(Boolean).join('  •  '):date;
+ const x=clamp(config.posX*W,W*.02,W*.95),y=clamp(config.posY*H,H*.02,H*.96);
+ g.save();g.textBaseline='alphabetic';g.textAlign='left';
+ const primarySize=size*(style==='cinema'?2.3:style==='compact'?1.1:style==='tech'?1.7:style==='clock'?2.45:1.95);
+ g.font=stampFont(primarySize,Number(config.fontWeight)||700);
+ const pwidth=g.measureText(main).width;
+ const secondarySize=size*(style==='compact'?.66:.83);
+ g.font=stampFont(secondarySize,500);
+ const p2width=Math.max(g.measureText(secondary).width,g.measureText(style==='clock'?'':location).width);
+ const totalWidth=Math.max(pwidth,p2width)+size*1.5;
+ const totalHeight=primarySize*1.35+(secondary?secondarySize*1.55:0)+(location&&style!=='clock'?secondarySize*1.35:0);
+ const left=clamp(x-totalWidth*.5,Math.max(4,W*.018),Math.max(4,W-totalWidth-W*.018));
+ const top=clamp(y-totalHeight*.5,Math.max(4,H*.012),Math.max(4,H-totalHeight-H*.012));
+ if(config.showBackground){g.fillStyle='rgba(10,21,34,'+(Number(config.bgOpacity)/100)+')';roundRect(g,left,top,totalWidth,totalHeight,size*.25);g.fill();}
+ if(config.showShadow){g.shadowColor='rgba(0,0,0,.7)';g.shadowBlur=size*.2;}
+ if(style==='tech'){g.fillStyle=config.accentColor;g.fillRect(left,top,size*.1,totalHeight);}
+ if(style==='cinema'){g.fillStyle=config.accentColor;g.fillRect(left,top+totalHeight-size*.13,totalWidth,size*.13);}
+ let py=top+primarySize*1.08,px=left+size*.55;
+ g.font=stampFont(primarySize,Number(config.fontWeight)||700);g.fillStyle=config.textColor;
+ g.fillText(ellipsis(g,main,Math.max(size,W-px-W*.025)),px,py);
+ if(secondary){py+=secondarySize*1.55;g.fillStyle=config.dateColor;g.font=stampFont(secondarySize,500);g.fillText(ellipsis(g,secondary,W-px-W*.025),px,py);}
+ if(location&&style!=='clock'){py+=secondarySize*1.35;g.fillStyle=config.addressColor;g.font=stampFont(secondarySize*.93,400);g.fillText(ellipsis(g,location,W-px-W*.025),px,py);}
+ g.restore();
+ if(style!=='clock'&&config.showFooter)drawReferenceFooter(g,W,H);
+ if(style!=='clock'&&config.showSerial)drawVerticalSerial(g,W,H,p);
+}
+
+// Standalone HNLMark stamp family. Never draws Timemark footer, shield or a
+// "Verified" claim. Each preset reads the SAME date/time and photo metadata
+// as the existing stamps so library edits, preview and video exports agree.
+const INDEPENDENT_PRESETS=new Set(['site-log','inspection','shift','geo','survey','blueprint','bottom-strip','memory','led','journey','corner','metadata']);
+function drawIndependentStamp(g,W,H,p){
+ const d=stampData(p),style=config.preset;
+ const unit=Math.max(8,Math.min(W,H)*Number(config.fontSize)/100);
+ const accent=config.accentColor,bright=config.textColor;
+ const pad=Math.max(unit*.55,5),margin=Math.max(3,W*.014);
+ const wide=style==='bottom-strip'?W*.96:style==='inspection'?W*.71:style==='geo'?W*.75:style==='corner'?W*.48:W*.67;
+ const width=clamp(wide,Math.min(W*.28,unit*9),W-margin*2);
+ const height=style==='bottom-strip'?unit*4.2:style==='geo'?unit*5:style==='shift'?unit*5.4:style==='led'?unit*5.0:style==='corner'?unit*5.7:style==='memory'?unit*7.4:unit*7.0;
+ const left=clamp(Number(config.posX)*W-width*.5,margin,Math.max(margin,W-width-margin));
+ const top=clamp(Number(config.posY)*H-height*.5,Math.max(2,H*.01),Math.max(2,H-height-H*.01));
+ const time=d.timeString||'',date=d.dateString||'',label=d.project||d.brand||'';
+ const location=d.location||'',note=d.note||'';
+ const middle=[time,date].filter(Boolean).join(' · ');
+ const safe=(x,max)=>ellipsis(g,x,Math.max(2,max));
+ const color=(v)=>{g.fillStyle=v;};
+ const font=(sz,weight=700,mono=false,serif=false)=>{
+  g.font=mono?`${weight} ${Math.max(7,Math.round(sz))}px Consolas,"Courier New",monospace`:serif?`${weight} ${Math.max(7,Math.round(sz))}px Georgia,"Times New Roman",serif`:stampFont(sz,weight);
+ };
+ const text=(str,x,y,sz,weight,fill,max,mono=false,serif=false)=>{
+  if(!str)return;g.fillStyle=fill;font(sz,weight,mono,serif);g.fillText(safe(str,max),x,y);
+ };
+ const rounded=(x,y,w,h,r,fill,stroke)=>{
+  roundRect(g,x,y,w,h,r);if(fill){color(fill);g.fill();}if(stroke){g.strokeStyle=stroke;g.lineWidth=Math.max(1,unit*.065);g.stroke();}
+ };
+ const shadow=()=>{if(config.showShadow){g.shadowColor='rgba(0,0,0,.58)';g.shadowBlur=unit*.35;g.shadowOffsetY=unit*.12;}};
+ const clearShadow=()=>{g.shadowColor='transparent';g.shadowBlur=0;g.shadowOffsetY=0;};
+ const widthIn=width-pad*2;
+ g.save();g.textBaseline='top';g.textAlign='left';shadow();
+ if(style==='site-log'){
+  rounded(left,top,width,height,unit*.35,'rgba(12,32,50,.84)');clearShadow();
+  color(accent);g.fillRect(left,top,unit*.24,height);
+  text('NHẬT KÝ THI CÔNG',left+pad,top+unit*.48,unit*.77,800,accent,widthIn);
+  text(time,left+pad,top+unit*1.55,unit*2.12,900,bright,widthIn*.62);
+  text(date,left+pad,top+unit*4.04,unit*1.03,750,bright,widthIn);
+  text(d.project||location||d.note,left+pad,top+unit*5.43,unit*.75,500,bright,widthIn);
+ }else if(style==='inspection'){
+  rounded(left,top,width,height,unit*.24,'rgba(246,255,249,.95)','#91c8ac');clearShadow();
+  color('#26866c');g.fillRect(left,top,unit*.21,height);
+  text('HỒ SƠ ẢNH • NGHIỆM THU',left+pad,top+unit*.44,unit*.76,800,'#277a60',widthIn);
+  text(date,left+pad,top+unit*1.70,unit*1.38,850,'#1d3546',widthIn);
+  text(time,left+pad,top+unit*3.52,unit*1.64,900,'#1d3546',widthIn);
+  text(d.project||location||note,left+pad,top+unit*5.58,unit*.68,550,'#355668',widthIn);
+ }else if(style==='shift'){
+  rounded(left,top,width,height,unit*.26,'rgba(246,232,192,.94)');clearShadow();
+  color('#b77829');g.fillRect(left,top,unit*.23,height);
+  text('CA LÀM VIỆC',left+pad,top+unit*.38,unit*.80,800,'#86562a',widthIn);
+  text(time,left+pad,top+unit*1.55,unit*2.23,850,'#442b18',widthIn*.72);
+  text(date,left+pad,top+unit*4.20,unit*.85,650,'#68503a',widthIn);
+ }else if(style==='geo'){
+  rounded(left,top,width,height,unit*1.05,'rgba(4,55,69,.85)');clearShadow();
+  color('#63e2db');g.beginPath();g.arc(left+unit*1.28,top+unit*1.15,unit*.40,0,Math.PI*2);g.fill();
+  text('ĐỊA ĐIỂM ẢNH',left+unit*2.04,top+unit*.72,unit*.76,800,'#8fe6e0',width-unit*2.65);
+  text(location||d.project,left+pad,top+unit*2.0,unit*1.00,750,'#ffffff',widthIn);
+  text(middle,left+pad,top+unit*3.54,unit*.92,600,'#d2f5f2',widthIn);
+ }else if(style==='survey'){
+  if(config.showBackground)rounded(left,top,width,height,unit*.16,'rgba(233,248,248,.90)');clearShadow();
+  g.strokeStyle=accent;g.lineWidth=Math.max(2,unit*.11);
+  const r=unit*.65;g.beginPath();g.moveTo(left,top+r);g.lineTo(left,top);g.lineTo(left+r,top);
+  g.moveTo(left+width-r,top+height);g.lineTo(left+width,top+height);g.lineTo(left+width,top+height-r);g.stroke();
+  text('KHẢO SÁT HIỆN TRƯỜNG',left+pad,top+unit*.55,unit*.86,800,config.showBackground?'#264f5b':bright,widthIn);
+  text(date,left+pad,top+unit*1.88,unit*1.34,800,config.showBackground?'#1b3e52':bright,widthIn);
+  text(time,left+pad,top+unit*3.63,unit*1.38,850,config.showBackground?'#1b3e52':bright,widthIn);
+  text(d.project||location,left+pad,top+unit*5.53,unit*.73,500,config.showBackground?'#3d6770':bright,widthIn);
+ }else if(style==='blueprint'){
+  rounded(left,top,width,height,unit*.16,'rgba(11,57,110,.88)','#67b3e5');clearShadow();
+  g.strokeStyle='rgba(161,219,244,.45)';g.lineWidth=Math.max(1,unit*.03);g.strokeRect(left+unit*.25,top+unit*.25,width-unit*.5,height-unit*.5);
+  text('ẢNH KỸ THUẬT / HIỆN TRƯỜNG',left+pad,top+unit*.59,unit*.76,800,'#8cdbff',widthIn);
+  text(date,left+pad,top+unit*2.06,unit*1.36,800,'#ffffff',widthIn,true);
+  text(time,left+pad,top+unit*3.74,unit*1.45,850,'#ffffff',widthIn,true);
+  text(d.project||location,left+pad,top+unit*5.73,unit*.70,500,'#d5eeff',widthIn,true);
+ }else if(style==='bottom-strip'){
+  rounded(left,top,width,height,unit*.18,'rgba(14,23,35,.88)');clearShadow();
+  color(accent);g.fillRect(left,top,Math.max(3,unit*.18),height);
+  const split=width*.56;
+  text(date,left+pad,top+unit*.69,unit*1.10,700,'#f4f8ff',split-pad*1.5);
+  text(time,left+pad,top+unit*2.24,unit*1.24,850,'#ffffff',split-pad*1.5);
+  text(location||d.project||d.brand,left+split,top+unit*1.44,unit*.74,600,'#dfeefb',width-split-pad);
+ }else if(style==='memory'){
+  rounded(left,top,width,height,unit*.20,'rgba(252,247,233,.92)','#e4d5b7');clearShadow();
+  color('#c38c60');g.fillRect(left+pad,top+unit*.78,widthIn,unit*.08);
+  text('NGÀY ĐÁNG NHỚ',left+pad,top+unit*1.15,unit*.67,650,'#a9785d',widthIn,true);
+  text(date,left+pad,top+unit*2.20,unit*1.50,750,'#704833',widthIn,false,true);
+  text(time,left+pad,top+unit*4.47,unit*1.33,600,'#805b42',widthIn,false,true);
+  text(note||location,left+pad,top+unit*6.25,unit*.63,500,'#a67e67',widthIn);
+ }else if(style==='led'){
+  rounded(left,top,width,height,unit*.40,'rgba(8,17,21,.92)','#426d50');clearShadow();
+  text(time,left+pad,top+unit*.70,unit*2.40,800,'#a6fbb1',widthIn,true);
+  text(date,left+pad,top+unit*3.67,unit*.74,500,'#79b68a',widthIn,true);
+ }else if(style==='journey'){
+  rounded(left,top,width,height,unit*1.2,'rgba(218,241,232,.92)');clearShadow();
+  text('NHẬT KÝ HÀNH TRÌNH',left+pad,top+unit*.73,unit*.77,750,'#286b61',widthIn);
+  text(date,left+pad,top+unit*2.06,unit*1.35,800,'#1b4a48',widthIn);
+  text(time,left+pad,top+unit*3.90,unit*1.27,750,'#20605e',widthIn);
+  text(location||note,left+pad,top+unit*5.80,unit*.70,550,'#36766a',widthIn);
+ }else if(style==='corner'){
+  clearShadow();g.strokeStyle=accent;g.lineWidth=Math.max(2,unit*.15);g.beginPath();
+  g.moveTo(left,top+height*.85);g.lineTo(left,top);g.lineTo(left+width*.28,top);g.stroke();
+  if(config.showBackground)rounded(left+unit*.14,top+unit*.25,width-unit*.14,height-unit*.56,unit*.16,'rgba(11,25,42,.55)');
+  text(time,left+pad,top+unit*1.03,unit*1.86,850,bright,widthIn);
+  text(date,left+pad,top+unit*3.43,unit*.88,700,config.dateColor,widthIn);
+  text(location||note,left+pad,top+unit*4.70,unit*.60,500,config.addressColor,widthIn);
+ }else if(style==='metadata'){
+  rounded(left,top,width,height,unit*.14,'rgba(14,25,34,.87)','#7093a8');clearShadow();
+  color('#80bedc');g.fillRect(left,top,width,unit*.12);
+  text('ẢNH SỐ  //  THÔNG TIN',left+pad,top+unit*.52,unit*.72,650,'#87b9d3',widthIn,true);
+  text('DATE  '+date,left+pad,top+unit*2.04,unit*.94,650,'#f0f6fc',widthIn,true);
+  text('TIME  '+time,left+pad,top+unit*3.65,unit*.94,650,'#f0f6fc',widthIn,true);
+  text(d.project||location,left+pad,top+unit*5.70,unit*.68,450,'#b4d0e1',widthIn,true);
+ }
+ g.restore();
+ // Unlike the legacy Timemark templates, the optional metadata is unverified
+ // user content and contains NO checkmark, Timemark label or brand assertion.
+ if(config.showFooter && style!=='bottom-strip')drawIndependentFooter(g,W,H);
+ if(config.showSerial)drawIndependentSerial(g,W,H,p);
+}
+function drawIndependentFooter(g,W,H){
+ const unit=Math.max(8,Math.min(W,H)*Number(config.fontSize)/100),margin=Math.max(5,W*.02);
+ const textSize=unit*.85*Number(config.footerScale)/100;
+ const captionSize=unit*.61*Number(config.footerScale)/100;
+ const brand=textSafe(config.footerBrand)==='Timemark'?'HNL Mark':textSafe(config.footerBrand)||'HNL Mark';
+ const caption=textSafe(config.footerCaption);
+ const w=Math.min(W*.38,Math.max(unit*5,W*.23)),h=textSize+captionSize*1.48+unit*.34;
+ const x=clamp(config.footerX*W-w/2,margin,W-w-margin),y=clamp(config.footerY*H-h/2,margin,H-h-margin);
+ g.save();g.textAlign='right';g.textBaseline='top';
+ if(config.showShadow){g.shadowColor='#000c';g.shadowBlur=unit*.16;}
+ g.fillStyle=config.footerColor;g.font=stampFont(textSize,750);g.fillText(ellipsis(g,brand,w),x+w,y);
+ g.fillStyle=config.textColor;g.font=stampFont(captionSize,450);g.fillText(ellipsis(g,caption,w),x+w,y+textSize*1.22);
+ g.restore();
+}
+function drawIndependentSerial(g,W,H,p){
+ const unit=Math.max(8,Math.min(W,H)*Number(config.fontSize)/100),fontSize=Math.max(8,unit*.55*Number(config.serialScale)/100);
+ g.save();g.textAlign='center';g.textBaseline='middle';g.font=stampFont(fontSize,500);
+ const mark='ID '+photoSerial(p),label=ellipsis(g,mark,H*.63),len=g.measureText(label).width;
+ const x=clamp(config.serialX*W,Math.max(6,fontSize*.7),W-Math.max(6,fontSize*.7));
+ const y=clamp(config.serialY*H,len*.5+fontSize,Math.max(len*.5+fontSize,H-len*.5-fontSize));
+ g.translate(x,y);g.rotate(-Math.PI/2);
+ if(config.showShadow){g.shadowColor='#000b';g.shadowBlur=unit*.15;}
+ g.fillStyle=config.serialColor;g.fillText(label,0,0);g.restore();
+}
+
+function drawOverlay(g,W,H,p){
+ if(config.preset==='none')return;
+ if(config.preset==='timemark'){drawReferenceStamp(g,W,H,p);drawReferenceFooter(g,W,H);drawVerticalSerial(g,W,H,p);}
+ else if(INDEPENDENT_PRESETS.has(config.preset))drawIndependentStamp(g,W,H,p);
+ else if(['clean','tech','cinema','compact','clock'].includes(config.preset))drawModernStamp(g,W,H,p);
+ else drawStamp(g,W,H,p);
+ drawFloatingLogo(g,W,H);
+}
 function drawPlaceholder(){const W=1000,H=600;canvas.width=W;canvas.height=H;const sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#4c758d');sky.addColorStop(.60,'#9fb5bd');sky.addColorStop(1,'#516778');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);for(let i=0;i<17;i++){const x=i*74-25,bh=115+(i*37)%200;ctx.fillStyle=i%2?'#435e72':'#526f80';ctx.fillRect(x,H-bh,66,bh);ctx.strokeStyle='#a9c0c7';ctx.lineWidth=2;for(let yy=H-bh+18;yy<H-10;yy+=29){ctx.beginPath();ctx.moveTo(x+8,yy);ctx.lineTo(x+60,yy);ctx.stroke();}}ctx.strokeStyle='#d6e2e5';ctx.lineWidth=8;ctx.beginPath();ctx.moveTo(640,70);ctx.lineTo(640,520);ctx.moveTo(640,95);ctx.lineTo(900,95);ctx.moveTo(640,95);ctx.lineTo(430,175);ctx.stroke();ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(835,95);ctx.lineTo(835,400);ctx.stroke();ctx.fillStyle='rgba(13,25,40,.35)';ctx.fillRect(0,0,W,H);ctx.fillStyle='rgba(255,255,255,.91)';ctx.textAlign='center';ctx.font='800 26px Arial';ctx.fillText('ẢNH MINH HỌA',500,63);ctx.font='400 16px Arial';ctx.fillText('Chọn ảnh thật để xem và xuất dấu thời gian',500,92);ctx.textAlign='start';drawOverlay(ctx,W,H,{exifDate:new Date(2026,8,20,9,30,25),modifiedDate:new Date(2026,8,20,9,30,25)});$('previewDimensions').textContent='Bản xem mẫu';}
 
 /* Nondestructive per-photo image operations. Coordinates stay normalized after
@@ -426,8 +621,35 @@ async function renderBlob(p){
  return await new Promise((resolve,reject)=>c.toBlob(blob=>blob?resolve(blob):reject(new Error('Không xuất được ảnh (thiếu bộ nhớ hoặc định dạng chưa hỗ trợ).')),mimetype,Number(config.quality)/100));
  }finally{Object.assign(config,restore);}
 }
-function outputName(p){const stem=p.file.name.replace(/\.[^.]+$/,'').replace(/[\\/:*?"<>|]/g,'_').slice(0,65)||'photo';const d=photoDate(p);return stem+'_HNLMark_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())+'_TM-'+p.serialCode+'.'+(config.outputFormat==='png'?'png':'jpg');}
-function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),40000);}
+function outputName(p,blob){const stem=p.file.name.replace(/\.[^.]+$/,'').replace(/[\\/:*?"<>|]/g,'_').slice(0,65)||'photo';const settings=p.stampConfig||config,d=photoDate(p,settings);const extension=blob?.type==='image/png'?'png':blob?.type==='image/jpeg'?'jpg':settings.outputFormat==='png'?'png':'jpg';return stem+'_HNLMark_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+pad(d.getSeconds())+'_TM-'+p.serialCode+'.'+extension;}
+function download(blob,name){
+ if(window.HNLAndroidApp?.saveBlob)return window.HNLAndroidApp.saveBlob(blob,name);
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download=name;document.body.append(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),40000);
+ return Promise.resolve(true);
+}
+// Keep the editable original in IndexedDB; automatically publish a separate STAMPED JPG/PNG
+// to Pictures/HNLMark on Android. Do not auto-save imported photos or duplicate camera IDs.
+const cameraDeviceSaveAttempted=new Set();
+let cameraDeviceSaveQueue=Promise.resolve();
+function autoSaveCameraPhoto(p){
+ if(!p||!window.HNLAndroidApp?.saveBlob||cameraDeviceSaveAttempted.has(p.serialCode))return;
+ const key=p.serialCode;cameraDeviceSaveAttempted.add(key);
+ const task=async()=>{
+  try{
+   const blob=await renderBlob(p);
+   await window.HNLAndroidApp.saveBlob(blob,outputName(p,blob));
+   p.deviceSaved=true;
+   showToast('✓ Ảnh đã tự lưu vào Pictures/HNLMark (Thư viện máy).');
+  }catch(e){
+   p.deviceSaved=false;
+   cameraDeviceSaveAttempted.delete(key);
+   showToast('Không tự lưu được ảnh ra máy. Ảnh gốc vẫn trong Thư viện HNL Mark; hãy dùng Lưu/Xuất để thử lại: '+(e.message||e));
+  }
+ };
+ cameraDeviceSaveQueue=cameraDeviceSaveQueue.then(task,task);
+}
 function crc32(data){let c=-1;for(const b of data){c^=b;for(let j=0;j<8;j++)c=(c>>>1)^((c&1)?0xedb88320:0);}return(c^(-1))>>>0;}
 function zipStored(entries){const encode=new TextEncoder(),parts=[],central=[];let offset=0;const now=new Date(),dosTime=(now.getHours()<<11)|(now.getMinutes()<<5)|(now.getSeconds()>>1),dosDate=((now.getFullYear()-1980)<<9)|((now.getMonth()+1)<<5)|now.getDate();
 for(const entry of entries){const name=encode.encode(entry.name),data=new Uint8Array(entry.bytes),crc=crc32(data),n=data.byteLength;if(offset+n>0xffffffff)throw new Error('ZIP quá 4GB. Hãy chia ảnh thành nhiều đợt.');const local=new Uint8Array(30+name.length),dv=new DataView(local.buffer);dv.setUint32(0,0x04034b50,true);dv.setUint16(4,20,true);dv.setUint16(6,0x0800,true);dv.setUint16(8,0,true);dv.setUint16(10,dosTime,true);dv.setUint16(12,dosDate,true);dv.setUint32(14,crc,true);dv.setUint32(18,n,true);dv.setUint32(22,n,true);dv.setUint16(26,name.length,true);local.set(name,30);parts.push(local,data);
@@ -435,8 +657,8 @@ const cd=new Uint8Array(46+name.length),d=new DataView(cd.buffer);d.setUint32(0,
 const centralSize=central.reduce((t,c)=>t+c.byteLength,0);const end=new Uint8Array(22),dv=new DataView(end.buffer);dv.setUint32(0,0x06054b50,true);dv.setUint16(8,entries.length,true);dv.setUint16(10,entries.length,true);dv.setUint32(12,centralSize,true);dv.setUint32(16,offset,true);return new Blob([...parts,...central,end],{type:'application/zip'});}
 function progress(label,index,total){$('progress').hidden=false;$('progressLabel').textContent=label;$('progressNumbers').textContent=index+' / '+total;$('progressBar').style.width=Math.round(index/Math.max(1,total)*100)+'%';}
 function setBusy(v){busy=v;if($('openCamera'))$('openCamera').disabled=v||cameraActive||cameraShotPending;$('saveOne').disabled=v||!previewIndex();$('saveAll').disabled=v||!previewIndex();$('photoInput').disabled=v;$('logoInput').disabled=v;}
-async function saveOne(){if(busy||!previewIndex())return;setBusy(true);progress('Đang tạo ảnh...',0,1);try{const p=previewIndex();download(await renderBlob(p),outputName(p));progress('Đã tạo ảnh',1,1);showToast('Đã tạo file ảnh. Kiểm tra thư mục Tải xuống của thiết bị.');}catch(e){showError(e);}finally{setBusy(false);setTimeout(()=>$('progress').hidden=true,3000);}}
-async function saveAll(){if(busy||!photos.length)return;setBusy(true);let list=[];const count=photos.length;progress('Đang chuẩn bị ảnh...',0,count);try{for(let i=0;i<count;i++){const p=photos[i];progress('Đang xuất '+p.file.name,i,count);const blob=await renderBlob(p);const bytes=await blob.arrayBuffer();list.push({name:(i+1)+'_'+outputName(p),bytes});progress('Đã xử lý',i+1,count);await new Promise(r=>setTimeout(r,0));}const zip=zipStored(list);download(zip,'HNLMark_'+new Date().toISOString().slice(0,10)+'_'+count+'_anh.zip');showToast('Đã đóng gói '+count+' ảnh trong ZIP. Kiểm tra mục Tải xuống.');}catch(e){showError(e);}finally{list=[];setBusy(false);setTimeout(()=>$('progress').hidden=true,3500);}}
+async function saveOne(){if(busy||!previewIndex())return;setBusy(true);progress('Đang tạo ảnh...',0,1);try{const p=previewIndex();const blob=await renderBlob(p);await download(blob,outputName(p,blob));progress('Đã lưu ảnh',1,1);showToast('✓ Đã lưu ảnh vào Pictures/HNLMark (APK) hoặc Tải xuống (Web).');}catch(e){showError(e);}finally{setBusy(false);setTimeout(()=>$('progress').hidden=true,3000);}}
+async function saveAll(){if(busy||!photos.length)return;setBusy(true);let list=[];const count=photos.length;progress('Đang chuẩn bị ảnh...',0,count);try{for(let i=0;i<count;i++){const p=photos[i];progress('Đang xuất '+p.file.name,i,count);const blob=await renderBlob(p);const bytes=await blob.arrayBuffer();list.push({name:(i+1)+'_'+outputName(p,blob),bytes});progress('Đã xử lý',i+1,count);await new Promise(r=>setTimeout(r,0));}const zip=zipStored(list);await download(zip,'HNLMark_'+new Date().toISOString().slice(0,10)+'_'+count+'_anh.zip');showToast('Đã lưu '+count+' ảnh trong ZIP ở Tải xuống/HNLMark (APK) hoặc Tải xuống (Web).');}catch(e){showError(e);}finally{list=[];setBusy(false);setTimeout(()=>$('progress').hidden=true,3500);}}
 
 /* Camera mode: in-place live preview rendered on the SAME canvas as exported photos.
    Camera frames are held in memory; no upload or network camera service is used. */
@@ -463,6 +685,7 @@ function cameraUi(){
   updateImageEditor();
 }
 function stopCamera(showPrevious=true,preserveReviewLayout=false){
+  if(cameraControls){cameraControls.destroy();cameraControls=null;}
   if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
   ++cameraRequest;
   cameraActive=false;
@@ -551,38 +774,50 @@ async function requestCameraSensorPermission(){
 }
 function cameraGeometry(video){
   const rawW=video.videoWidth,rawH=video.videoHeight;
-  const physicalSensor=cameraSensorPortrait!==null;
-  const expectedPortrait=physicalSensor?cameraSensorPortrait:devicePortrait();
+  // The portrait-locked APK receives a reliable physical angle from Android.
+  // DeviceMotion can be unavailable in WebView; use native pose when present.
+  const nativeAngle=window.HNLAndroidApp?.getDeviceAngle?.();
+  const nativePose=Number.isFinite(nativeAngle)&&[0,90,180,270].includes(nativeAngle);
+  const physicalSensor=nativePose||cameraSensorPortrait!==null;
+  const expectedPortrait=nativePose?nativeAngle%180===0:(physicalSensor?cameraSensorPortrait:devicePortrait());
+  const side=nativePose?(nativeAngle===270?-1:1):cameraSensorSide;
   let baseRotation=0;
   // The video frame might be landscape-native while the phone is portrait,
   // or vice versa. Rotate source pixels, not only the canvas with CSS.
   if((rawH>=rawW)!==expectedPortrait){
-    if(physicalSensor&&!expectedPortrait)baseRotation=cameraSensorSide===1?90:-90;
+    if(physicalSensor&&!expectedPortrait)baseRotation=side===1?90:-90;
     else {
       const angle=Number(screen.orientation?.angle);
       const secondary=screen.orientation?.type?.endsWith('secondary')||false;
       baseRotation=expectedPortrait?(secondary||angle===180?-90:90):(secondary||angle===270?90:-90);
     }
   }
+  if(nativePose&&nativeAngle===180)baseRotation=(baseRotation+180)%360;
   const rotation=((baseRotation+cameraManualRotation)%360+360)%360;
   const turns90=rotation===90||rotation===270;
   const width=turns90?rawH:rawW,height=turns90?rawW:rawH;
   return {rawW,rawH,portrait:height>=width,rotation,width,height,
-    sensor:physicalSensor,manual:cameraManualRotation!==0};
+    sensor:physicalSensor,nativeAngle:nativePose?nativeAngle:null,manual:cameraManualRotation!==0};
 }
 function paintCameraFrame(g,video,frame,W,H){
-  g.save();
+  const digitalZoom=Math.max(1,cameraControls?.getDigitalZoom?.()||1);
+  function drawSource(dw,dh){
+    if(digitalZoom<=1)return g.drawImage(video,0,0,dw,dh);
+    const sw=video.videoWidth/digitalZoom,sh=video.videoHeight/digitalZoom;
+    return g.drawImage(video,(video.videoWidth-sw)/2,(video.videoHeight-sh)/2,sw,sh,0,0,dw,dh);
+  }
+  g.save();g.filter=cameraControls?.getFilter()||'none';
   if(frame.rotation===90){
-    g.translate(W,0);g.rotate(Math.PI/2);g.drawImage(video,0,0,H,W);
+    g.translate(W,0);g.rotate(Math.PI/2);drawSource(H,W);
   }else if(frame.rotation===270){
-    g.translate(0,H);g.rotate(-Math.PI/2);g.drawImage(video,0,0,H,W);
+    g.translate(0,H);g.rotate(-Math.PI/2);drawSource(H,W);
   }else if(frame.rotation===180){
-    g.translate(W,H);g.rotate(Math.PI);g.drawImage(video,0,0,W,H);
-  }else g.drawImage(video,0,0,W,H);
+    g.translate(W,H);g.rotate(Math.PI);drawSource(W,H);
+  }else drawSource(W,H);
   g.restore();
 }
 function cameraOrientationUi(frame){
-  const key=[frame.portrait?'doc':'ngang',frame.rotation,frame.sensor,frame.manual,cameraSensorSource,frame.sensor?cameraSensorSide:0,devicePortrait()].join(':');
+  const key=[frame.portrait?'doc':'ngang',frame.rotation,frame.sensor,frame.manual,cameraSensorSource,cameraSensorPortrait,frame.sensor?cameraSensorSide:0,devicePortrait()].join(':');
   if(cameraOrientationKey===key)return;
   cameraOrientationKey=key;
   const el=$('cameraOrientation');
@@ -595,18 +830,22 @@ function cameraOrientationUi(frame){
   // When the browser stays portrait while the physical handset is landscape,
   // display the *whole live camera* turned in the opposite direction. This
   // includes the canvas, the stamp and every control. Saved pixels are unchanged.
-  const turn=frame.sensor&&cameraSensorPortrait!==null&&cameraSensorPortrait!==screenPortrait
+  const turn=window.HNLAndroidApp?'':frame.sensor&&cameraSensorPortrait!==null&&cameraSensorPortrait!==screenPortrait
     ?(cameraSensorSide>=0?'left':'right') : '';
   cameraViewTurn=turn;
   $('cameraArea').classList.toggle('hnl-turn-left',turn==='left');
   $('cameraArea').classList.toggle('hnl-turn-right',turn==='right');
+  // The actual handset can be horizontal while CSS remains portrait (rotation lock).
+  // Keep the actions in a compact dock on the user's right in BOTH cases.
+  const dockRight=!window.HNLAndroidApp&&(cameraSensorPortrait===false||(cameraSensorPortrait===null&&!screenPortrait));
+  $('cameraArea').classList.toggle('hnl-landscape-dock',dockRight);
   const btn=$('rotateCameraOverlay');
   if(btn){btn.title='Xoay cả hình camera và dấu HNLMark 90° (đang bù '+cameraManualRotation+'°)';btn.setAttribute('aria-label',btn.title);}
 }
 function clearOrientationUi(){
   cameraOrientationKey='';
   stage.classList.remove('camera-portrait','camera-landscape');
-  $('cameraArea').classList.remove('portrait','landscape','hnl-turn-left','hnl-turn-right');
+  $('cameraArea').classList.remove('portrait','landscape','hnl-turn-left','hnl-turn-right','hnl-landscape-dock');
   cameraViewTurn='';
 }
 function rotateCameraAndStamp(){
@@ -660,6 +899,7 @@ async function startCamera(){
     if(request!==cameraRequest){stopCamera();return;}
     cameraSystemFallback(false);
     cameraActive=true;cameraCapturing=false;cameraLastDraw=0;
+    if(window.HNLCameraControls){cameraControls=window.HNLCameraControls.create({stage,dock:$('cameraControls'),track:()=>cameraStream?.getVideoTracks()[0],active:()=>cameraActive,rotation:()=>cameraGeometry($('cameraVideo')).rotation});}
     cameraManualRotation=0;cameraSensorPortrait=null;cameraSensorSide=0;cameraSensorAt=0;cameraSensorCandidate='';cameraSensorSamples=0;cameraSensorCandidateAt=0;cameraSensorSource='';cameraMotionAt=0;cameraOrientationSide=0;cameraOrientationAt=0;
     cameraPreviewCode=createPhotoCode();burstCount=0;
     clearOrientationUi();
@@ -703,12 +943,14 @@ async function takeCameraPhoto(){
     const file=new File([blob],name,{type:'image/jpeg',lastModified:capturedAt.getTime()});
     if(burstEnabled){
       await appendFiles([file],{serialCode:code,origin:'camera',silent:true,keepCamera:true});
+      autoSaveCameraPhoto(photos.find(p=>p.serialCode===code));
       burstCount++;cameraPreviewCode=createPhotoCode();cameraLastDraw=0;
       cameraUi();
       showToast('✓ Đã chụp '+burstCount+' ảnh · Tiếp tục chụp hoặc mở Thư viện.');
     }else{
       stopCamera(false,true);
       await appendFiles([file],{serialCode:code,origin:'camera',silent:true});
+      autoSaveCameraPhoto(photos.find(p=>p.serialCode===code));
       cameraShotUniqueId=previewIndex()?.uniqueId||null;
       cameraShotPending=!!cameraShotUniqueId;
       cameraUi();
@@ -737,19 +979,30 @@ function readStoredProjectZip(buffer){
  return files;
 }
 async function saveProject(){
- if(busy||!photos.length){showToast('Chưa có ảnh để sao lưu.');return;}
+ if(busy)return;
  setBusy(true);try{
-  const project={app:'HNLMark',version:2,createdAt:new Date().toISOString(),templateConfig:{...config},photos:[]},items=[];
-  for(let i=0;i<photos.length;i++){
-   const p=photos[i],fn='originals/'+(i+1)+'_'+p.serialCode+'.bin';
-   project.photos.push({id:p.serialCode,name:p.file.name,mime:p.file.type,modifiedAt:p.modifiedDate.getTime(),exifISO:p.exifDate?.toISOString()||null,override:p.override,customDate:p.customDate,edits:structuredClone(p.edits),stampConfig:configForPhoto(p),origin:p.origin||'import',file:fn});
-   items.push({name:fn,bytes:await p.file.arrayBuffer()});
+  // Back up all local originals, including photos not currently open.
+  // In-memory photos override older autosaved copies of the same ID.
+  let stored=[],partial=false;
+  try{stored=await libraryList();}catch(_){partial=true;}
+  const combined=new Map();
+  for(const row of stored){if(row?.id&&row.blob)combined.set(row.id,row);}
+  for(const p of photos)combined.set(p.serialCode,photoRecord(p));
+  if(!combined.size){showToast('Chưa có ảnh để sao lưu.');return;}
+  const project={app:'HNLMark',version:2,createdAt:new Date().toISOString(),templateConfig:{...config},backupScope:partial?'open-photos-only':'entire-local-library',photos:[]},items=[];
+  let index=0;
+  for(const row of combined.values()){
+   const fn='originals/'+(++index)+'_'+row.id+'.bin';
+   project.photos.push({id:row.id,name:row.name,mime:row.blob.type||'image/jpeg',modifiedAt:row.modifiedAt,exifISO:row.exifISO||null,override:!!row.override,customDate:row.customDate,edits:structuredClone(row.edits),stampConfig:migrateStampLabels(row.stampConfig||{...config}),origin:row.origin||'import',file:fn});
+   items.push({name:fn,bytes:await row.blob.arrayBuffer()});
   }
-  if(logoFile){project.logo='assets/custom-logo.bin';items.push({name:project.logo,bytes:await logoFile.arrayBuffer()});}
+  // Include logo stored in IndexedDB even before its UI preview has loaded.
+  const backupLogo=logoFile||await logoAsset('get').catch(()=>null);
+  if(backupLogo){project.logo='assets/custom-logo.bin';items.push({name:project.logo,bytes:await backupLogo.arrayBuffer()});}
   items.unshift({name:'project.json',bytes:new TextEncoder().encode(JSON.stringify(project,null,2)).buffer});
-  const file=zipStored(items);
-  download(file,'HNLMark-du-an-'+new Date().toISOString().slice(0,10)+'.hnlmark.zip');
-  showToast('Đã tạo tệp dự án gồm ảnh GỐC + ngày giờ + tùy chỉnh. Cất giữ file ZIP này để sửa lại sau.');
+  const file=zipStored(items),suffix=partial?'-CHI-ANH-DANG-MO':'';
+  await download(file,'HNLMark-du-an-'+new Date().toISOString().slice(0,10)+suffix+'.hnlmark.zip');
+  showToast(partial?'Đã sao lưu '+index+' ảnh ĐANG MỞ. Không đọc được thư viện; bản sao lưu chưa đầy đủ.':'Đã sao lưu '+index+' ảnh gốc trong thư viện và danh sách đang mở, kèm ngày giờ và tùy chỉnh.');
  }catch(e){showError(e);}finally{setBusy(false);}
 }
 async function importProject(file){
@@ -809,7 +1062,11 @@ window.addEventListener('devicemotion',handleCameraMotion);
 $('rotateCameraOverlay').addEventListener('click',rotateCameraAndStamp);
 const orientationMedia=window.matchMedia?.('(orientation: portrait)');
 if(orientationMedia?.addEventListener)orientationMedia.addEventListener('change',refreshCameraOrientation);
-$('openCamera').addEventListener('click',()=>{requestCameraSensorPermission().catch(()=>{});startCamera().catch(showError);});
+$('openCamera').addEventListener('click',()=>{
+ requestCameraSensorPermission().catch(()=>{});
+ if(window.HNLVideoStudio?.isVideoSelected?.())window.HNLVideoStudio.openCamera().catch(showError);
+ else startCamera().catch(showError);
+});
 $('closeCamera').addEventListener('click',()=>stopCamera());
 $('flipCamera').addEventListener('click',()=>{cameraFacing=cameraFacing==='environment'?'user':'environment';stopCamera(false);startCamera().catch(showError);});
 $('shutterButton').addEventListener('click',()=>takeCameraPhoto().catch(showError));
@@ -818,12 +1075,43 @@ $('acceptPhoto').addEventListener('click',acceptCameraShot);
 $('cameraFallback').addEventListener('change',e=>{const files=e.target.files;if(files?.length){if(cameraActive)stopCamera(false);if(cameraShotPending)acceptCameraShot();appendFiles(files).catch(showError);}e.target.value='';});
 window.addEventListener('pagehide',()=>stopCamera(false));
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&cameraActive)stopCamera();});
-$('photoInput').addEventListener('change',e=>{appendFiles(e.target.files).catch(showError);e.target.value='';});const dz=$('dropzone');dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragging');});dz.addEventListener('dragleave',()=>dz.classList.remove('dragging'));dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragging');appendFiles(e.dataTransfer.files).catch(showError);});
+async function routeMediaFiles(input){
+  const files=Array.from(input||[]);
+  const images=files.filter(f=>f.type.startsWith('image/')||/\.(jpe?g|png|webp|heic|heif|avif|gif)$/i.test(f.name));
+  const videos=files.filter(f=>f.type.startsWith('video/')||/\.(mp4|mov|webm|m4v|ogv)$/i.test(f.name));
+  if(images.length)await appendFiles(images);
+  if(videos.length){
+   if(!window.HNLVideoStudio?.importVideo)throw Error('Bộ xử lý video chưa tải xong. Tải lại trang rồi thử.');
+   await window.HNLVideoStudio.importVideo(videos[0]);
+   if(videos.length>1)showToast('Đã mở video đầu tiên; hãy xử lý từng video lần lượt ('+videos.length+' video đã chọn).');
+  }
+  if(!images.length&&!videos.length&&files.length)showToast('Tệp không phải ảnh hoặc video được hỗ trợ.');
+ }
+ // Native Android Photo Picker returns File objects through the same audited media route.
+ // Avoid simulated input clicks from the native tab (no trusted WebView user activation).
+ window.HNLMediaImport={acceptFiles:(files)=>routeMediaFiles(files)};
+ $('photoInput').addEventListener('change',e=>{const files=Array.from(e.target.files||[]);e.target.value='';routeMediaFiles(files).catch(showError);});
+ const dz=$('dropzone');dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragging');});dz.addEventListener('dragleave',()=>dz.classList.remove('dragging'));dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragging');routeMediaFiles(e.dataTransfer.files).catch(showError);});
 const inputs=['timeMode','batchDate','dateFormat','timeFormat','brandText','projectText','addressText','noteText','symbolType','logoMode','footerBrand','footerCaption','serialMode','serialText','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','outputSize','outputFormat','quality','showDate','showTime','showBackground','showShadow','showFooter','showSerial'];inputs.forEach(id=>{const el=$(id);el.addEventListener(['range','text','color','textarea'].includes(el.type)||el.tagName==='TEXTAREA'?'input':'change',()=>{changeConfig(id,el.type==='checkbox'?el.checked:el.value);if(id==='logoMode'&&config.logoMode!=='floating'&&config.moveTarget==='logo'){config.moveTarget='stamp';updateTarget();}});});
 $('overrideCheck').addEventListener('change',e=>{const p=previewIndex();if(!p)return;p.override=e.target.checked;if(!p.customDate)p.customDate=toLocalInput(photoDate(p));updateSelectionUI();scheduleSavePhoto(p);renderPreview();});$('individualDate').addEventListener('input',e=>{const p=previewIndex();if(!p)return;p.customDate=e.target.value;updateSelectionUI();scheduleSavePhoto(p);renderPreview();});
-document.querySelectorAll('.preset').forEach(el=>el.addEventListener('click',()=>{config.preset=el.dataset.preset;updatePreset();store();stashPhotoSettings();renderPreview();}));document.querySelectorAll('#moveTarget button').forEach(el=>el.addEventListener('click',()=>{config.moveTarget=el.dataset.target;if(config.moveTarget==='logo'&&config.logoMode!=='floating'){$('logoMode').value='floating';config.logoMode='floating';}updateTarget();store();stashPhotoSettings();renderPreview();}));document.querySelectorAll('#positionGrid button').forEach(el=>el.addEventListener('click',()=>{const prefix=config.moveTarget==='logo'?'logo':config.moveTarget==='footer'?'footer':config.moveTarget==='serial'?'serial':'pos';config[prefix+'X']=+el.dataset.x;config[prefix+'Y']=+el.dataset.y;updatePositionGrid();store();stashPhotoSettings();renderPreview();}));
+document.querySelectorAll('.preset').forEach(el=>el.addEventListener('click',()=>{const previous=config.preset;config.preset=el.dataset.preset;if(INDEPENDENT_PRESETS.has(config.preset)&&config.footerBrand==='Timemark'){config.footerBrand='HNL Mark';$('footerBrand').value=config.footerBrand;}else if(config.preset==='timemark'&&INDEPENDENT_PRESETS.has(previous)&&config.footerBrand==='HNL Mark'){config.footerBrand='Timemark';$('footerBrand').value=config.footerBrand;}updatePreset();store();stashPhotoSettings();renderPreview();}));document.querySelectorAll('#moveTarget button').forEach(el=>el.addEventListener('click',()=>{config.moveTarget=el.dataset.target;if(config.moveTarget==='logo'&&config.logoMode!=='floating'){$('logoMode').value='floating';config.logoMode='floating';}updateTarget();store();stashPhotoSettings();renderPreview();}));document.querySelectorAll('#positionGrid button').forEach(el=>el.addEventListener('click',()=>{const prefix=config.moveTarget==='logo'?'logo':config.moveTarget==='footer'?'footer':config.moveTarget==='serial'?'serial':'pos';config[prefix+'X']=+el.dataset.x;config[prefix+'Y']=+el.dataset.y;updatePositionGrid();store();stashPhotoSettings();renderPreview();}));
 // Image editing tools operate on the original image beneath the HNLMark stamp.
 $('cropTool').addEventListener('click',()=>setEditTool(editTool==='crop'?'move':'crop'));
+$('cropRatio').addEventListener('change',e=>{
+ config.cropRatio=e.target.value;store();
+ if(previewIndex()&&!cameraActive){setEditTool('crop');}
+});
+$('cropCenter').addEventListener('click',()=>{
+ if(!previewIndex()||cameraActive)return;
+ setEditTool('crop');
+ editSelection=window.HNLCropRatio.center(config.cropRatio,canvas.width,canvas.height);
+ drawEditSelection();updateImageEditor();
+});
+document.querySelectorAll('.image-quality-presets button').forEach(btn=>btn.addEventListener('click',()=>{
+ const quality=Number(btn.dataset.quality);
+ $('quality').value=quality;changeConfig('quality',quality);
+}));
+
 $('repairTool').addEventListener('click',()=>setEditTool(editTool==='repair'?'move':'repair'));
 $('cancelEditTool').addEventListener('click',()=>setEditTool('move'));
 function commitPhotoOperation(op){const p=previewIndex();if(!p||cameraActive)return;photoEdits(p).operations.push(op);scheduleSavePhoto(p);editSelection=null;setEditTool('move');updateImageEditor();}
@@ -838,13 +1126,14 @@ $('resetFilters').addEventListener('click',()=>{const p=previewIndex();if(!p)ret
 $('applyFiltersAll').addEventListener('click',()=>{const p=previewIndex();if(!p)return;const filters={...photoEdits(p).filters};for(const photo of photos){photoEdits(photo).filters={...filters};scheduleSavePhoto(photo);}showToast('Đã dùng cài đặt màu cho '+photos.length+' ảnh.');renderPreview();});
 function selectPosition(e){const r=canvas.getBoundingClientRect();return{x:clamp((e.clientX-r.left)/r.width,0,1),y:clamp((e.clientY-r.top)/r.height,0,1)};}
 let dragging=false;function move(e){
- if(editDragging){const pos=selectPosition(e);editSelection.x2=pos.x;editSelection.y2=pos.y;drawEditSelection();updateImageEditor();return;}
+ if(window.HNLPreviewZoom?.isGesturing?.())return;
+ if(editDragging){const pos=selectPosition(e),end=editTool==='crop'?window.HNLCropRatio.fromDrag({x:editSelection.x1,y:editSelection.y1},pos,config.cropRatio,canvas.width,canvas.height):{x2:pos.x,y2:pos.y};editSelection.x2=end.x2;editSelection.y2=end.y2;drawEditSelection();updateImageEditor();return;}
  if(!dragging)return;const r=canvas.getBoundingClientRect();const x=clamp((e.clientX-r.left)/r.width,.02,.98),y=clamp((e.clientY-r.top)/r.height,.02,.98);const prefix=config.moveTarget==='logo'?'logo':config.moveTarget==='footer'?'footer':config.moveTarget==='serial'?'serial':'pos';config[prefix+'X']=x;config[prefix+'Y']=y;updatePositionGrid();renderPreview();
 }
 canvas.addEventListener('pointerdown',e=>{
  if(cameraActive||!previewIndex())return;e.preventDefault();canvas.setPointerCapture(e.pointerId);
  if(editTool!=='move'){const pos=selectPosition(e);editDragging=true;editSelection={x1:pos.x,y1:pos.y,x2:pos.x,y2:pos.y};drawEditSelection();return;}
- dragging=true;move(e);
+ dragging=true; // Dragging a stamp begins on movement, not on a touch that could become a pinch.
 });
 canvas.addEventListener('pointermove',move);
 const end=()=>{dragging=false;if(editDragging){editDragging=false;updateImageEditor();}store();stashPhotoSettings();};canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);
@@ -852,5 +1141,19 @@ $('logoInput').addEventListener('change',async e=>{const file=e.target.files&&e.
 $('clearLogo').addEventListener('click',()=>{if(logoImg&&logoImg.close)logoImg.close();logoImg=null;if(logoUrl)URL.revokeObjectURL(logoUrl);logoUrl=null;logoFile=null;logoAsset('delete').catch(showError);$('logoThumb').textContent='HNL';renderPreview();});
 $('resetStyle').addEventListener('click',()=>{const names=['fontSize','fontFamily','fontWeight','timeScale','dateScale','addressScale','footerScale','serialScale','dateColor','addressColor','footerColor','serialColor','accentColor','textColor','bgOpacity','logoScale','showBackground','showShadow','posX','posY','logoX','logoY','footerX','footerY','serialX','serialY'];names.forEach(key=>config[key]=defaultConfig[key]);fillForm();store();renderPreview();showToast('Đã đặt lại kiểu dáng và vị trí.');});$('previousPhoto').addEventListener('click',()=>{if(selected>0){selectPhoto(selected-1);}});$('nextPhoto').addEventListener('click',()=>{if(selected<photos.length-1){selectPhoto(selected+1);}});$('saveOne').addEventListener('click',saveOne);$('saveAll').addEventListener('click',saveAll);
 let installEvent=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvent=e;$('installBtn').hidden=false;});$('installBtn').addEventListener('click',async()=>{if(!installEvent)return;installEvent.prompt();await installEvent.userChoice;installEvent=null;$('installBtn').hidden=true;});if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));renderPreview();}
+// Shared overlay renderer: Video reuses photo stamp type, logo and layout.
+window.HNLVideoBridge={
+ drawStamp:(g,w,h,date,serial,scale=1)=>{
+  const previous=config.fontSize;
+  try{config.fontSize=Math.max(.4,Number(previous)*Math.min(1.4,Math.max(.3,scale||1)));drawOverlay(g,w,h,{serialCode:serial,exifDate:date,modifiedDate:date});}
+  finally{config.fontSize=previous;}
+},
+ photoCameraActive:()=>cameraActive
+};
+window.HNLPhotoBridge={shareCurrent:async()=>{
+  if(!window.HNLAndroidApp?.shareBlob)throw Error('Tính năng chỉ có trên bản Android');
+  const p=previewIndex();if(!p)throw Error('Chưa chọn ảnh để chia sẻ');
+  const blob=await renderBlob(p);return window.HNLAndroidApp.shareBlob(blob,outputName(p,blob));
+}};
 bind();
 })();

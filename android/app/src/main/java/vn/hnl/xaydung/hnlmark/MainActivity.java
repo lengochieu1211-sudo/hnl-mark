@@ -1,0 +1,1064 @@
+package vn.hnl.xaydung.hnlmark;
+
+import android.Manifest;
+import android.app.Activity;
+import android.content.ContentValues;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.hardware.display.DisplayManager;
+import android.graphics.Color;
+import android.location.Address;
+import android.location.Geocoder;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Build;
+import android.content.ClipData;
+import android.database.Cursor;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.provider.DocumentsContract;
+import android.provider.OpenableColumns;
+import android.content.ContentResolver;
+import android.webkit.MimeTypeMap;
+import android.util.Base64;
+import android.view.Gravity;
+import android.view.OrientationEventListener;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
+import android.webkit.GeolocationPermissions;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.ValueCallback;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import androidx.webkit.WebViewAssetLoader;
+import androidx.core.content.FileProvider;
+
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ * Offline Android-specific shell around the exact HNLMark DEV web core.
+ * No remote host is allowed to load into the privileged WebView.
+ */
+public final class MainActivity extends Activity {
+    private static final String HOST = "appassets.androidplatform.net";
+    private static final String ENTRY = "https://" + HOST + "/assets/www/studio/index.html";
+    private static final int REQ_FILES = 400;
+    private static final int REQ_NATIVE_GALLERY = 402;
+    private static final int REQ_MEDIA_PERMISSIONS = 401;
+    private static final int REQ_SAVE_FOLDER = 403;
+    private static final int REQ_GEOLOCATION = 404;
+    private static final String SAVE_FOLDER_PREF = "hnlmark_selected_save_tree";
+    private static final int NAVY = Color.rgb(19, 38, 58);
+    private static final int GOLD = Color.rgb(255, 210, 83);
+
+    private FrameLayout root;
+    private LinearLayout chromeTabs;
+    private WebView web;
+    private View fullscreenView;
+    private WebChromeClient.CustomViewCallback fullscreenCallback;
+    private ValueCallback<Uri[]> fileCallback;
+    // Camera fallback is a real ACTION_IMAGE_CAPTURE request, not a gallery chooser.
+    // Keep the temp capture file after returning its content URI: WebView loads it asynchronously.
+    private Uri pendingScanCaptureUri;
+    private File pendingScanCaptureFile;
+    private PermissionRequest pendingMediaRequest;
+    private GeolocationPermissions.Callback pendingGeoCallback;
+    private String pendingGeoOrigin;
+    private String[] pendingResources;
+    private boolean cameraImmersive;
+    private OrientationEventListener cameraOrientationListener;
+    private DisplayManager displayManager;
+    private DisplayManager.DisplayListener displayRotationListener;
+    private int lastPhysicalAngle = 0;
+    private int lastPublishedDisplayAngle = -1;
+    private final Map<String, SaveSession> sessions = new ConcurrentHashMap<>();
+    private final Map<String, ShareSession> shares = new ConcurrentHashMap<>();
+    private final Map<String, PickedContent> pickedContents = new ConcurrentHashMap<>();
+    // Pending batch IDs are unguessable. Only an explicit JS persistence result
+    // releases the content:// URI allowlist; never infer success from evaluateJavascript.
+    private final Map<String, List<String>> pendingPickedBatches = new ConcurrentHashMap<>();
+    private static final class PickedContent {
+        final Uri uri;
+        final String mime;
+        final long until;
+        PickedContent(Uri uri,String mime){
+            this.uri=uri;this.mime=mime;this.until=System.currentTimeMillis()+20L*60*1000;
+        }
+    }
+    private static final class ShareSession {
+        final File file;
+        final String mime;
+        final OutputStream stream;
+        ShareSession(File file, String mime, OutputStream stream) {
+            this.file=file;this.mime=mime;this.stream=stream;
+        }
+    }
+    private int screenAngle() {
+        return getWindowManager().getDefaultDisplay().getRotation()*90;
+    }
+    private void tidyShares(){
+        File dir=new File(getCacheDir(),"share");
+        File[] files=dir.listFiles();
+        if(files==null)return;
+        long expiry=System.currentTimeMillis()-48L*3600*1000;
+        for(File file:files){
+            if(file.isFile() && file.lastModified()<expiry)file.delete();
+        }
+    }
+
+    private static final class SaveSession {
+        final Uri uri;
+        final OutputStream stream;
+        final String destination;
+        final boolean mediaStore;
+        SaveSession(Uri uri, OutputStream stream, String destination, boolean mediaStore) {
+            this.uri = uri;
+            this.stream = stream;
+            this.destination = destination;
+            this.mediaStore = mediaStore;
+        }
+    }
+
+    private int dp(float v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    private TextView text(String label, int sp, int color, boolean bold) {
+        TextView t = new TextView(this);
+        t.setText(label);
+        t.setTextColor(color);
+        t.setTextSize(sp);
+        t.setGravity(Gravity.CENTER_VERTICAL);
+        if (bold) t.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        return t;
+    }
+
+    @Override public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        // No native dark title bar: system status remains visible and blends with the page.
+        getWindow().setStatusBarColor(Color.rgb(9, 17, 30));
+        getWindow().getDecorView().setSystemUiVisibility(0);
+        getWindow().setNavigationBarColor(Color.BLACK);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+
+        root = new FrameLayout(this);
+        LinearLayout app = new LinearLayout(this);
+        app.setOrientation(LinearLayout.VERTICAL);
+        app.setBackgroundColor(Color.rgb(237, 242, 248));
+        root.addView(app, new FrameLayout.LayoutParams(-1, -1));
+
+        // Android bottom tabs are outside the scrolling WebView and stay fixed.
+
+        web = new WebView(this);
+        app.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        chromeTabs = new LinearLayout(this);
+        chromeTabs.setOrientation(LinearLayout.HORIZONTAL);
+        chromeTabs.setBackgroundColor(NAVY);
+        chromeTabs.setPadding(dp(6), dp(3), dp(6), dp(3));
+        app.addView(chromeTabs, new LinearLayout.LayoutParams(-1, dp(61)));
+        addTab("Chụp", android.R.drawable.ic_menu_camera, "capture");
+        addTab("Thư viện máy", android.R.drawable.ic_menu_gallery, "library");
+        addTab("Cài dấu", android.R.drawable.ic_menu_edit, "stamp");
+        addTab("Xuất", android.R.drawable.ic_menu_save, "export");
+        // React AI Studio has its own fixed navigation. Avoid duplicate bottom bars.
+        chromeTabs.setVisibility(View.GONE);
+
+        setContentView(root);
+        tidyShares();
+        initializeWeb();
+        setupCameraOrientationListener();
+    }
+
+    private void addTab(String label, int iconId, String command) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setGravity(Gravity.CENTER);
+        item.setClickable(true);
+        item.setFocusable(true);
+        item.setContentDescription(label);
+        item.setPadding(0, dp(3), 0, dp(2));
+        ImageView image = new ImageView(this);
+        image.setImageResource(iconId);
+        if (image.getDrawable() != null) image.getDrawable().mutate().setTint(GOLD);
+        item.addView(image, new LinearLayout.LayoutParams(dp(23), dp(23)));
+        TextView name = text(label, 10, Color.WHITE, false);
+        name.setGravity(Gravity.CENTER);
+        item.addView(name, new LinearLayout.LayoutParams(-1, dp(18)));
+        chromeTabs.addView(item, new LinearLayout.LayoutParams(0, -1, 1f));
+        item.setOnClickListener(v -> {
+            if ("library".equals(command)) {
+                openDeviceGallery();
+                return;
+            }
+            if (web != null) {
+                web.evaluateJavascript(
+                    "window.HNLAndroidApp && window.HNLAndroidApp.chooseTab(" +
+                    org.json.JSONObject.quote(command) + ")", null);
+            }
+        });
+    }
+
+    private boolean trusted(Uri uri) {
+        return uri != null && "https".equalsIgnoreCase(uri.getScheme())
+            && HOST.equalsIgnoreCase(uri.getHost());
+    }
+
+    /** Send a coherent physical+display pair; retain it for React mounting later. */
+    private void publishOrientation(boolean resize){
+        if(web==null)return;
+        web.post(()->{
+            if(web==null)return;
+            final int displayAngle=screenAngle();
+            lastPublishedDisplayAngle=displayAngle;
+            final String state="{angle:"+lastPhysicalAngle+",displayAngle:"+displayAngle+"}";
+            final String script="window.__hnlNativeOrientation="+state+";"+
+                "window.HNLAndroidApp?.setDeviceOrientation("+lastPhysicalAngle+","+displayAngle+");"+
+                (resize?"window.dispatchEvent(new Event('resize'));":"");
+            web.evaluateJavascript(script,null);
+        });
+    }
+
+    private void setupCameraOrientationListener(){
+        cameraOrientationListener = new OrientationEventListener(this){
+            @Override public void onOrientationChanged(int value){
+                if(value == ORIENTATION_UNKNOWN)return;
+                // 13-degree hysteresis around each quadrant avoids jitter near 45/135.
+                final int snapped=((value+45)/90*90)%360;
+                if(snapped!=lastPhysicalAngle){
+                    int diff=Math.abs(value-lastPhysicalAngle);
+                    diff=Math.min(diff,360-diff);
+                    if(diff<58)return;
+                }
+                if(snapped==lastPhysicalAngle&&screenAngle()==lastPublishedDisplayAngle)return;
+                lastPhysicalAngle=snapped;
+                publishOrientation(false);
+            }
+        };
+        if(cameraOrientationListener.canDetectOrientation())cameraOrientationListener.enable();
+        // 180-degree rotations do not reliably fire onConfigurationChanged.
+        // Listen to the display independently as Android camera apps do.
+        displayManager=(DisplayManager)getSystemService(DISPLAY_SERVICE);
+        if(displayManager!=null){
+            displayRotationListener=new DisplayManager.DisplayListener(){
+                @Override public void onDisplayAdded(int id){}
+                @Override public void onDisplayRemoved(int id){}
+                @Override public void onDisplayChanged(int id){
+                    if(id==getWindowManager().getDefaultDisplay().getDisplayId())
+                        publishOrientation(true);
+                }
+            };
+            displayManager.registerDisplayListener(displayRotationListener,null);
+        }
+    }
+
+    private void initializeWeb() {
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setTextZoom(100);
+        settings.setDomStorageEnabled(true);
+        settings.setGeolocationEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(true);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        web.setBackgroundColor(Color.rgb(237, 242, 248));
+        web.addJavascriptInterface(new NativeBridge(), "HNLAndroidBridge");
+
+        WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
+            .setDomain(HOST)
+            .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+            .addPathHandler("/picked/", path -> {
+                // Private in-memory URI allowlist, populated ONLY after Android
+                // returns a user-selected document/photo. Never proxy arbitrary paths.
+                String token = path==null?"":path.replace("/","");
+                PickedContent entry = pickedContents.get(token);
+                if(entry==null || entry.until<System.currentTimeMillis()
+                    || !"content".equals(entry.uri.getScheme())){
+                    pickedContents.remove(token);
+                    return new WebResourceResponse("text/plain","UTF-8",
+                        new ByteArrayInputStream(new byte[0]));
+                }
+                try{
+                    java.io.InputStream in = getContentResolver().openInputStream(entry.uri);
+                    if(in==null)throw new IOException("Selected media stream is empty");
+                    return new WebResourceResponse(entry.mime,null,in);
+                }catch(Exception err){
+                    return new WebResourceResponse("text/plain","UTF-8",
+                        new ByteArrayInputStream(new byte[0]));
+                }
+            })
+            .build();
+
+        web.setWebViewClient(new WebViewClient() {
+            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest req) {
+                if (trusted(req.getUrl())) return loader.shouldInterceptRequest(req.getUrl());
+                // No external page/resource can access the native JS bridge.
+                return new WebResourceResponse("text/plain", "UTF-8",
+                    new ByteArrayInputStream(new byte[0]));
+            }
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
+                if (trusted(req.getUrl())) return false;
+                Uri uri = req.getUrl();
+                if ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); }
+                    catch (Exception ignored) { toast("Không mở được liên kết."); }
+                }
+                return true;
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                if (trusted(Uri.parse(url))) {
+                    view.evaluateJavascript("document.body.classList.add('hnl-android-apk');",null);
+                    publishOrientation(true);
+                }
+            }
+        });
+
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override public void onPermissionRequest(PermissionRequest request) {
+                runOnUiThread(() -> handleWebPermission(request));
+            }
+            @Override public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                if(!ENTRY.startsWith(origin) && !origin.equals("https://" + HOST)) {
+                    callback.invoke(origin,false,false);return;
+                }
+                if(Build.VERSION.SDK_INT < 23 || checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED ||
+                   checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED) {
+                    callback.invoke(origin,true,false);return;
+                }
+                pendingGeoCallback=callback;pendingGeoOrigin=origin;
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_GEOLOCATION);
+            }
+            @Override public void onPermissionRequestCanceled(PermissionRequest request) {
+                if (pendingMediaRequest == request) {
+                    pendingMediaRequest = null;
+                    pendingResources = null;
+                }
+            }
+            @Override public boolean onShowFileChooser(
+                WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+                if(fileCallback!=null)fileCallback.onReceiveValue(null);
+                fileCallback=callback;
+                boolean isZip=false;
+                for(String type:params.getAcceptTypes()){
+                    if(type!=null&&(type.contains("zip")||type.contains("octet-stream")))isZip=true;
+                }
+                final boolean multiple=params.getMode()==FileChooserParams.MODE_OPEN_MULTIPLE;
+                // Scanner's <input accept="image/*" capture="environment"> must
+                // launch a camera app even when the WebView file chooser is native.
+                boolean imageCapture=params.isCaptureEnabled()&&!isZip;
+                if(imageCapture){
+                    boolean acceptsImage=false;
+                    for(String accepted:params.getAcceptTypes()){
+                        if(accepted!=null&&(accepted.contains("image")||accepted.contains("jpeg")))acceptsImage=true;
+                    }
+                    if(acceptsImage){
+                        if(!startScannerSystemCamera()){
+                            cancelPendingFileChooser(REQ_FILES);
+                            toast("Không mở được Camera hệ thống; hãy dùng Chọn nhiều ảnh.");
+                        }
+                        return true;
+                    }
+                }
+                showMediaSourceDialog(REQ_FILES,multiple,isZip);
+                return true;
+            }
+            @Override public void onShowCustomView(View view, CustomViewCallback callback) {
+                if (fullscreenView != null) { callback.onCustomViewHidden(); return; }
+                fullscreenView = view;
+                fullscreenCallback = callback;
+                root.addView(view, new FrameLayout.LayoutParams(-1, -1));
+                setChromeVisible(false);
+                web.setVisibility(View.GONE);
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            }
+            @Override public void onHideCustomView() { hideFullscreen(); }
+        });
+        web.loadUrl(ENTRY);
+    }
+
+    private void handleWebPermission(PermissionRequest request) {
+        if (!trusted(request.getOrigin())) { request.deny(); return; }
+        if (pendingMediaRequest != null) { request.deny(); return; }
+        List<String> webResources = new ArrayList<>();
+        List<String> androidPermissions = new ArrayList<>();
+        List<String> requested = Arrays.asList(request.getResources());
+        if (requested.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) {
+            webResources.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE);
+            androidPermissions.add(Manifest.permission.CAMERA);
+        }
+        if (requested.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+            webResources.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE);
+            androidPermissions.add(Manifest.permission.RECORD_AUDIO);
+        }
+        if (webResources.isEmpty() || webResources.size() != requested.size()) {
+            request.deny();
+            return;
+        }
+        boolean allGranted = true;
+        for (String p : androidPermissions) {
+            if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) allGranted = false;
+        }
+        if (allGranted) {
+            request.grant(webResources.toArray(new String[0]));
+            return;
+        }
+        pendingMediaRequest = request;
+        pendingResources = webResources.toArray(new String[0]);
+        requestPermissions(androidPermissions.toArray(new String[0]), REQ_MEDIA_PERMISSIONS);
+    }
+
+    @Override public void onRequestPermissionsResult(
+        int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if(requestCode==REQ_GEOLOCATION){
+            boolean allowed=false;
+            for(int grant:results)if(grant==PackageManager.PERMISSION_GRANTED)allowed=true;
+            if(pendingGeoCallback!=null){pendingGeoCallback.invoke(pendingGeoOrigin,allowed,false);pendingGeoCallback=null;pendingGeoOrigin=null;}
+            return;
+        }
+        if (requestCode != REQ_MEDIA_PERMISSIONS || pendingMediaRequest == null) return;
+        boolean allowed = results.length == permissions.length && results.length > 0;
+        for (int result : results) allowed &= result == PackageManager.PERMISSION_GRANTED;
+        PermissionRequest p = pendingMediaRequest;
+        String[] resources = pendingResources;
+        pendingMediaRequest = null;
+        pendingResources = null;
+        if (allowed && resources != null) p.grant(resources);
+        else { p.deny(); toast("Chưa cấp quyền camera/micro."); }
+    }
+
+    private Intent mediaIntent(boolean multiple,boolean zip,boolean usePhotoPicker) {
+        if(usePhotoPicker&&Build.VERSION.SDK_INT>=33&&!zip){
+            // IMPORTANT: For both PHOTO and VIDEO, ACTION_PICK_IMAGES must
+            // NOT request a wildcard MIME type. Some Android ROMs reject it.
+            Intent pick=new Intent(MediaStore.ACTION_PICK_IMAGES);
+            if(multiple){
+                int max=Math.max(2,Math.min(MediaStore.getPickImagesMaxLimit(),20));
+                pick.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX,max);
+            }
+            pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            return pick;
+        }
+        Intent intent=new Intent(zip?Intent.ACTION_OPEN_DOCUMENT:Intent.ACTION_GET_CONTENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,zip
+            ?new String[]{"application/zip","application/octet-stream"}
+            :new String[]{"image/*","video/*"});
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        return intent;
+    }
+
+    private boolean startScannerSystemCamera(){
+        File output=null;
+        try{
+            File folder=new File(getCacheDir(),"scanner_capture");
+            if(!folder.exists()&&!folder.mkdirs())return false;
+            File[] stale=folder.listFiles();
+            if(stale!=null)for(File old:stale){
+                if(old.isFile()&&old.getName().startsWith("scan_")&&
+                   System.currentTimeMillis()-old.lastModified()>24L*60L*60L*1000L)old.delete();
+            }
+            output=File.createTempFile("scan_",".jpg",folder);
+            Uri uri=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",output);
+            Intent camera=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+            camera.putExtra(MediaStore.EXTRA_OUTPUT,uri);
+            camera.setClipData(ClipData.newRawUri("HNL Mark scan",uri));
+            camera.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivityForResult(camera,REQ_FILES);
+            pendingScanCaptureUri=uri;
+            pendingScanCaptureFile=output;
+            return true;
+        }catch(Exception e){
+            if(output!=null)output.delete();
+            pendingScanCaptureUri=null;pendingScanCaptureFile=null;
+            return false;
+        }
+    }
+
+    private boolean startDocumentPicker(int requestCode,boolean multiple,boolean zip){
+        // Separate Files route for OEM galleries which launch but hide media.
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,zip
+            ?new String[]{"application/zip","application/octet-stream"}
+            :new String[]{"image/*","video/*"});
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,multiple);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try{
+            startActivityForResult(intent,requestCode);
+            return true;
+        }catch(Exception ignored){return false;}
+    }
+
+    private boolean startSystemPicker(int requestCode,boolean multiple,boolean zip){
+        // Android 13+ Photo Picker, then GET_CONTENT, then Documents fallback.
+        for(int pass=0;pass<3;pass++){
+            if(pass==0&&(zip||Build.VERSION.SDK_INT<33))continue;
+            if(pass==2)return startDocumentPicker(requestCode,multiple,zip);
+            Intent intent=mediaIntent(multiple,zip,pass==0);
+            try{
+                startActivityForResult(intent,requestCode);
+                return true;
+            }catch(Exception ignored){}
+        }
+        return false;
+    }
+
+    private void cancelPendingFileChooser(int requestCode){
+        if(requestCode==REQ_FILES&&fileCallback!=null){
+            ValueCallback<Uri[]> pending=fileCallback;
+            fileCallback=null;
+            pending.onReceiveValue(null);
+        }
+    }
+
+    private void showMediaSourceDialog(int requestCode,boolean multiple,boolean zip){
+        // Document ZIP import is unchanged and needs no media source dialog.
+        if(zip){
+            if(!startSystemPicker(requestCode,multiple,true)){
+                cancelPendingFileChooser(requestCode);
+                toast("Không mở được trình chọn tệp ZIP.");
+            }
+            return;
+        }
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Chọn ảnh / video")
+            .setItems(new String[]{"Thư viện ảnh / video","Duyệt tệp trong máy"},(dialog,which)->{
+                boolean started=which==0
+                    ?startSystemPicker(requestCode,multiple,false)
+                    :startDocumentPicker(requestCode,multiple,false);
+                if(!started){
+                    cancelPendingFileChooser(requestCode);
+                    toast("Không mở được Thư viện/Files trên thiết bị.");
+                }
+            })
+            .setNegativeButton("Hủy",(dialog,which)->cancelPendingFileChooser(requestCode))
+            .setOnCancelListener(dialog->cancelPendingFileChooser(requestCode))
+            .show();
+    }
+
+    private void openDeviceGallery(){
+        runOnUiThread(()->{
+            if(!pendingPickedBatches.isEmpty()){
+                toast("Đang nhập tệp đã chọn; hãy hoàn tất trước khi chọn lượt mới.");
+                return;
+            }
+            if(fileCallback!=null){
+                toast("Hãy hoàn tất chọn tệp đang mở trước.");
+                return;
+            }
+            showMediaSourceDialog(REQ_NATIVE_GALLERY,true,false);
+        });
+    }
+
+    private List<Uri> getPickedUris(int resultCode,Intent data){
+        List<Uri> list=new ArrayList<>();
+        if(resultCode!=RESULT_OK||data==null)return list;
+        if(data.getClipData()!=null){
+            ClipData clip=data.getClipData();
+            for(int i=0;i<clip.getItemCount()&&i<30;i++){
+                Uri uri=clip.getItemAt(i).getUri();
+                if(uri!=null&&"content".equalsIgnoreCase(uri.getScheme())
+                  &&!list.contains(uri))list.add(uri);
+            }
+        }
+        Uri single=data.getData();
+        if(single!=null&&"content".equalsIgnoreCase(single.getScheme())
+          &&!list.contains(single)&&list.size()<30)list.add(single);
+        return list;
+    }
+
+    private JSONObject describePickedUri(Uri uri){
+        if(!"content".equalsIgnoreCase(uri.getScheme()))return null;
+        String mime=getContentResolver().getType(uri);
+        String filename="HNLMark-media";
+        long length=-1;
+        try(Cursor cursor=getContentResolver().query(uri,
+              new String[]{OpenableColumns.DISPLAY_NAME,OpenableColumns.SIZE},
+              null,null,null)){
+            if(cursor!=null&&cursor.moveToFirst()){
+                int nameCol=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                int sizeCol=cursor.getColumnIndex(OpenableColumns.SIZE);
+                if(nameCol>=0&&!cursor.isNull(nameCol))filename=cursor.getString(nameCol);
+                if(sizeCol>=0&&!cursor.isNull(sizeCol))length=cursor.getLong(sizeCol);
+            }
+        }catch(Exception ignored){}
+        if(filename==null||filename.trim().isEmpty())filename="HNLMark-media";
+        filename=filename.replaceAll("[\\r\\n\\t]","_");
+        if(filename.length()>160)filename=filename.substring(filename.length()-160);
+        if(mime==null||mime.equals("application/octet-stream")){
+            String ext=filename.contains(".")?filename.substring(filename.lastIndexOf('.')+1):"";
+            mime=MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase(java.util.Locale.ROOT));
+        }
+        if(mime==null)mime="application/octet-stream";
+        if(!mime.startsWith("image/")&&!mime.startsWith("video/"))return null;
+        String token=UUID.randomUUID().toString();
+        pickedContents.put(token,new PickedContent(uri,mime));
+        try{
+            JSONObject result=new JSONObject();
+            result.put("url","https://"+HOST+"/picked/"+token);
+            result.put("name",filename);
+            result.put("type",mime);
+            result.put("size",length);
+            return result;
+        }catch(Exception error){pickedContents.remove(token);return null;}
+    }
+
+    @Override protected void onActivityResult(int code,int resultCode,Intent data){
+        super.onActivityResult(code,resultCode,data);
+        if(code==REQ_SAVE_FOLDER){
+            if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null){
+                final Uri tree=data.getData();
+                try{
+                    int flags=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                    getContentResolver().takePersistableUriPermission(tree,flags);
+                    getSharedPreferences("hnlmark_settings",MODE_PRIVATE).edit().putString(SAVE_FOLDER_PREF,tree.toString()).apply();
+                    toast("Đã chọn thư mục lưu. Ảnh và video mới sẽ lưu tại đây.");
+                }catch(Exception e){toast("Không cấp được quyền ghi thư mục. Vị trí lưu cũ được giữ nguyên.");}
+            }
+            if(web!=null)web.post(()->web.evaluateJavascript("window.HNLAndroidApp?.saveDestinationChanged()",null));
+            return;
+        }
+        if(code!=REQ_FILES&&code!=REQ_NATIVE_GALLERY)return;
+        List<Uri> selected=getPickedUris(resultCode,data);
+        if(code==REQ_FILES&&pendingScanCaptureUri!=null){
+            // Camera apps generally return RESULT_OK with *null* Intent data.
+            // Do not return an empty/failed JPEG as a successful scan.
+            if(resultCode==RESULT_OK&&pendingScanCaptureFile!=null&&pendingScanCaptureFile.length()>0){
+                selected.clear();selected.add(pendingScanCaptureUri);
+            }else if(pendingScanCaptureFile!=null){
+                pendingScanCaptureFile.delete();
+            }
+            pendingScanCaptureUri=null;pendingScanCaptureFile=null;
+        }
+        if(code==REQ_FILES){
+            ValueCallback<Uri[]> callback=fileCallback;
+            fileCallback=null;
+            if(callback!=null){
+                callback.onReceiveValue(selected.isEmpty()?null:selected.toArray(new Uri[0]));
+            }
+            return;
+        }
+        if(resultCode!=RESULT_OK)return;
+        JSONArray media=new JSONArray();
+        for(Uri uri:selected){
+            JSONObject item=describePickedUri(uri);
+            if(item!=null)media.put(item);
+        }
+        if(media.length()==0){
+            toast("Không nhận được ảnh/video hợp lệ từ thư viện.");
+            return;
+        }
+        if(web!=null){
+            String batchId=UUID.randomUUID().toString();
+            List<String> tokens=new ArrayList<>();
+            for(int i=0;i<media.length();i++){
+                JSONObject item=media.optJSONObject(i);
+                if(item==null)continue;
+                Uri selectedUri=Uri.parse(item.optString("url",""));
+                if(selectedUri.getLastPathSegment()!=null)tokens.add(selectedUri.getLastPathSegment());
+            }
+            pendingPickedBatches.put(batchId,tokens);
+            String script="window.HNLAndroidApp?.receivePickedMedia("+media.toString()+","+JSONObject.quote(batchId)+")";
+            web.post(()->{
+                web.evaluateJavascript(script,null);
+                // Crashed/reloaded WebView? Never leave a permanent picker lock.
+                web.postDelayed(()->{
+                    List<String> expired=pendingPickedBatches.remove(batchId);
+                    if(expired!=null){
+                        for(String token:expired)pickedContents.remove(token);
+                        toast("Chưa xác nhận được kết quả nhập tệp. Mở Thư viện HNL để kiểm tra rồi chọn lại nếu cần.");
+                    }
+                },4L*60*1000);
+            });
+        }
+    }
+
+    private void setChromeVisible(boolean visible) {
+        chromeTabs.setVisibility(View.GONE);
+    }
+
+    private void hideFullscreen() {
+        if (fullscreenView == null) return;
+        root.removeView(fullscreenView);
+        fullscreenView = null;
+        if (fullscreenCallback != null) fullscreenCallback.onCustomViewHidden();
+        fullscreenCallback = null;
+        web.setVisibility(View.VISIBLE);
+        if (!cameraImmersive) {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            setChromeVisible(true);
+        }
+    }
+
+    @Override public void onConfigurationChanged(Configuration config) {
+        super.onConfigurationChanged(config);
+        publishOrientation(true);
+    }
+
+    @Override public void onBackPressed() {
+        if (fullscreenView != null) { hideFullscreen(); return; }
+        // React Studio handles the Back action. Legacy engine remains available
+        // in an iframe, and retains its own close handlers.
+        if (web == null) { moveTaskToBack(true); return; }
+        web.evaluateJavascript(
+            "(function(){if(window.HNLAndroidApp?.handleBack)" +
+            "return window.HNLAndroidApp.handleBack()===true;" +
+            "if(document.body.classList.contains('hnl-video-live'))" +
+            "{document.getElementById('videoClose')?.click();return true;}" +
+            "if(document.body.classList.contains('hnl-camera-live'))" +
+            "{document.getElementById('closeCamera')?.click();return true;}" +
+            "const modal=document.getElementById('libraryModal');" +
+            "if(modal&&!modal.hidden){document.getElementById('closeLibrary')?.click();return true;}" +
+            "return false;})()",
+            value->{if(!"true".equals(value))moveTaskToBack(true);});
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if(cameraOrientationListener!=null && cameraOrientationListener.canDetectOrientation())cameraOrientationListener.enable();
+        if (web != null) web.onResume();
+        publishOrientation(true);
+    }
+
+    @Override protected void onPause() {
+        if(cameraOrientationListener!=null)cameraOrientationListener.disable();
+        if (web != null) web.onPause();
+        super.onPause();
+    }
+
+    /** Acknowledged only after the React importer has completed its IndexedDB writes.
+     * One bad file must not discard the other successfully imported originals. */
+    private void completePickedBatch(String batchId,int imported,int failed,String firstError){
+        List<String> tokens=pendingPickedBatches.remove(batchId);
+        if(tokens==null)return; // Ignore duplicate/forged/stale acknowledgements.
+        for(String token:tokens)pickedContents.remove(token);
+        String feedback="Đã nhập "+Math.max(0,imported)+"/"+tokens.size()+" ảnh/video vào HNL Mark";
+        if(failed>0){
+            String reason=firstError==null?"":firstError.replaceAll("[\r\n]"," ");
+            if(reason.length()>90)reason=reason.substring(0,90);
+            feedback+="; lỗi "+failed+" tệp"+(reason.isEmpty()?"":": "+reason);
+        }
+        toast(feedback);
+    }
+
+    @Override protected void onDestroy() {
+        if(cameraOrientationListener!=null)cameraOrientationListener.disable();
+        if(displayManager!=null&&displayRotationListener!=null)
+            displayManager.unregisterDisplayListener(displayRotationListener);
+        for (String token : new ArrayList<>(sessions.keySet())) abortSession(token);
+        for (String token : new ArrayList<>(shares.keySet())) abortShareFile(token);
+        pendingPickedBatches.clear();
+        pickedContents.clear();
+        if (web != null) {
+            web.loadUrl("about:blank");
+            web.destroy();
+            web = null;
+        }
+        super.onDestroy();
+    }
+
+    private void toast(String text) {
+        runOnUiThread(() -> Toast.makeText(this, text, Toast.LENGTH_LONG).show());
+    }
+
+    private Uri selectedSaveTree(){
+        String text=getSharedPreferences("hnlmark_settings",MODE_PRIVATE).getString(SAVE_FOLDER_PREF,"");
+        if(text==null||text.isEmpty())return null;
+        try{return Uri.parse(text);}catch(Exception e){return null;}
+    }
+
+    private String getSaveDestinationLabel(){
+        final Uri uri=selectedSaveTree();
+        if(uri==null)return "Bộ nhớ trong · Ảnh Pictures/HNLMark · Video Movies/HNLMark";
+        try{
+            String id=DocumentsContract.getTreeDocumentId(uri);
+            if(id==null)return "Thư mục đã chọn trong Android";
+            boolean internal=id.startsWith("primary:");
+            String path=id.contains(":")?id.substring(id.indexOf(':')+1):id;
+            if(path.length()>100)path=path.substring(0,100);
+            return (internal?"Bộ nhớ trong – ":"Thẻ nhớ/thư mục – ")+(path.isEmpty()?"Thư mục đã chọn":path);
+        }catch(Exception e){return "Thư mục Android đã chọn";}
+    }
+
+    private void openSaveTreePicker(){
+        runOnUiThread(()->{
+            try{
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+                startActivityForResult(intent,REQ_SAVE_FOLDER);
+            }catch(Exception e){toast("Thiết bị không mở được trình chọn thư mục.");}
+        });
+    }
+
+    private String beginSession(String requestedName, String mime) {
+        String name = requestedName == null ? "HNLMark" : requestedName
+            .replaceAll("[\\\\/:*?\"<>|\\r\\n]", "_");
+        if (name.length() > 120) name = name.substring(name.length() - 120);
+        if (name.isEmpty()) name = "HNLMark";
+        // Public Android media collections: visible in device Gallery, unlike WebView IndexedDB.
+        // ZIP/project exports remain in Downloads/HNLMark. Android 10+ does not need broad storage access.
+        String type = mime == null || mime.isEmpty() ? "application/octet-stream" : mime.split(";", 2)[0].trim().toLowerCase(java.util.Locale.ROOT);
+        final Uri folder=selectedSaveTree();
+        if(folder!=null){
+            // Storage Access Framework: Android's system picker grants ONLY this subtree.
+            try{
+                String rootId=DocumentsContract.getTreeDocumentId(folder);
+                Uri parent=DocumentsContract.buildDocumentUriUsingTree(folder,rootId);
+                Uri document=DocumentsContract.createDocument(getContentResolver(),parent,type,name);
+                if(document==null)return ""; // Never pretend to save on another volume.
+                try{
+                    OutputStream out=getContentResolver().openOutputStream(document,"w");
+                    if(out==null)throw new IOException("No writable stream");
+                    String token=UUID.randomUUID().toString();
+                    sessions.put(token,new SaveSession(document,out,"SAF folder",false));
+                    return token;
+                }catch(Exception error){getContentResolver().delete(document,null,null);return "";}
+            }catch(Exception e){
+                toast("Thư mục lưu không còn quyền ghi. Chọn lại thư mục hoặc chuyển về bộ nhớ trong.");
+                return "";
+            }
+        }
+        final Uri destinationCollection;
+        final String relativePath;
+        if (type.startsWith("image/")) {
+            destinationCollection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+            relativePath = Environment.DIRECTORY_PICTURES + "/HNLMark";
+        } else if (type.startsWith("video/")) {
+            destinationCollection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+            relativePath = Environment.DIRECTORY_MOVIES + "/HNLMark";
+        } else {
+            destinationCollection = MediaStore.Downloads.EXTERNAL_CONTENT_URI;
+            relativePath = Environment.DIRECTORY_DOWNLOADS + "/HNLMark";
+        }
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        values.put(MediaStore.MediaColumns.MIME_TYPE, type);
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath);
+        values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+        Uri uri = getContentResolver().insert(destinationCollection, values);
+        if (uri == null) return "";
+        try {
+            OutputStream stream = getContentResolver().openOutputStream(uri);
+            if (stream == null) throw new IOException("No output stream");
+            String token = UUID.randomUUID().toString();
+            sessions.put(token, new SaveSession(uri, stream, relativePath,true));
+            return token;
+        } catch (Exception e) {
+            getContentResolver().delete(uri, null, null);
+            return "";
+        }
+    }
+
+    private boolean appendSession(String token, String base64) {
+        SaveSession s = sessions.get(token);
+        if (s == null) return false;
+        try {
+            byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+            synchronized (s) { s.stream.write(bytes); }
+            return true;
+        } catch (Exception e) { return false; }
+    }
+
+    private boolean finishSession(String token) {
+        SaveSession s = sessions.remove(token);
+        if (s == null) return false;
+        try {
+            synchronized (s) { s.stream.flush(); s.stream.close(); }
+            if(s.mediaStore){
+                ContentValues done = new ContentValues();
+                done.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                if (getContentResolver().update(s.uri, done, null, null) < 1)
+                    throw new IOException("MediaStore finalization rejected");
+            }
+            // The camera already confirms capture through shutter/thumbnail. Do not show
+            // a blocking native Toast for every photo/video, especially burst shooting.
+            // Explicit ZIP/download saves still get a completion toast.
+            if (s.destination.startsWith(Environment.DIRECTORY_DOWNLOADS + "/"))
+                toast("Đã lưu vào " + s.destination);
+            return true;
+        } catch (Exception e) {
+            try { s.stream.close(); } catch (Exception ignored) {}
+            getContentResolver().delete(s.uri, null, null);
+            return false;
+        }
+    }
+
+    private void abortSession(String token) {
+        SaveSession s = sessions.remove(token);
+        if (s == null) return;
+        try { s.stream.close(); } catch (IOException ignored) {}
+        getContentResolver().delete(s.uri, null, null);
+    }
+
+
+    private String safeSharedName(String filename){
+        String name=(filename==null||filename.trim().isEmpty()?"HNLMark":filename);
+        name=name.replaceAll("[^\\p{L}\\p{N} ._()-]","_");
+        if(name.length()>120)name=name.substring(name.length()-120);
+        return name.isEmpty()?"HNLMark":name;
+    }
+
+    private String beginShareFile(String filename, String mime) {
+        if(mime==null||!(mime.startsWith("image/")||mime.startsWith("video/")||mime.equals("application/zip")))
+            return "";
+        File dir=new File(getCacheDir(),"share");
+        if(!dir.exists()&&!dir.mkdirs())return "";
+        try {
+            String token=UUID.randomUUID().toString();
+            File file=new File(dir,token+"_"+safeSharedName(filename));
+            FileOutputStream stream=new FileOutputStream(file);
+            shares.put(token,new ShareSession(file,mime,stream));
+            return token;
+        }catch(Exception ignored){return "";}
+    }
+    private boolean appendShareFile(String token,String data){
+        ShareSession session=shares.get(token);
+        if(session==null)return false;
+        try{
+            byte[] bytes=Base64.decode(data,Base64.DEFAULT);
+            synchronized(session){session.stream.write(bytes);}
+            return true;
+        }catch(Exception e){return false;}
+    }
+    private boolean finishShareFile(String token){
+        ShareSession session=shares.remove(token);
+        if(session==null)return false;
+        try{
+            synchronized(session){session.stream.flush();session.stream.close();}
+            Uri uri=FileProvider.getUriForFile(this,getPackageName()+".fileprovider",session.file);
+            Intent share=new Intent(Intent.ACTION_SEND);
+            share.setType(session.mime);
+            share.putExtra(Intent.EXTRA_STREAM,uri);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            share.setClipData(ClipData.newUri(getContentResolver(),"HNLMark",uri));
+            runOnUiThread(()->{
+                try{startActivity(Intent.createChooser(share,"Chia sẻ từ HNLMark"));}
+                catch(Exception ex){toast("Không mở được bảng chia sẻ Android.");}
+            });
+            return true;
+        }catch(Exception ex){
+            session.file.delete();
+            return false;
+        }
+    }
+    private void abortShareFile(String token){
+        ShareSession session=shares.remove(token);
+        if(session==null)return;
+        try{session.stream.close();}catch(Exception ignored){}
+        session.file.delete();
+    }
+
+    /** Only the opt-in GPS button invokes this. Never geocode on every shutter press. */
+    private void finishReverseGeocode(String token, String address) {
+        if(web==null)return;
+        try {
+            JSONObject detail=new JSONObject();
+            detail.put("token",token);
+            detail.put("address",address==null?"":address);
+            String script="window.dispatchEvent(new CustomEvent('hnl-studio:reverse-geocode',{detail:"+detail.toString()+"}));";
+            web.post(()->web.evaluateJavascript(script,null));
+        }catch(Exception ignored){}
+    }
+    private String firstAddressLine(List<Address> addresses){
+        if(addresses==null||addresses.isEmpty())return "";
+        Address address=addresses.get(0);
+        if(address==null)return "";
+        String line=address.getAddressLine(0);
+        if(line==null||line.trim().isEmpty())return "";
+        return line.trim().length()>240?line.trim().substring(0,240):line.trim();
+    }
+    private void reverseDeviceAddress(String token,double lat,double lon){
+        if(token==null||!token.matches("[a-zA-Z0-9_-]{1,70}")||!Double.isFinite(lat)||!Double.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)return;
+        if(!Geocoder.isPresent()){finishReverseGeocode(token,"");return;}
+        try{
+            Geocoder coder=new Geocoder(this,new Locale("vi","VN"));
+            if(Build.VERSION.SDK_INT>=33){
+                coder.getFromLocation(lat,lon,1,new Geocoder.GeocodeListener(){
+                    @Override public void onGeocode(List<Address> addresses){finishReverseGeocode(token,firstAddressLine(addresses));}
+                    @Override public void onError(String message){finishReverseGeocode(token,"");}
+                });
+            }else{
+                new Thread(()->{
+                    try{finishReverseGeocode(token,firstAddressLine(coder.getFromLocation(lat,lon,1)));}
+                    catch(Exception ignored){finishReverseGeocode(token,"");}
+                },"hnl-reverse-geocode").start();
+            }
+        }catch(Exception ignored){finishReverseGeocode(token,"");}
+    }
+
+    /** Exposed only to trusted appassets content; all external WebView URLs blocked. */
+    public final class NativeBridge {
+        @JavascriptInterface public String beginSave(String name, String mime) {
+            return beginSession(name, mime);
+        }
+        @JavascriptInterface public boolean appendSave(String token, String base64) {
+            return appendSession(token, base64);
+        }
+        @JavascriptInterface public boolean finishSave(String token) {
+            return finishSession(token);
+        }
+        @JavascriptInterface public void abortSave(String token) {
+            abortSession(token);
+        }
+        @JavascriptInterface public String beginShare(String name,String mime){return beginShareFile(name,mime);}
+        @JavascriptInterface public boolean appendShare(String token,String chunk){return appendShareFile(token,chunk);}
+        @JavascriptInterface public boolean finishShare(String token){return finishShareFile(token);}
+        @JavascriptInterface public void abortShare(String token){abortShareFile(token);}
+        @JavascriptInterface public void reverseGeocode(String token,double latitude,double longitude){
+            reverseDeviceAddress(token,latitude,longitude);
+        }
+        @JavascriptInterface public void openDeviceGallery(){MainActivity.this.openDeviceGallery();}
+        @JavascriptInterface public void pickedBatchFinished(String batchId,int imported,int failed,String firstError){
+            runOnUiThread(()->completePickedBatch(batchId,imported,failed,firstError));
+        }
+        @JavascriptInterface public void chooseSaveFolder(){openSaveTreePicker();}
+        @JavascriptInterface public String getSaveDestination(){return getSaveDestinationLabel();}
+        @JavascriptInterface public void resetSaveFolder(){
+            getSharedPreferences("hnlmark_settings",MODE_PRIVATE).edit().remove(SAVE_FOLDER_PREF).apply();
+        }
+        @JavascriptInterface public void cameraState(boolean active) {
+            runOnUiThread(() -> {
+                cameraImmersive = active;
+                if (fullscreenView == null) {
+                    setChromeVisible(!active);
+                    if (active) getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                    else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                }
+            });
+        }
+    }
+}

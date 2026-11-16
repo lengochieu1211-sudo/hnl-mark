@@ -1,0 +1,48 @@
+/* HNL Mark Design System Tokens — Precision Field Optics (All-Dark Commercial Camera) */
+:root {
+  /* Core Surfaces (60% Dominant Obsidian & Deep Navy) */
+  --hnl-bg-obsidian: #060b14;
+  --hnl-bg-navy: #0b1424;
+  --hnl-surface: #111c30;
+  --hnl-surface-elevated: #17253d;
+  --hnl-surface-glass: rgba(11, 20, 36, 0.84);
+
+  /* Brand Accents (10% High-Intent Gold & Optical Contrast) */
+  --hnl-gold: #e2b74b;
+  --hnl-gold-hover: #ecc768;
+  --hnl-gold-muted: rgba(226, 183, 75, 0.16);
+  --hnl-navy-brand: #0e2444;
+
+  /* Typography & Hairlines */
+  --hnl-text-primary: #f8fafc;
+  --hnl-text-secondary: #94a3b8;
+  --hnl-text-muted: #64748b;
+  --hnl-border-hairline: rgba(248, 250, 252, 0.09);
+  --hnl-border-strong: rgba(248, 250, 252, 0.18);
+
+  /* Semantic Feedback */
+  --hnl-danger: #ef4444;
+  --hnl-success: #22c55e;
+  --hnl-warning: #f59e0b;
+
+  /* Radii & Spacing Scale */
+  --hnl-radius-sm: 8px;
+  --hnl-radius-md: 12px;
+  --hnl-radius-lg: 16px;
+  --hnl-radius-xl: 22px;
+  --hnl-touch-min: 44px;
+
+  /* Android Safe Area Insets */
+  --hnl-safe-top: env(safe-area-inset-top, 0px);
+  --hnl-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --hnl-safe-left: env(safe-area-inset-left, 0px);
+  --hnl-safe-right: env(safe-area-inset-right, 0px);
+
+  /* Typography */
+  --hnl-font-sans: 'Be Vietnam Pro', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --hnl-font-display: 'Plus Jakarta Sans', 'Be Vietnam Pro', system-ui, sans-serif;
+  --hnl-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Motion */
+  --hnl-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}

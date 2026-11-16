@@ -1,6 +1,77 @@
-# HNLMark v2.0.4 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
+# HNLMark v2.2.1 DEV — Camera: icon xoay và đồng bộ chữ ẢNH / VIDEO
+
+- Sửa vector xoay 90° trong camera Ảnh và Video: thay nét SVG cũ bằng cùng biểu tượng xoay có đầu mũi tên rõ ràng.
+- Khắc phục CSS cũ `#photoToVideo { font-size:18px!important }` lấn át cỡ chữ chung; ép hai nhãn ẢNH và VIDEO dùng cùng kiểu font, cùng cỡ 12px dọc / 10px ngang và cùng chiều rộng căn giữa.
+- Giữ màu vàng hiện hành cho chế độ được chọn, các nút khác màu xám nhạt.
+- Chỉ thay icon/giao diện; không sửa logic camera, xoay thực tế, watermark hay dữ liệu ảnh/video.
+- CI gồm kiểm tra biểu tượng SVG giống nhau và kích thước nhãn bằng nhau; cần kiểm thử Android thực tế trước Runtime Golden.
+
+# HNLMark v2.2.0 — Mẫu dấu/Font, cắt ảnh đúng tỷ lệ, chất lượng ảnh/video & sửa xoay video (DEV)
+
+- Source GitHub dev, không sửa main/production.
+- Mẫu dấu bổ sung: Hiện đại, Kỹ thuật, Điện ảnh, Một dòng, Chỉ giờ, **Không dấu**. Không dấu thực sự không vẽ chữ/logo/mã. Mặc định giữ Timemark.
+- Thêm font hệ thống, Trebuchet, Impact, Times New Roman, Courier New. Độ đậm và cỡ từng nhóm chữ điều chỉnh trên ảnh. Các font tùy độ sẵn có của máy, fallback theo hệ thống.
+- Chuẩn hóa tỷ lệ cắt 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, 4:5, 5:4, 21:9, gốc hoặc tự do. Nút Tạo khung giữa, kéo theo tỷ lệ, lưu dưới dạng edit non-destructive.
+- Ảnh: JPG 75/85/92/100%, PNG không giảm chất lượng JPEG; thêm 3000 và 3840px, không nâng độ phân giải gốc.
+- Khi quay video trực tiếp, nút bánh răng nhỏ trên thanh Video mở/đóng bảng chất lượng ngay trong camera, không cần thoát chế độ Full.
+- Video: chọn giới hạn độ phân giải (720/1080/1440/2160 hoặc theo nguồn), bitrate 2.5–24 Mbps, 24/30/60 FPS (trình duyệt có thể giới hạn), dấu trên video mặc định 65% so với ảnh.
+- Sửa hướng: dùng cùng phép quay đã kiểm tra của camera Ảnh để xử lý hướng ngang Video, phân biệt tư thế ngược khi cảm biến cho phép, nút lật 180° thủ công. Ghép khung hình và mọi dấu/giờ/logo vào canvas tạm rồi mới đưa vào canvas xuất; ghi hình giữ kích thước cố định và letterbox khi máy đổi hướng, tránh kéo dãn.
+- **Chưa runtime golden:** kiểm thử cảm biến, ghi âm, video thực tế trên điện thoại; CI kiểm tra code/logic không thay thế thử máy. Video trên web không bảo đảm mức bitrate/fps mà trình duyệt có thể thay đổi.
+
+# HNLMark v2.1.3 DEV — camera tối giản, sửa xoay ngược video
+
+- **Source chuẩn** GitHub dev; không chỉnh main, không thay Vercel Production.
+- Giữ một nút Chọn ảnh/video, một nút Mở camera. Camera dọc có thanh điều khiển 168px; ngang có cụm icon 108px ở cạnh phải; nút chụp/quay được cân tâm theo 3 cột.
+- Thiết kế camera phương án A: màu tối, ít biểu tượng, nút chụp trắng/ghi hình đỏ, ảnh-video chuyển ngay trong camera; Full/Xoay/Đóng giảm kích thước; chụp liên tiếp vẫn hoạt động.
+- **Sửa lỗi video xoay 180°**: tách `orientation.js`, tính góc xoay từ chiều khung nguồn, tư thế máy và hướng trái/phải. Sửa chiều ngang khi điện thoại bị khóa xoay (đổi quy tắc 90°/270°); xem trước và xuất video dùng cùng phép tính, khóa góc quay tại thời điểm bắt đầu ghi. Giữ khả năng xoay tay 90° khi thiết bị báo sai.
+- Video nhập từ thiết bị giữ đúng góc nguồn trừ khi người dùng chọn xoay. Khôi phục biểu tượng phát/tạm dừng SVG và không hiện icon vô dụng.
+- Thêm regression `tests/test_video_orientation.cjs`; chạy cùng static checks. **Chưa được thử camera và ghi file trên Android thực tế**, chưa Runtime Golden.
+- Video có dấu không chứng minh nguồn gốc hoặc thời điểm ghi thực sự.
+
+# HNLMark v2.1.2 — Một nút chọn ảnh/video, camera cân tâm theo cách sử dụng iPhone
+
+- Source chỉ cập nhật nhánh `dev`; không thay `main`, production, projectId.
+- Trên đầu trang dùng đúng một nút **Chọn ảnh / video** (`input accept=image/*,video/*`, multiple). Tệp được nhận dạng theo MIME/đuôi; ảnh vẫn đi vào bộ sửa ảnh/thư viện gốc, video đầu tiên được chuyển đến trình xử lý video. Nhiều video cùng lúc sẽ báo rõ chỉ xử lý từng video một.
+- Duy trì đúng một nút **Mở camera**. Khi mở mặc định vào ẢNH; chuyển **ẢNH ↔ VIDEO** bằng thanh chế độ ngay trong camera giống nguyên tắc điều khiển của iPhone, không phải quay lại đầu trang.
+- Cả Ảnh và Video sử dụng nút tròn chính ở **tâm chính xác** theo CSS grid 1fr / 70px / 1fr; hai biểu tượng Thư viện và Đổi camera cân xứng hai bên. Nút Ảnh màu trắng, nút Video màu đỏ và chuyển Dừng khi đang quay. Màn hình ngang (kể cả Android khóa xoay) dùng rail dọc bên phải, shutter căn theo tâm chiều ngang rail.
+- Tùy chọn Full, xoay, đóng thành biểu tượng nhỏ; tránh nút phụ che ảnh. Vẫn giữ chế độ chụp liên tiếp và nhãn mã đứng có khiên dấu tích với màu cấu hình cũ.
+- Xử lý video giữ nguyên theo MediaRecorder (WebM/MP4 tùy trình duyệt), âm thanh khi có quyền và hỗ trợ, không ghi đè video gốc. Video chưa lưu vẫn được cảnh báo trước khi bỏ.
+- Đây là bản preview DEV, CI chỉ gồm syntax/static test; **chưa Runtime Golden trên Android/iOS thật**.
+
+# HNLMark v2.1.1 — Ảnh/Video chung khu vực đầu, icon khiên dấu tích
+
+- Nhánh DEV: gộp nút chế độ **Ảnh / Video** ngay panel đầu. Sau khi chọn, chỉ còn hai lựa chọn tại cùng vị trí: **Chụp ảnh / Quay video** và **Chọn ảnh / Chọn video từ máy**. Không phải kéo xuống một panel Video khác.
+- Khi chọn Video, các nút khởi tạo vẫn ở trên; vùng chỉnh/xuất video chỉ hiện trong cùng panel nếu đang dùng Video. Chế độ Ảnh giữ nguyên thư viện ảnh, ZIP dự án và ảnh đang mở.
+- Nếu video đã xuất nhưng chưa bấm Lưu, hiển thị xác nhận trước khi chuyển sang Ảnh hoặc chọn video khác. Không cho chuyển chế độ khi đang quay.
+- Biểu tượng đầu dòng mã đứng bên phải đổi thành **tấm khiên có dấu tích**, giữ nguyên màu `serialColor` hiện có (mặc định trắng). Áp dụng cả ảnh và video qua chung bộ vẽ dấu Timemark.
+- Chỉ cập nhật `dev`, không rollback `main`/Production. CI chỉ kiểm tra cú pháp và tài sản, chưa thay thế kiểm thử camera/âm thanh Android thật.
+
+# HNLMark v2.1.0 — Video thử nghiệm và camera gọn hơn
+
+## Video (DEV, chưa Runtime Golden)
+- Chọn video MP4/WebM/MOV từ thiết bị, xem thử, thêm dấu giờ, ngày, logo và mã ảnh bằng bộ vẽ Timemark chung với ảnh.
+- Chế độ quay video trực tiếp từ camera, mở được từ công cụ Video hoặc nút Video khi đang chụp ảnh.
+- Ghi hình có dấu theo thời gian thực (canvas.captureStream + MediaRecorder); khi được cấp quyền, ghi kèm micro; nhập video hỗ trợ lấy lại âm thanh gốc khi trình duyệt cho phép.
+- File gốc vẫn giữ nguyên; xuất bản mới dạng WebM hoặc MP4 tùy khả năng trình duyệt. Cần nhấn "Lưu video" sau khi kết thúc.
+- Trên điện thoại nằm ngang, video có thanh điều khiển tách riêng ở bên phải, kể cả trường hợp khóa xoay mà có cảm biến hoạt động.
+- Ngày giờ khi nhập video lấy từ ngày sửa của file và cộng thời gian phát; đây là nhãn người dùng có thể chỉnh, không phải xác thực nguồn gốc.
+- Hiện chưa cắt ghép video, chưa đưa video vào ZIP lưu dự án ảnh, không có xử lý trên máy chủ. Video dài có thể tốn RAM và thời gian xử lý bằng đúng thời lượng video.
+- Chưa kiểm chứng ghi âm, định dạng, xoay và mã hóa trên Android/iOS thực tế. Kiểm tra CI mã không tương đương Runtime Golden.
+
+## Giao diện camera ảnh
+- Giữ chức năng Ảnh hiện có, thu gọn thanh nút dọc và thanh phải ngang, thêm nút đổi sang Video.
+
+# HNLMark v2.0.5 — Camera toàn màn hình, chụp liên tiếp và thư viện ảnh
 
 **Trang chính:** https://hnl-photomark.vercel.app/
+
+## Bản vá camera v2.0.5 – cụm điều khiển nằm bên phải khi quay ngang
+- Khi điện thoại nằm ngang, thanh chụp thu gọn thành một cụm ở cạnh phải, nút chụp lớn và các biểu tượng Thư viện, Full, Đổi camera, Xoay, Đóng.
+- Áp dụng cả khi thiết bị khóa xoay làm viewport vẫn dọc nhưng cảm biến nhận diện điện thoại nằm ngang. Các nút ở ngoài vùng ảnh, không che dấu thời gian.
+- Giao diện đứng/dọc giữ nguyên; Full dùng giao diện đồng nhất, không thay đổi chiều ảnh được lưu.
+- Sao lưu ZIP giờ gom mọi ảnh trong thư viện IndexedDB cùng ảnh đang mở; nếu không truy cập được thư viện, xuất ZIP chỉ ảnh đang mở và cảnh báo sao lưu chưa đầy đủ.
+- Tên JPG/PNG khi xuất theo từng ảnh khớp định dạng của blob; khi bỏ ảnh đang chọn, trạng thái chọn và tuỳ chỉnh được đồng bộ.
+- **Chưa kiểm thử trên thiết bị Android thực tế** (cảm biến, nút bấm khi khóa xoay, Full). Không xem kiểm tra mã hoặc mô phỏng là Runtime Golden.
 
 ## Bản vá camera v2.0.4 – tăng độ nhạy tự xoay
 - Dùng `devicemotion.accelerationIncludingGravity.x/y` (trọng lực theo trục thiết bị) làm nguồn nhận hướng chính khi trình duyệt hỗ trợ; `deviceorientation.beta/gamma` làm dự phòng.

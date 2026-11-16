@@ -1,0 +1,44 @@
+/* Android v2.5.3 TEST — preview geometry, same in Photo and Video.
+   The image is rendered to its original unmodified canvas; CSS affects
+   ONLY the live monitor and is safely clipped by the monitor viewport. */
+body.hnl-android-apk.hnl-camera-live #cameraArea #stage #previewCanvas.apk-geometry-preview,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-canvas-wrap #videoCanvas.apk-geometry-preview{
+ display:block!important;
+ position:relative!important;
+ width:var(--apk-preview-width)!important;
+ height:var(--apk-preview-height)!important;
+ min-width:0!important;min-height:0!important;
+ max-width:none!important;max-height:none!important;
+ flex:0 0 auto!important;
+ object-fit:fill!important;
+ transform:rotate(var(--apk-preview-turn))!important;
+ transform-origin:50% 50%!important;
+ margin:auto!important;
+}
+body.hnl-android-apk.hnl-camera-live #cameraArea #stage,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .video-canvas-wrap{
+ overflow:hidden!important;
+ align-items:center!important;justify-content:center!important;
+}
+body.hnl-android-apk .apk-camera-topbar .apk-preview-toggle{
+ display:grid!important;place-items:center!important;
+ background:transparent!important;border:0!important;border-radius:50%!important;
+ width:41px!important;height:41px!important;
+ min-width:41px!important;min-height:41px!important;
+ max-width:41px!important;max-height:41px!important;
+ flex:0 0 41px!important;padding:8px!important;
+ color:#eee!important;box-shadow:none!important;
+}
+body.hnl-android-apk .apk-camera-topbar .apk-preview-toggle svg{
+ width:23px!important;height:23px!important;display:block!important;pointer-events:none!important
+}
+body.hnl-android-apk .apk-camera-topbar .apk-preview-toggle.is-on{color:#ffd455!important}
+body.hnl-android-apk.hnl-angle-90 .apk-camera-topbar .apk-preview-toggle svg{transform:rotate(-90deg)!important}
+body.hnl-android-apk.hnl-angle-270 .apk-camera-topbar .apk-preview-toggle svg{transform:rotate(90deg)!important}
+body.hnl-android-apk.hnl-angle-180 .apk-camera-topbar .apk-preview-toggle svg{transform:rotate(180deg)!important}
+/* Reduce empty black borders on physically horizontal phones while keeping
+   the shutter/mode tabs in their original place at the bottom. */
+body.hnl-android-apk.hnl-camera-live #cameraArea .apk-camera-topbar,
+body.hnl-android-apk.hnl-video-live #videoStudio.video-open .apk-camera-topbar{
+ overflow:visible!important
+}

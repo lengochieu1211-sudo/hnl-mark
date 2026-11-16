@@ -1,0 +1,62 @@
+name: HNLMark Android RELEASE unsigned candidate (DEV)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/android-release-candidate.yml'
+      - 'android/**'
+      - 'tests/version_contract.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unsigned-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Android SDK 35 and signing verification tools
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT}}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Package current Web UI offline and audit Android
+        run: |
+          python3 -m pip install --disable-pip-version-check pillow==11.1.0
+          python3 android/scripts/package_web.py
+          python3 android/scripts/audit_android.py
+          python3 tests/test_studio50_legacy_web_migration.py
+      - name: Build UNSIGNED release candidate (never publish as installable)
+        working-directory: android
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+      - name: Collect unsigned APK and Android's official apksigner
+        run: |
+          mkdir -p release-candidate
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk release-candidate/HNLMark-release-unsigned.apk
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT}}"
+          cp "$SDK_ROOT/build-tools/35.0.0/lib/apksigner.jar" release-candidate/apksigner.jar
+          test -s release-candidate/apksigner.jar
+          test -s release-candidate/HNLMark-release-unsigned.apk
+          cd release-candidate
+          sha256sum HNLMark-release-unsigned.apk apksigner.jar > SHA256.txt
+          cat SHA256.txt
+      - name: Private workflow artifacts; NO signing key included
+        uses: actions/upload-artifact@v4
+        with:
+          name: HNLMark-UNSIGNED-Release-Candidate-and-apksigner
+          path: release-candidate/
+          if-no-files-found: error
+          retention-days: 3

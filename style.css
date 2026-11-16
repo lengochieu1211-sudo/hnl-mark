@@ -295,3 +295,752 @@
 }
 #cameraArea:fullscreen.hnl-turn-left{left:0!important;top:100dvh!important;transform:rotate(-90deg)!important}
 #cameraArea:fullscreen.hnl-turn-right{left:100dvw!important;top:0!important;transform:rotate(90deg)!important}
+
+/* v2.0.5: right-hand compact camera rail in actual landscape AND when
+   Android locks the CSS viewport in portrait while the phone is sideways.
+   The image and the rail remain siblings: controls NEVER cover photo pixels. */
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock{
+ display:flex!important;flex-direction:row!important;align-items:stretch!important;
+ justify-content:stretch!important;gap:5px!important;
+ padding:5px max(5px,env(safe-area-inset-right)) 5px max(5px,env(safe-area-inset-left))!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .canvas-stage{
+ flex:1 1 auto!important;width:auto!important;min-width:0!important;
+ height:100%!important;min-height:0!important;max-height:none!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-toolbar,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review{
+ flex:0 0 112px!important;width:112px!important;min-width:112px!important;
+ max-width:112px!important;height:100%!important;min-height:0!important;
+ display:flex!important;flex-direction:column!important;
+ justify-content:space-between!important;align-items:stretch!important;
+ overflow:hidden!important;padding:6px 4px!important;gap:4px!important;
+ border-radius:12px;background:#14263ae8;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-status,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-tag{
+ flex:0 0 auto!important;font-size:9px!important;line-height:1.3!important;
+ padding:2px 0!important;margin:0!important;gap:3px!important;
+ max-width:100%!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-count,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-orientation{
+ font-size:9px!important;padding:2px 5px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-buttons{
+ display:grid!important;flex:1 1 auto!important;width:100%!important;
+ min-width:0!important;min-height:0!important;
+ grid-template-columns:repeat(2,minmax(0,1fr))!important;
+ grid-template-rows:64px repeat(3,31px)!important;
+ align-content:center!important;align-items:center!important;
+ justify-content:stretch!important;justify-items:stretch!important;
+ padding:1px!important;margin:0!important;gap:5px!important;
+ overflow:hidden!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-buttons .camera-glass{
+ width:100%!important;max-width:none!important;min-width:0!important;
+ height:31px!important;min-height:31px!important;
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ flex-basis:auto!important;white-space:nowrap!important;
+ font-size:18px!important;padding:2px!important;border-radius:10px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-action-label{
+ display:none!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #shutterButton{
+ grid-column:1/-1!important;grid-row:1!important;justify-self:center!important;
+ width:62px!important;height:62px!important;
+ min-width:62px!important;min-height:62px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #shutterButton span{
+ width:46px!important;height:46px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #cameraLibrary{grid-column:1;grid-row:2}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #toggleCameraFull{grid-column:2;grid-row:2}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #flipCamera{grid-column:1;grid-row:3}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #rotateCameraOverlay{grid-column:2;grid-row:3}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #closeCamera{
+ grid-column:1/-1;grid-row:4;max-width:60px!important;justify-self:center!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-burst{
+ flex:0 0 auto!important;display:flex;flex-wrap:nowrap;gap:3px!important;
+ padding:0!important;margin:0!important;font-size:10px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-burst input{width:15px;height:15px}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-burst small{display:none!important}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions{
+ display:flex!important;flex:1!important;flex-direction:column!important;
+ justify-content:center!important;gap:8px!important;padding:2px!important;
+ width:100%!important;min-height:0!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions button{
+ width:100%!important;min-width:0!important;max-width:none!important;
+ font-size:10px!important;padding:8px 2px!important;
+ min-height:39px!important;white-space:normal!important;
+}
+
+
+/* HNLMark v2.1 – video studio, independent of still-photo storage. */
+.video-panel{scroll-margin-top:65px}
+.video-entry{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.video-entry>*{flex:1 1 150px;min-height:43px;text-align:center;display:flex;align-items:center;justify-content:center}
+.video-picker{border:1px solid #b5c8dc;border-radius:9px;background:#f5f8fc;font-size:12px;font-weight:750;color:#27486a;cursor:pointer}
+.video-picker input{display:none}
+.video-status{font-size:11px;line-height:1.5;color:#456581;margin:7px 0 10px}
+.video-studio{display:flex;flex-direction:column;gap:5px;padding:6px;border-radius:12px;background:#0d1a29;color:white;min-height:0;overflow:hidden}
+.video-canvas-wrap{display:flex;flex:1 1 auto;align-items:center;justify-content:center;min-width:0;min-height:0;background:#05111d;border-radius:9px;overflow:hidden;aspect-ratio:16/9}
+.video-canvas-wrap canvas{display:block;width:auto;height:auto;max-height:100%;max-width:100%;object-fit:contain}
+.video-studio #videoMedia[hidden]{display:none!important}
+.video-controls{display:flex;align-items:center;justify-content:space-between;gap:5px;padding:5px;min-width:0}
+.video-control-header{display:flex;flex-direction:column;gap:3px;align-items:center;flex:0 0 auto}
+.video-control-header strong{font-size:10px;letter-spacing:.1em;color:#bad3f1}
+#videoElapsed{font-size:12px;font-weight:900;color:#ff6262;white-space:nowrap}
+.video-actions{display:flex;flex:1;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
+.video-actions button{border-radius:10px;border:1px solid #5d7694;background:#263e58;color:white;font-size:11px;font-weight:800;min-height:39px;padding:6px 9px;cursor:pointer}
+.video-actions .video-primary{background:#d82548;border-color:#ff6385}
+.video-actions .video-stop{background:#e9434f;border-color:#ff8585}
+.video-mode-tip{font-size:10px;color:#9cb4d4;white-space:nowrap}
+.video-result{margin-top:10px;border:1px solid #cfdfef;border-radius:10px;padding:10px;background:#f2f7ff;display:flex;flex-direction:column;gap:8px}
+.video-result[hidden],.video-actions [hidden],#videoElapsed[hidden],.video-mode-tip[hidden]{display:none!important}
+.video-result strong{font-size:13px;color:#183753}
+.video-result small{font-size:11px;color:#65809c}
+.video-result video{display:block;max-width:100%;width:100%;max-height:350px;background:#000;border-radius:8px}
+.video-result-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.video-result-actions button{flex:1}
+body.hnl-video-live{overflow:hidden}
+body.hnl-video-live #videoStudio.video-open{
+ position:fixed;inset:0;z-index:225;width:100dvw;height:100dvh;
+ box-sizing:border-box;display:flex;flex-direction:column;gap:6px;
+ background:#091827;padding:7px max(7px,env(safe-area-inset-right)) max(7px,env(safe-area-inset-bottom)) max(7px,env(safe-area-inset-left));
+ overflow:hidden;transform-origin:top left;
+}
+body.hnl-video-live #videoStudio.video-open .video-canvas-wrap{aspect-ratio:auto;min-height:0;flex:1 1 auto}
+body.hnl-video-live #videoStudio.video-open .video-controls{flex:0 0 auto;background:#13263c;border-radius:10px}
+body.hnl-video-live #videoStudio.video-open .video-actions button{min-height:37px}
+body.hnl-video-live #videoStudio.video-open.is-recording .video-primary{display:none}
+body.hnl-video-live #videoStudio.video-open .video-mode-tip{display:none}
+@media (orientation:landscape) and (max-height:680px), (max-width:950px) and (orientation:landscape){
+ body.hnl-video-live #videoStudio.video-open:not(.video-locked-left):not(.video-locked-right){flex-direction:row}
+ body.hnl-video-live #videoStudio.video-open .video-controls{width:112px;flex:0 0 112px;flex-direction:column;gap:6px;min-width:0}
+ body.hnl-video-live #videoStudio.video-open .video-actions{flex-direction:column;flex-wrap:nowrap;gap:5px;justify-content:center;width:100%}
+ body.hnl-video-live #videoStudio.video-open .video-actions button{width:100%;font-size:10px;padding:5px 2px;min-height:36px}
+}
+@media (max-width:950px), (max-height:650px){
+ body.hnl-video-live #videoStudio.video-open.video-landscape{flex-direction:row}
+ body.hnl-video-live #videoStudio.video-open.video-landscape .video-controls{width:112px;flex:0 0 112px;flex-direction:column;min-width:0;gap:4px}
+ body.hnl-video-live #videoStudio.video-open.video-landscape .video-actions{display:flex;flex-direction:column;flex-wrap:nowrap;gap:4px;width:100%;justify-content:center}
+ body.hnl-video-live #videoStudio.video-open.video-landscape .video-actions button{min-height:33px;width:100%;padding:4px 2px;font-size:10px}
+ body.hnl-video-live #videoStudio.video-open.video-locked-left{
+  inset:auto;left:0;top:100dvh;width:100dvh;height:100dvw;transform:rotate(-90deg)
+ }
+ body.hnl-video-live #videoStudio.video-open.video-locked-right{
+  inset:auto;left:100dvw;top:0;width:100dvh;height:100dvw;transform:rotate(90deg)
+ }
+}
+/* Camera v2.1: portrait layout tightened without reducing the shutter tap area. */
+@media (orientation:portrait) and (max-width:600px){
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-toolbar{gap:1px!important;padding:4px 5px!important}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-status{font-size:9px!important;margin:0!important;padding:1px!important;line-height:1.15!important}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-buttons{
+  grid-template-rows:31px 58px!important;min-height:90px!important;gap:3px!important;padding:1px!important
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-buttons .camera-glass{
+  font-size:15px!important;min-height:30px!important;padding:2px!important
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-action-label{display:none!important}
+ body.hnl-camera-live .camera-area.hnl-capture-screen #photoToVideo{
+  grid-column:4;grid-row:2;font-size:18px!important;width:40px!important;justify-self:center
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .shutter-button{
+  grid-column:3!important;grid-row:2!important;width:58px!important;height:58px!important;min-width:58px!important;min-height:58px!important
+ }
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-burst{padding:0 1px 1px!important;font-size:10px!important;min-height:18px}
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-burst small{display:none}
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #photoToVideo{
+ grid-column:1!important;grid-row:4!important;max-width:none!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock #closeCamera{
+ grid-column:2!important;grid-row:4!important;max-width:none!important;
+}
+/* Keep REVIEW actions compact in landscape: the whole right rail fits screen. */
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions{
+ justify-content:center!important;gap:5px!important;min-height:0!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-review-actions button{
+ min-height:36px!important;padding:5px 2px!important;font-size:10px!important;
+}
+
+
+/* v2.1.1 — ONE capture/import bar. Photo and Video share the first panel. */
+.media-mode-switch{display:flex;align-items:center;gap:3px;padding:4px;background:#e8eef7;border:1px solid #d9e3f0;border-radius:12px;margin:10px 0 8px}
+.media-mode-switch .media-mode{flex:1 1 50%;min-width:0;border:0;border-radius:9px;background:transparent;color:#52708f;font-weight:850;font-size:13px;min-height:39px;cursor:pointer}
+.media-mode-switch .media-mode.active{background:#fff;color:#1b5cbe;box-shadow:0 2px 8px #1a324a1a}
+.media-mode-switch .media-mode:focus-visible,.media-top-actions>:focus-visible{outline:2px solid #246ef5;outline-offset:2px}
+.media-top-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:9px}
+.media-top-actions [hidden],#photoLibraryArea[hidden],#videoPanel[hidden],#photoCount[hidden]{display:none!important}
+.media-top-actions .media-select,
+.media-top-actions .media-capture{
+ box-sizing:border-box;display:flex;align-items:center;justify-content:center;
+ min-width:0;min-height:52px;max-width:none;margin:0;padding:9px 7px;
+ border-radius:11px;gap:8px;flex:initial;text-align:center;cursor:pointer;
+}
+.media-top-actions .media-select{background:#f8fbff;color:#245587;border:1px solid #aec7e4}
+.media-top-actions .media-select strong,.media-top-actions .media-capture strong{font-size:12px;line-height:1.25;font-weight:850;white-space:normal}
+.media-top-actions .media-select .media-action-icon{font-size:23px;line-height:1;flex-shrink:0;color:#3c6b9e}
+.media-top-actions .media-capture{background:#216fe6;border:1px solid #2268d6;color:#fff;box-shadow:0 3px 8px #236be429}
+.media-top-actions .media-capture>span{font-size:23px;line-height:1}
+.media-top-actions .media-select input{display:none}
+.media-top-actions .media-select.dragging{border-color:#246ef5;background:#eaf2ff}
+#videoPanel.video-inline{border-top:1px solid #dfe7f1;margin:10px 0 0;padding-top:8px;min-width:0}
+#videoPanel .video-inline-title{font-size:13px;margin:0 0 4px;color:#244664}
+#photoLibraryArea{min-width:0}
+@media(max-width:420px){
+ .media-mode-switch .media-mode{font-size:12px;min-height:38px}
+ .media-top-actions .media-select,.media-top-actions .media-capture{min-height:48px;padding:6px 5px;gap:5px}
+ .media-top-actions .media-select strong,.media-top-actions .media-capture strong{font-size:11px}
+ .media-top-actions .media-select .media-action-icon,.media-top-actions .media-capture>span{font-size:20px}
+}
+
+/* Respect hidden state on the inline editor and camera preview. */
+.video-studio[hidden],.video-inline[hidden]{display:none!important}
+
+
+/* v2.1.2: iPhone-inspired camera ergonomics — functional layout, own HNLMark colors.
+   Three equal columns keep shutter precisely centered independently of side actions. */
+.media-combined-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.media-combined-actions .media-select,.media-combined-actions .media-capture{
+ display:flex;justify-content:center;align-items:center;gap:8px;min-height:54px;
+ padding:8px 6px;line-height:1.2;max-width:none;text-align:center
+}
+.media-combined-actions .media-select svg,.media-combined-actions .media-capture svg{
+ width:24px;height:24px;flex:0 0 24px;display:block
+}
+.media-combined-actions strong{display:block;font-weight:800;font-size:12px}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-toolbar.camera-ios{
+ box-sizing:border-box;align-items:center!important;justify-content:center!important;
+ gap:5px!important;padding:7px 10px max(7px,env(safe-area-inset-bottom))!important;
+ border-radius:14px;background:#13263ae8;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-status{
+ width:100%;min-height:18px;font-size:10px!important;line-height:1.1!important;
+ margin:0!important;padding:0!important;gap:4px!important;flex-shrink:0
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-utilities{
+ display:flex!important;align-items:center;justify-content:center;gap:11px;
+ width:100%;min-height:33px;flex:0 0 33px
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-icon{
+ display:inline-flex!important;align-items:center;justify-content:center;
+ background:#283f58;border:1px solid #50667d;color:#fff;border-radius:50%;
+ width:38px;height:38px;min-width:38px;min-height:38px;
+ padding:0!important;font-size:0!important;line-height:1!important;
+ flex:0 0 38px;max-width:38px!important;white-space:nowrap!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-icon svg{width:20px;height:20px;display:block;pointer-events:none}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-utilities .camera-icon{
+ width:32px;height:32px;min-width:32px;min-height:32px;flex-basis:32px;
+ border-color:#ffffff42;background:#20334a
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-utilities .camera-icon svg{width:17px;height:17px}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-shutter-row{
+ display:grid!important;grid-template-columns:minmax(0,1fr) 70px minmax(0,1fr)!important;
+ grid-template-rows:70px!important;align-items:center!important;justify-items:center!important;
+ justify-content:stretch!important;width:100%!important;min-height:70px!important;
+ padding:0!important;margin:0!important;gap:0!important;
+ flex:0 0 auto!important;overflow:visible!important;flex-wrap:nowrap!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #cameraLibrary{
+ grid-column:1!important;grid-row:1!important;justify-self:center!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #shutterButton{
+ grid-column:2!important;grid-row:1!important;justify-self:center!important;
+ width:66px!important;height:66px!important;min-width:66px!important;min-height:66px!important;
+ margin:0!important;box-sizing:border-box!important;border:3px solid #fff;
+ border-radius:50%;display:grid;place-items:center;background:#fff2;padding:5px;
+ box-shadow:0 0 0 1px #20344a,0 2px 8px #0006
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #shutterButton span{
+ display:block;width:49px!important;height:49px!important;border-radius:50%;background:#fff
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #flipCamera{
+ grid-column:3!important;grid-row:1!important;justify-self:center!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes{
+ display:flex;align-items:center;justify-content:center;gap:18px;
+ flex:0 0 23px;min-height:23px;width:100%;font-size:12px;font-weight:900;
+ letter-spacing:.07em
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes span,
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes button{
+ border:0;background:transparent;color:#c4cede;font:inherit;font-size:12px;
+ padding:3px 6px;margin:0;min-height:23px;cursor:pointer
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes .is-selected{
+ color:#ffd253;border-bottom:2px solid #ffd253
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-burst{
+ font-size:10px!important;line-height:1.15!important;gap:6px!important;
+ padding:2px 0!important;margin:0!important;min-height:17px!important;
+ flex:0 0 17px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-burst small{display:none!important}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-burst input{width:15px;height:15px}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-toolbar.camera-ios{
+ flex:0 0 116px!important;width:116px!important;min-width:116px!important;
+ max-width:116px!important;min-height:0!important;height:100%!important;
+ padding:5px 4px!important;gap:4px!important;justify-content:center!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-status{
+ gap:2px!important;min-height:0!important;flex:0 0 auto!important;
+ line-height:1.08!important;font-size:9px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-utilities{
+ flex:0 0 auto!important;width:100%;gap:3px;min-height:30px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-utilities .camera-icon{
+ width:30px!important;height:30px!important;min-width:30px!important;min-height:30px!important;
+ flex:0 0 30px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-shutter-row{
+ width:100%!important;grid-template-columns:1fr 1fr!important;
+ grid-template-rows:66px 36px!important;gap:3px!important;
+ min-height:105px!important;max-height:110px!important;
+ align-content:center!important;justify-content:stretch!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios #shutterButton{
+ grid-column:1/-1!important;grid-row:1!important;width:64px!important;height:64px!important;
+ min-width:64px!important;min-height:64px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios #shutterButton span{
+ width:46px!important;height:46px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios #cameraLibrary{
+ grid-column:1!important;grid-row:2!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios #flipCamera{
+ grid-column:2!important;grid-row:2!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-icon{
+ width:33px!important;height:33px!important;min-width:33px!important;min-height:33px!important;
+ max-width:33px!important;flex:0 0 33px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes{
+ gap:8px!important;flex:0 0 24px!important;font-size:10px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes button,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes span{
+ font-size:10px!important;padding:2px 4px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-burst{
+ gap:4px!important;flex:0 0 auto!important;min-height:16px!important
+}
+/* Video: center record/stop on exactly the same 3-column track. */
+.video-studio .video-ios-controls{
+ display:flex;align-items:center;justify-content:center;flex-direction:column;
+ gap:6px;min-width:0;padding:7px!important
+}
+.video-studio .video-ios-controls .video-control-header{
+ flex:0 0 auto;flex-direction:row;gap:8px;width:100%;justify-content:center
+}
+.video-studio .video-ios-controls .video-ios-utilities{
+ display:flex;align-items:center;justify-content:center;gap:12px;
+ width:100%;min-height:34px;flex:0 0 34px
+}
+.video-studio .video-ios-controls .video-icon{
+ display:inline-flex;align-items:center;justify-content:center;
+ width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;
+ max-width:38px!important;flex:0 0 38px!important;
+ background:#283f58!important;color:#fff!important;
+ border:1px solid #50667d!important;border-radius:50%!important;
+ font-size:0!important;padding:0!important
+}
+.video-studio .video-ios-controls .video-icon svg{width:20px;height:20px;pointer-events:none}
+.video-studio .video-ios-controls .video-ios-utilities .video-icon{
+ width:32px!important;height:32px!important;min-width:32px!important;min-height:32px!important;
+ flex-basis:32px!important
+}
+.video-studio .video-ios-controls .video-ios-utilities .video-icon svg{width:17px;height:17px}
+.video-studio .video-ios-controls .video-ios-shutter-row{
+ display:grid!important;grid-template-columns:minmax(0,1fr) 70px minmax(0,1fr)!important;
+ grid-template-rows:70px!important;align-items:center!important;justify-items:center!important;
+ gap:0!important;justify-content:stretch!important;
+ width:100%!important;flex:0 0 auto!important;min-height:70px!important;padding:0!important
+}
+.video-studio .video-ios-controls #videoFileShortcut{grid-column:1;grid-row:1}
+.video-studio .video-ios-controls #videoRecord,
+.video-studio .video-ios-controls #videoStop{
+ grid-column:2!important;grid-row:1!important;justify-self:center!important;
+ width:66px!important;height:66px!important;min-width:66px!important;min-height:66px!important;
+ border:3px solid #fff!important;border-radius:50%!important;
+ background:#202a34!important;display:grid;place-items:center;padding:5px!important;
+ box-shadow:0 2px 8px #0006;box-sizing:border-box
+}
+.video-studio .video-ios-controls #videoRecord[hidden],.video-studio .video-ios-controls #videoStop[hidden]{display:none!important}
+.video-studio .video-ios-controls #videoRecord .video-record-symbol{
+ width:49px;height:49px;border-radius:50%;background:#ee4056;display:block
+}
+.video-studio .video-ios-controls #videoStop .video-stop-symbol{
+ width:24px;height:24px;border-radius:5px;background:#ee4056;display:block
+}
+.video-studio .video-ios-controls .video-button-label{display:none}
+.video-studio .video-ios-controls #videoFlip{grid-column:3;grid-row:1}
+.video-studio .video-ios-controls .video-ios-modes{
+ display:flex;align-items:center;justify-content:center;gap:18px;
+ flex:0 0 23px;min-height:23px;letter-spacing:.07em;font-size:12px;font-weight:900;
+}
+.video-studio .video-ios-controls .video-ios-modes span,.video-studio .video-ios-controls .video-ios-modes button{
+ border:0;background:transparent;color:#c4cede;font:inherit;font-size:12px;
+ padding:3px 6px;min-height:23px
+}
+.video-studio .video-ios-controls .video-ios-modes .is-selected{color:#ffd253;border-bottom:2px solid #ffd253}
+.video-studio.video-file-mode .video-ios-controls .video-ios-shutter-row{
+ grid-template-columns:1fr!important;grid-template-rows:auto!important
+}
+.video-studio.video-file-mode .video-ios-controls #videoRecord{
+ grid-column:1!important;grid-row:1!important;width:auto!important;min-width:160px!important;
+ height:44px!important;min-height:44px!important;border-radius:12px!important;
+ background:#2274fa!important;border:1px solid #448eff!important;padding:8px 12px!important
+}
+.video-studio.video-file-mode .video-ios-controls #videoRecord .video-record-symbol{display:none}
+.video-studio.video-file-mode .video-ios-controls #videoRecord .video-button-label{
+ display:inline!important;color:#fff;font-size:12px
+}
+.video-studio.video-file-mode .video-ios-controls #videoFileShortcut{display:none!important}
+.video-studio.video-file-mode .video-ios-controls #videoStop{
+ grid-column:1!important;grid-row:1!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls{
+ flex:0 0 116px!important;width:116px!important;min-width:116px!important;
+ max-width:116px!important;gap:4px!important;padding:5px 4px!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-ios-utilities{
+ flex:0 0 33px!important;gap:4px;min-height:32px!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-ios-shutter-row{
+ grid-template-columns:1fr 1fr!important;grid-template-rows:64px 35px!important;
+ gap:3px!important;min-height:102px!important;align-content:center!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls #videoRecord,
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls #videoStop{
+ grid-column:1/-1!important;grid-row:1!important;width:62px!important;height:62px!important;
+ min-width:62px!important;min-height:62px!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls #videoFileShortcut{
+ grid-column:1!important;grid-row:2!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls #videoFlip{
+ grid-column:2!important;grid-row:2!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-icon{
+ width:32px!important;height:32px!important;min-width:32px!important;min-height:32px!important;
+ max-width:32px!important;flex:0 0 32px!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-ios-modes{
+ gap:8px!important;font-size:10px!important;flex:0 0 23px!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-ios-modes button,
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-ios-modes span{
+ font-size:10px!important;padding:2px 4px!important
+}
+@media(max-width:420px) and (orientation:portrait){
+ body.hnl-camera-live .camera-area.hnl-capture-screen:not(.hnl-landscape-dock) .camera-ios .camera-utilities{gap:9px}
+ .media-combined-actions .media-select,.media-combined-actions .media-capture{min-height:50px}
+ .media-combined-actions strong{font-size:11px}
+}
+
+
+/* Visibility from JS must take precedence over icon display flex. */
+.video-studio .video-ios-controls .video-icon[hidden],
+.video-studio .video-ios-controls button[hidden],
+.video-studio .video-ios-controls .video-mode-tip[hidden],
+.video-studio .video-ios-controls #videoElapsed[hidden]{display:none!important}
+
+
+/* HNLMark v2.1.3 — Option A: compact camera controls in a restrained
+   iPhone-inspired layout. The photo/video canvas gets remaining screen area. */
+body.hnl-camera-live .camera-area.hnl-capture-screen:not(.hnl-landscape-dock) .camera-toolbar.camera-ios{
+ box-sizing:border-box!important;position:relative!important;inset:auto!important;
+ flex:0 0 168px!important;width:100%!important;height:168px!important;
+ min-height:0!important;max-height:168px!important;padding:3px 10px 5px!important;
+ gap:2px!important;justify-content:space-between!important;
+ border-radius:12px!important;background:#13263a!important;
+ overflow:hidden!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-status{
+ height:17px!important;min-height:17px!important;flex:0 0 17px!important;
+ font-size:10px!important;padding:0!important;margin:0!important;
+ justify-content:center!important;gap:5px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-utilities{
+ height:29px!important;min-height:29px!important;flex:0 0 29px!important;
+ gap:9px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-utilities .camera-icon{
+ width:29px!important;height:29px!important;min-width:29px!important;min-height:29px!important;
+ flex-basis:29px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-shutter-row{
+ grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr)!important;
+ grid-template-rows:64px!important;min-height:64px!important;height:64px!important;
+ flex:0 0 64px!important;gap:0!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #shutterButton{
+ width:62px!important;height:62px!important;min-width:62px!important;min-height:62px!important;
+ padding:4px!important;grid-column:2!important;grid-row:1!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #shutterButton span{
+ width:45px!important;height:45px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #cameraLibrary,
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #flipCamera{
+ width:34px!important;height:34px!important;min-width:34px!important;min-height:34px!important;
+ flex-basis:34px!important;max-width:34px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes{
+ min-height:21px!important;height:21px!important;flex:0 0 21px!important;
+ gap:13px!important;font-size:11px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes span,
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes button{
+ font-size:11px!important;min-height:19px!important;padding:1px 6px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-burst{
+ height:15px!important;min-height:15px!important;flex:0 0 15px!important;
+ justify-content:center!important;font-size:10px!important;padding:0!important;margin:0!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-burst input{width:14px!important;height:14px!important}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-orientation{
+ font-size:9px!important;padding:2px 6px!important
+}
+@media(max-width:430px){
+ body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-status>span:nth-child(2){display:none!important}
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-toolbar.camera-ios{
+ flex:0 0 108px!important;width:108px!important;min-width:108px!important;
+ max-width:108px!important;height:100%!important;max-height:none!important;
+ padding:4px 3px!important;gap:2px!important;justify-content:center!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-status{
+ height:auto!important;min-height:0!important;flex:0 0 auto!important;
+ flex-wrap:wrap!important;font-size:8px!important;gap:2px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-utilities{
+ height:28px!important;min-height:28px!important;flex:0 0 28px!important;gap:2px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-shutter-row{
+ grid-template-columns:1fr 1fr!important;grid-template-rows:60px 32px!important;
+ min-height:95px!important;height:95px!important;max-height:95px!important;
+ flex:0 0 95px!important;gap:2px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios #shutterButton{
+ grid-column:1/-1!important;grid-row:1!important;
+ width:58px!important;height:58px!important;min-width:58px!important;min-height:58px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios #shutterButton span{
+ width:42px!important;height:42px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes{
+ min-height:20px!important;flex:0 0 20px!important;gap:6px!important
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-burst{
+ height:auto!important;min-height:14px!important;flex:0 0 auto!important;font-size:9px!important
+}
+/* Video uses the same centered primary action, with red only for recording. */
+body.hnl-video-live #videoStudio.video-open:not(.video-landscape) .video-ios-controls{
+ box-sizing:border-box!important;flex:0 0 156px!important;height:156px!important;
+ width:100%!important;padding:4px 9px!important;gap:2px!important;
+ background:#13263a;border-radius:12px
+}
+.video-studio .video-ios-controls .video-control-header{min-height:15px!important;flex:0 0 15px!important}
+.video-studio .video-ios-controls .video-ios-utilities{min-height:27px!important;flex:0 0 27px!important;gap:8px!important}
+.video-studio .video-ios-controls .video-ios-utilities .video-icon{
+ width:29px!important;height:29px!important;min-width:29px!important;min-height:29px!important;
+ flex-basis:29px!important
+}
+.video-studio .video-ios-controls .video-ios-shutter-row{
+ grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr)!important;
+ grid-template-rows:64px!important;min-height:64px!important;flex:0 0 64px!important
+}
+.video-studio.video-camera-mode .video-ios-controls #videoRecord,
+.video-studio.video-camera-mode .video-ios-controls #videoStop{
+ width:62px!important;height:62px!important;min-width:62px!important;min-height:62px!important;
+ grid-column:2!important;grid-row:1!important
+}
+.video-studio.video-camera-mode .video-ios-controls #videoRecord .video-record-symbol{width:45px!important;height:45px!important}
+.video-studio .video-ios-controls .video-ios-modes{min-height:21px!important;flex:0 0 21px!important;gap:13px!important}
+.video-studio .video-ios-controls .video-ios-modes span,
+.video-studio .video-ios-controls .video-ios-modes button{font-size:11px!important;padding:1px 6px!important;min-height:20px!important}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls{
+ width:108px!important;min-width:108px!important;max-width:108px!important;flex:0 0 108px!important;
+ padding:4px 3px!important;gap:3px!important;justify-content:center!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls .video-ios-shutter-row{
+ grid-template-columns:1fr 1fr!important;grid-template-rows:60px 32px!important;
+ min-height:95px!important;flex:0 0 95px!important
+}
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls #videoRecord,
+body.hnl-video-live #videoStudio.video-open.video-landscape .video-ios-controls #videoStop{
+ grid-column:1/-1!important;grid-row:1!important;width:58px!important;height:58px!important;
+ min-width:58px!important;min-height:58px!important
+}
+.video-studio.video-file-mode .video-ios-controls #videoRecord{
+ grid-template-columns:none!important;min-width:150px!important;width:auto!important;
+ height:42px!important;min-height:42px!important;border-radius:12px!important
+}
+.video-studio.video-file-mode .video-ios-controls .video-ios-shutter-row{
+ grid-template-columns:1fr!important;grid-template-rows:auto!important;min-height:50px!important
+}
+.video-studio .video-ios-controls .video-icon[hidden],
+.video-studio .video-ios-controls button[hidden],
+body.hnl-camera-live .camera-area .camera-toolbar[hidden],
+body.hnl-camera-live .camera-area .camera-review[hidden]{display:none!important}
+
+
+/* v2.2 - extra stamp looks, precise aspect-crop and output quality controls */
+.crop-ratio-options{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:8px;margin:7px 0}
+.crop-ratio-options .field{margin:0!important;min-width:0}
+.crop-ratio-options #cropCenter{white-space:nowrap;min-height:40px;padding:8px 11px;border-radius:10px;font-size:12px}
+.image-quality-presets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:6px 0 3px}
+.image-quality-presets button{background:#f3f7fc;color:#365b78;border:1px solid #c6d8e8;border-radius:9px;min-height:35px;padding:5px 8px;font-size:11px;font-weight:700;cursor:pointer}
+.image-quality-presets button.selected{background:#e6f0ff;border-color:#2575f1;color:#1e61bf;box-shadow:0 0 0 1px #2575f133 inset}
+.video-quality-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;background:#f5f8fc;padding:10px;margin:8px 0;border:1px solid #dbe5f1;border-radius:12px}
+.video-quality-panel .field{min-width:0;margin:0!important}
+.video-quality-panel .field:last-child{grid-column:1/-1}
+.video-quality-panel label{font-size:11px;line-height:1.4}
+.video-quality-panel select{width:100%;min-width:0;min-height:35px;font-size:12px}
+.video-quality-panel input[type=range]{width:100%}
+.video-quality-panel output{font-weight:750;color:#235ba2}
+.preset-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.preset-grid .preset{min-width:0}
+@media(min-width:750px){.preset-grid{grid-template-columns:repeat(5,minmax(0,1fr))}.video-quality-panel{grid-template-columns:repeat(3,minmax(0,1fr))}.video-quality-panel .field:last-child{grid-column:1}}
+@media(max-width:360px){.crop-ratio-options{grid-template-columns:minmax(0,1fr)}.crop-ratio-options #cropCenter{width:100%}}
+
+
+/* Live Video quick settings: compact gear, rotated together with the dock. */
+.video-settings-button{
+ display:inline-flex;align-items:center;justify-content:center;
+ flex:0 0 27px;width:27px;height:27px;border-radius:50%;
+ border:1px solid #5b6d83;background:#29435f;color:white;padding:3px;cursor:pointer
+}
+.video-settings-button[hidden]{display:none!important}
+.video-settings-button svg{width:16px;height:16px}
+#videoStudio.video-open{isolation:isolate}
+#videoStudio.video-open.video-settings-open .video-quality-panel{
+ position:absolute!important;inset:8px 8px auto 8px;z-index:50;
+ display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));
+ width:auto!important;max-height:calc(100% - 16px);overflow:auto;
+ background:#edf4fc;border:2px solid #578ce8;
+ padding:12px;box-shadow:0 12px 40px #0009;border-radius:12px
+}
+#videoStudio.video-open.video-settings-open .video-quality-panel:after{
+ content:'Chọn chất lượng rồi nhấn lại biểu tượng bánh răng để đóng';
+ grid-column:1/-1;color:#334e69;font-size:10px;line-height:1.4
+}
+body.hnl-video-live #videoStudio.video-landscape.video-settings-open .video-quality-panel{
+ grid-template-columns:1fr 1fr;inset:5px 114px 5px 5px;
+ max-height:none;gap:5px;padding:7px
+}
+@media(max-width:430px){
+ #videoStudio.video-open.video-settings-open .video-quality-panel{grid-template-columns:1fr 1fr}
+ #videoStudio.video-open.video-settings-open .video-quality-panel select{font-size:11px}
+}
+
+
+/* v2.2.1 — mode labels and rotation icons: defeat legacy #photoToVideo 18px.
+   Keep the existing yellow active mode and neutral inactive mode. */
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes,
+.video-studio .video-ios-controls .video-ios-modes{
+ display:flex!important;align-items:center!important;justify-content:center!important;
+ gap:12px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > span,
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > button,
+.video-studio .video-ios-controls .video-ios-modes > span,
+.video-studio .video-ios-controls .video-ios-modes > button{
+ box-sizing:border-box!important;display:inline-flex!important;
+ align-items:center!important;justify-content:center!important;
+ flex:0 0 64px!important;width:64px!important;min-width:64px!important;max-width:64px!important;
+ height:22px!important;min-height:22px!important;max-height:22px!important;
+ margin:0!important;padding:0!important;border-radius:0!important;
+ font-family:Inter,"Segoe UI",Arial,sans-serif!important;
+ font-size:12px!important;font-weight:800!important;line-height:1!important;
+ letter-spacing:.04em!important;text-align:center!important;text-transform:none!important;
+ white-space:nowrap!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes #photoToVideo,
+.video-studio .video-ios-controls .video-ios-modes #videoPhotoMode{
+ /* Both inactive buttons must match active labels, not legacy button sizes. */
+ font-size:12px!important;width:64px!important;min-width:64px!important;max-width:64px!important;
+ flex:0 0 64px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > .is-selected,
+.video-studio .video-ios-controls .video-ios-modes > .is-selected{
+ color:#ffd253!important;border-bottom:2px solid #ffd253!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios .camera-ios-modes > :not(.is-selected),
+.video-studio .video-ios-controls .video-ios-modes > :not(.is-selected){
+ color:#c4cede!important;border-bottom:2px solid transparent!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #rotateCameraOverlay,
+.video-studio .video-ios-controls #videoRotate{
+ display:inline-flex!important;align-items:center!important;justify-content:center!important;
+ padding:0!important;transform:none!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #rotateCameraOverlay svg,
+.video-studio .video-ios-controls #videoRotate svg{
+ display:block!important;flex:0 0 18px!important;width:18px!important;height:18px!important;
+ margin:0!important;transform:none!important;stroke-linecap:round;stroke-linejoin:round;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen .camera-ios #rotateCameraOverlay{
+ /* Old .camera-rotate mobile rule gave the 90-degree icon 100% flex-basis. */
+ flex:0 0 29px!important;width:29px!important;min-width:29px!important;
+ height:29px!important;min-height:29px!important;max-width:29px!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes > span,
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes > button,
+body.hnl-video-live #videoStudio.video-landscape .video-ios-controls .video-ios-modes > span,
+body.hnl-video-live #videoStudio.video-landscape .video-ios-controls .video-ios-modes > button{
+ flex:0 0 45px!important;width:45px!important;min-width:45px!important;max-width:45px!important;
+ font-size:10px!important;letter-spacing:0!important;
+}
+body.hnl-camera-live .camera-area.hnl-capture-screen.hnl-landscape-dock .camera-ios .camera-ios-modes #photoToVideo,
+body.hnl-video-live #videoStudio.video-landscape .video-ios-controls .video-ios-modes #videoPhotoMode{
+ flex:0 0 45px!important;width:45px!important;min-width:45px!important;max-width:45px!important;
+ font-size:10px!important;
+}
+
+/* 2.5.8: optional independent stamp gallery; compact on narrow Android screens. */
+.preset-extra{margin-top:10px;border:1px solid #dbe5f1;border-radius:12px;overflow:hidden;background:#f8fbff}
+.preset-extra>summary{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;list-style:none;color:#23456b;user-select:none}
+.preset-extra>summary::-webkit-details-marker{display:none}
+.preset-extra>summary b{display:block;font-size:12px}
+.preset-extra>summary small{display:block;margin-top:3px;font-size:10px;color:#7188a0}
+.preset-more-count{border:1px solid #c2d8ed;border-radius:99px;padding:4px 8px;font-size:11px;font-weight:800;flex-shrink:0;background:#fff}
+.preset-extra[open] .preset-more-count{background:#eaf4ff;color:#1b60a6}
+.preset-new-grid{padding:9px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.preset-new{min-width:0;text-align:center}
+.preset-new .preset-art{height:67px;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:4px;padding:8px;text-align:left}
+.preset-new .preset-art b{font-family:Inter,Arial,sans-serif;font-size:12px;line-height:1.2;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.preset-new .preset-art i{font-size:9px;line-height:1.2;opacity:.95}
+.preset-new .template-log{background:linear-gradient(125deg,#172e44,#415c75);border-left:5px solid #ffc84d}
+.preset-new .template-inspection{background:#f5fbf5;color:#1c6050;border:2px solid #67aa8e}
+.preset-new .template-inspection i{color:#2c7760}
+.preset-new .template-shift{background:#f8e9c5;color:#715018;border-left:7px solid #d6a342}
+.preset-new .template-shift i{color:#8d662b}
+.preset-new .template-geo{background:linear-gradient(135deg,#003e55,#17798c);color:#fff}
+.preset-new .template-survey{background:#f4f7f9;color:#204a5c;border:1px dashed #2c8d98}
+.preset-new .template-survey i{color:#406c7b}
+.preset-new .template-blueprint{background:#134c8a;color:#fff;border:2px solid #6cc3ee}
+.preset-new .template-strip{background:linear-gradient(#475361 51%,#161c24 51%);color:#fff}
+.preset-new .template-memory{background:#fcf6e7;color:#85522f;border:2px solid #e5cda8}
+.preset-new .template-memory i{color:#92673b}
+.preset-new .template-led{background:#121d21;color:#9cf9a2;border:2px solid #365747}
+.preset-new .template-led b{font-family:Consolas,monospace;font-size:17px}
+.preset-new .template-journey{background:linear-gradient(125deg,#d7ede9,#9fcbc5);color:#18534f}
+.preset-new .template-journey i{color:#246d61}
+.preset-new .template-corner{background:#eff5fc;color:#1a416b;border-left:2px solid #d7ad40;border-bottom:2px solid #d7ad40}
+.preset-new .template-corner i{color:#547496}
+.preset-new .template-metadata{background:#222932;color:#c7e7f0;border-top:2px solid #7ab7db;font-family:monospace}
+@media(min-width:750px){.preset-new-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:360px){.preset-new .preset-art b{font-size:11px}.preset-new .preset-art i{font-size:8px}}

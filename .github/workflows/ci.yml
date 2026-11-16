@@ -12,11 +12,91 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pillow for exact launcher color fidelity
+        run: python3 -m pip install --disable-pip-version-check pillow==11.1.0
       - name: JavaScript syntax and required assets
         run: |
           node --check app.js
+          node --check video.js
+          node --check orientation.js
+          node --check crop-ratios.js
+          node tests/test_crop_ratios.cjs
+          node tests/test_video_orientation.cjs
           node --check sw.js
+          node --check hnl-studio-ui.js
+          grep -q 'hnl-studio-ui.js' index.html
+          grep -q 'hnl-studio-ui.css' android/scripts/package_web.py
+          grep -q 'video.js?v=2.2.1' index.html
+          test -s video.js
+          test -s orientation.js
+          test -s crop-ratios.js
+          grep -q 'crop-ratios.js?v=2.2.1' index.html
+          grep -q 'orientation.js?v=2.2.1' index.html
           test -s index.html
           test -s style.css
           test -s hnl-logo-192.png
           test -s hnl-logo-512.png
+          python3 tests/test_unified_media.py
+          node --check camera-controls.js
+          node --check android/android-preview-zoom-v259.js
+          python3 tests/test_video_reopen_source_v259.py
+          python3 tests/test_device_media_save_v2510.py
+          python3 tests/test_launcher_color_fidelity_v2511.py
+          python3 tests/test_studio_ui_port.py
+          python3 tests/test_ai_studio_primary.py
+          python3 tests/test_video_micro_preview_test15.py
+          python3 tests/test_studio_test16_contract.py
+          python3 tests/test_studio18_video_import.py
+          python3 tests/test_studio19_ui_video_guard.py
+          python3 tests/test_logo_fonts_test20.py
+          python3 tests/test_document_scanner_source.py
+          python3 tests/test_document_scanner_live_camera.py
+          python3 tests/test_studio21_simple_stamp_storage.py
+          python3 tests/test_studio22_timemark_catalog.py
+          python3 tests/test_studio23_rotation.py
+          python3 tests/test_studio30_preview_sync.py
+          python3 tests/test_studio31_preview_loading.py
+          python3 tests/test_studio32_timemark_geometry.py
+          node --experimental-strip-types tests/test_studio23_orientation_matrix.mjs
+          python3 tests/test_studio33_video_capture_orientation.py
+          python3 tests/test_studio34_android_address.py
+          node --experimental-strip-types tests/test_studio34_location_logic.mjs
+          python3 tests/test_studio35_ui_and_orientation_contract.py
+          node --experimental-strip-types tests/test_studio35_orientation_canvas.mjs
+          python3 tests/test_studio36_scanner_ui.py
+          node --experimental-strip-types tests/test_studio36_scanner_magnifier.mjs
+          node --experimental-strip-types tests/test_studio40_camera_mic_focus.mjs
+          python3 tests/test_studio40_scanner_live_ui.py
+          node --experimental-strip-types tests/test_studio40_scanner_live_edges.mjs
+          python3 tests/test_studio38_scanner_wiring.py
+          node --experimental-strip-types tests/test_studio38_scanner_edits.mjs
+          TZ=Asia/Ho_Chi_Minh node --experimental-strip-types tests/test_studio38_date_audio_media.mjs
+          node --experimental-strip-types tests/test_studio37_camera_geometry.mjs
+          python3 tests/test_studio37_safety.py
+          python3 tests/test_studio39_trash_and_native_capture.py
+          node --experimental-strip-types tests/test_studio39_photo_serial.mjs
+          python3 tests/test_studio42_picker_bridge.py
+          node --experimental-strip-types tests/test_studio42_picker.mjs
+          node --experimental-strip-types tests/test_studio42_backup_mime.mjs
+          node --experimental-strip-types tests/test_studio43_stamp_parity.mjs
+          node --experimental-strip-types tests/test_studio44_timemark_aspect.mjs
+          node --experimental-strip-types tests/test_studio45_classic_camera_stamp.mjs
+          node --experimental-strip-types tests/test_studio46_editor_stamp_parity.mjs
+          node --experimental-strip-types tests/test_studio47_microphone_recovery.mjs
+          node --experimental-strip-types tests/test_studio48_microphone_reset.mjs
+          node --experimental-strip-types tests/test_studio48_quick_stamp.mjs
+          node --experimental-strip-types tests/test_studio49_android_mic_permission.mjs
+          python3 tests/test_studio50_legacy_web_migration.py
+          node --experimental-strip-types tests/test_studio41_timemark_code.mjs
+          python3 tests/test_studio41_timemark_wiring.py
+          node --experimental-strip-types tests/test_studio39_pdf_cccd.mjs
+      - name: AI Studio React TypeScript + Vite build
+        run: |
+          npm install --prefix studio-ui --no-audit --no-fund
+          npm run lint --prefix studio-ui
+          npm run build --prefix studio-ui
+          node tests/test_document_edges.cjs
+          node tests/test_document_edges_realistic.cjs
