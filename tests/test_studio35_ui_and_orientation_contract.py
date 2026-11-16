@@ -9,7 +9,7 @@ backup=(root/'studio-ui/src/services/projectBackup.ts').read_text()
 assert 'onRestoreBackupFile(file)' in library and 'accept=".zip,application/zip"' in library
 assert 'onRestoreBackupJson' not in library
 assert 'Interactive State Switcher' not in library
-assert 'onRetryLoad()' in library and "libraryLoadError ? 'error'" in library
+assert 'onRetryLoad()' in library and "libraryLoadError && items.length===0 ? 'error'" in library
 assert 'const restoreLibraryZip=async(file:File)' in app
 assert 'setMediaItems(old=>[...restored,...old])' in app, 'restore must append, not overwrite'
 assert 'setLibraryLoadError(' in app and 'retryLibraryLoad' in app
