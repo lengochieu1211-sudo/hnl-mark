@@ -450,6 +450,13 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
               Chụp ảnh trực tiếp từ Camera APK hoặc chọn ảnh từ thiết bị để bắt đầu đóng dấu thời gian.
             </p>
           </div>
+          {typeof window !== 'undefined' && window.location.hostname === 'hnlmark.vercel.app' && (
+            <div role="note" className="mx-auto max-w-sm rounded-xl border border-[#E2B74B]/30 p-3 text-left text-xs text-[#CBD5E1] space-y-2">
+              <p><strong className="text-[#E2B74B]">Đã đổi địa chỉ Web?</strong> Ảnh/video lưu trên tên miền cũ vẫn còn ở tên miền cũ, không bị xóa. Trình duyệt không tự chuyển dữ liệu giữa hai địa chỉ.</p>
+              <p>Hãy mở <a href="https://hnl-photomark.vercel.app/" target="_blank" rel="noopener noreferrer" className="underline text-[#E2B74B]">Web HNL Mark cũ</a> trên cùng trình duyệt, vào Thư viện → menu ⋮ → Sao lưu dự án ZIP. Sau đó quay lại đây, chọn Thư viện → menu ⋮ → Khôi phục từ sao lưu.</p>
+              <p className="text-[#94A3B8]">Giữ file ZIP và kiểm đếm ảnh/video trước khi xóa dữ liệu trình duyệt cũ.</p>
+            </div>
+          )}
           <button
             type="button"
             onClick={onOpenCamera}
