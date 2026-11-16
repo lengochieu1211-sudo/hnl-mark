@@ -81,7 +81,7 @@ function convertLegacy(row:LegacyRow):MediaItem|null{
  * the legacy database. Batch is atomic: quota/ID conflicts roll back. */
 export async function migrateLegacyWebLibrary():Promise<number>{
  if(typeof window==='undefined'||!('indexedDB' in window))return 0;
- try{if(localStorage.getItem(DONE_KEY)==='done')return 0;}catch{/* Private mode */}
+ // Recheck on each launch: users may still add photos using the old Web interface.\n // The DONE_KEY is only informational; never let it hide newly added originals.
  const oldPhotos=await readOldPhotos();if(!oldPhotos.length)return 0;
  const previous=await loadMedia();
  const ids=new Set(previous.map(item=>item.id));
