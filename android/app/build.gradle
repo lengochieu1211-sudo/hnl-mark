@@ -10,11 +10,12 @@ android {
         minSdk 29
         targetSdk 35
         versionCode 2547
-        versionName '2.5.47-studio-test'
+        versionName '2.5.47'
     }
     buildTypes {
         debug {
             debuggable true
+            versionNameSuffix '-studio-test'
             // Parallel installation: NEVER uninstall a previous HNLMark
             // while its offline photo library has not been ZIP-backed up.
             applicationIdSuffix '.trial2547'

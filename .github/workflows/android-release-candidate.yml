@@ -4,6 +4,7 @@ on:
     branches: [dev]
     paths:
       - '.github/workflows/android-release-candidate.yml'
+      - 'android/**'
   workflow_dispatch:
 
 permissions:

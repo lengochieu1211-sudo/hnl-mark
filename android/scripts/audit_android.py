@@ -38,7 +38,7 @@ assert "android:exported=\"false\"" in manifest
 assert "fileprovider" in manifest
 assert "share_paths.xml" in str(list((root/"android/app/src/main/res/xml").glob("share_paths.xml")))
 assert "android:screenOrientation=\"fullUser\"" in manifest
-assert "versionCode 2547" in gradle and "versionName '2.5.47-studio-test'" in gradle
+assert "versionCode 2547" in gradle and "versionName '2.5.47'" in gradle and "versionNameSuffix '-studio-test'" in gradle
 assert "androidx.core:core:" in gradle
 for token in ("chooseTab","shareBlob","saveBlob","setDeviceOrientation",
               "apkSharePhoto","apkShareVideo","openGallery","photoInput"):
@@ -92,7 +92,7 @@ assert 'scroll-margin-top:clamp(190px,34dvh,272px)' in ui
 assert 'hnl-android-video-editing' in ui
 assert "function syncPreviewMode()" in bridge
 assert "attributeFilter:['hidden']" in bridge
-assert "version:'2.5.47-studio-test'" in bridge
+assert "version:'2.5.47'" in bridge
 
 # User-reported Android camera + form + launcher regressions (v2.5).
 camera_ui=r("android/android-camera-v25.css")
