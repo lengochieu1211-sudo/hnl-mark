@@ -8,8 +8,9 @@ import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scanne
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
  DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,newScanId,putScan,putScanFolder,
+ splitStoredScanPage,addScanRegionManually,suggestMultipleDocumentEdges,
  removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,reconcileSavedScanCorners,detectDocumentEdges,validCorners,scannerOrientedPreview,
- type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
+ type ScanCorners,type ScanFilter,type ScanSharpness,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';
 import {scanQuadAfterOp,normalizeScanOps,safeScanOps,safeScanColor,DEFAULT_SCAN_COLOR,type ScanImageOp,type ScanColorAdjust} from '../../services/scannerEdits';
 
@@ -31,6 +32,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [editingId,setEditingId]=useState<string|null>(null),[showResult,setShowResult]=useState(false);
  const [cornerDraft,setCornerDraft]=useState<ScanCorners>(emptyCorners());
  const [filterDraft,setFilterDraft]=useState<ScanFilter>('enhance');
+ const [scanSharpnessDraft,setScanSharpnessDraft]=useState<ScanSharpness>('auto');
  const [scanOpsDraft,setScanOpsDraft]=useState<ScanImageOp[]>([]);
  const [scanColorDraft,setScanColorDraft]=useState<ScanColorAdjust>({...DEFAULT_SCAN_COLOR});
  const [scanDocumentType,setScanDocumentType]=useState<ScanDocumentType>('auto');
@@ -45,10 +47,13 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  // Use an actual in-app MediaStream, kept open across continuous page captures.
  const [scanCameraOpen,setScanCameraOpen]=useState(false);
  const [scanMode,setScanMode]=useState<'single'|'continuous'>('continuous');
+ const [scanSplitMode,setScanSplitMode]=useState<'one'|'multiple'>('one');
  const [cameraFacing,setCameraFacing]=useState<'environment'|'user'>('environment');
  const [scanCameraReady,setScanCameraReady]=useState(false);
  const [scanCameraError,setScanCameraError]=useState('');
  const [scanCameraBusy,setScanCameraBusy]=useState(false);
+ const [scanPendingCount,setScanPendingCount]=useState(0);
+ const [scanQueueError,setScanQueueError]=useState('');
  const [scanCameraNotice,setScanCameraNotice]=useState('');
  const [scanZoom,setScanZoom]=useState(1),[scanZoomMax,setScanZoomMax]=useState(4),[scanNativeZoom,setScanNativeZoom]=useState(false);
  const [scanExposure,setScanExposure]=useState(0),[scanNativeExposure,setScanNativeExposure]=useState(false);
@@ -61,6 +66,13 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const scanSessionIdsRef=useRef<string[]>([]);
  const scanVideoRef=useRef<HTMLVideoElement>(null),scanStreamRef=useRef<MediaStream|null>(null);
  const scanCaptureLock=useRef(false);
+ const scanCaptureCounter=useRef(0),scanCaptureSessionSerial=useRef(0);
+ // Queue at most three raw camera snapshots; JPEG encoding / IDB writing can
+ // happen after shutter release without keeping the user's button blocked.
+ type ScanPendingFrame={canvas:HTMLCanvasElement;id:string;time:number;folder:string;
+  kind:ScanDocumentType;live:ScanCorners|null;mode:'single'|'continuous';split:'one'|'multiple';name:string;sessionSerial:number};
+ const scanPendingFrames=useRef<ScanPendingFrame[]>([]),scanSavingRef=useRef(false);
+ const scanFinishRequestedRef=useRef(false),scanSessionSavedPages=useRef<ScanPage[]>([]);
  const scanAutoDetectQueue=useRef<Promise<void>>(Promise.resolve());
  const scanDirtyDrafts=useRef<Set<string>>(new Set());
  const scanLiveSnapshotRef=useRef<{corners:ScanCorners;at:number;width:number;height:number;zoom:number;facing:string}|null>(null);
@@ -271,7 +283,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    const created:ScanPage[]=[];
    for(const file of list){if(!file.type.startsWith('image/'))continue;if(file.size>35*1024*1024)throw Error('Ảnh '+file.name+' vượt giới hạn 35 MB');
     const p:ScanPage={id:newScanId(),folderId:currentFolder==='*'?'':currentFolder,name:fileStem(file.name),original:file,
-      corners:emptyCorners(),filter:'enhance',documentType:scanDocumentType,detectionConfidence:'manual',createdAt:Date.now(),order:Date.now()+created.length};
+      corners:emptyCorners(),filter:'enhance',sharpness:'auto',documentType:scanDocumentType,detectionConfidence:'manual',createdAt:Date.now(),order:Date.now()+created.length};
     // Commit unmodified source FIRST; a slow or failed detector cannot lose a picked photo.
     await putScan(p);
     let updated=p;
@@ -283,17 +295,38 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    }
    if(!created.length)throw Error('Không có ảnh JPEG/PNG/WebP hợp lệ để quét');
    setPages(prev=>[...prev,...created]);setSelection(created.map(p=>p.id));setEditingId(created[0].id);
-   setCornerDraft(created[0].corners.map(p=>({...p})) as ScanCorners);setFilterDraft(created[0].filter);setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
+   setCornerDraft(created[0].corners.map(p=>({...p})) as ScanCorners);setFilterDraft(created[0].filter);setScanSharpnessDraft(created[0].sharpness||'off');setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
    setNotice(`Đã giữ ${created.length} ảnh gốc trong ứng dụng. Kéo 4 điểm để chỉnh mép giấy.`);
   });
  };
  /** The shutter is released after committing the original, not after expensive
   * JPEG decoding and edge detection. Queue fallback analysis separately so
   * continuous scanning remains responsive and page edits are never replaced. */
- const queueScanEdgeEstimate=(page:ScanPage)=>{
+ const queueScanEdgeEstimate=(page:ScanPage,splitMode:'one'|'multiple'='one',sessionSerial=scanCaptureSessionSerial.current)=>{
   scanAutoDetectQueue.current=scanAutoDetectQueue.current.catch(()=>{}).then(async()=>{
    // Give the next camera frame and user controls time to paint first.
    await new Promise<void>(resolve=>window.setTimeout(resolve,100));
+   if(splitMode==='multiple'){
+    const proposed=await suggestMultipleDocumentEdges(page.original,page.documentType);
+    if(proposed.length>=2&&!scanDirtyDrafts.current.has(page.id)){
+     const regions=await splitStoredScanPage(page.id,page.corners,proposed.map(p=>p.corners),
+      ()=>!scanDirtyDrafts.current.has(page.id));
+     if(regions.length>=2){
+      setPages(prev=>[...prev.filter(p=>p.id!==page.id),...regions]);
+      if(scanCaptureSessionSerial.current===sessionSerial){
+       scanSessionIdsRef.current.push(...regions.slice(1).map(p=>p.id));
+       setScanSessionIds([...scanSessionIdsRef.current]);
+      }
+      setSelection(prev=>[...new Set([...prev,...regions.map(p=>p.id)])]);
+      setScanCameraNotice(`Đã tách ${regions.length} tài liệu từ một ảnh gốc · kiểm tra mép từng tài liệu`);
+      if(scannerEditingIdRef.current===page.id){
+       setCornerDraft(prev=>prev.every((c,i)=>Math.hypot(c.x-page.corners[i].x,c.y-page.corners[i].y)<1e-6)
+        ?regions[0].corners.map(c=>({...c})) as ScanCorners:prev);
+      }
+      return;
+     }
+    }
+   }
    const detected=await reconcileSavedScanCorners(page.original,page.detectionConfidence==='estimated'?page.corners:null,page.documentType);
    if(!detected||scanDirtyDrafts.current.has(page.id))return;
    // A user moving a handle has priority over an in-flight estimate.
@@ -312,9 +345,58 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  };
  /** Capture one immutable source JPEG, persist it, and only then detect edges.
   * A failed edge detector must never lose the newly photographed page. */
+ /** Save queued camera snapshots in order. A frame remains in memory on
+  * storage failure so the user can retry; never display "saved" prematurely. */
+ const flushCapturedScanQueue=async()=>{
+  if(scanSavingRef.current)return;
+  scanSavingRef.current=true;
+  setScanQueueError('');
+  try{
+   while(scanPendingFrames.current.length){
+    const frame=scanPendingFrames.current[0];
+    try{
+     const blob=await new Promise<Blob>((resolve,reject)=>frame.canvas.toBlob(
+      b=>b&&b.size?resolve(b):reject(Error('Không thể tạo JPEG từ camera')),'image/jpeg',.94));
+     const page:ScanPage={id:frame.id,folderId:frame.folder,name:frame.name,
+      original:blob,corners:frame.live||emptyCorners(),filter:'enhance',sharpness:'auto',
+      documentType:frame.kind,detectionConfidence:frame.live?'estimated':'manual',
+      createdAt:frame.time,order:frame.time};
+     await putScan(page);
+     scanPendingFrames.current.shift();
+     setScanPendingCount(scanPendingFrames.current.length);
+     scanSessionSavedPages.current.push(page);
+     scanSessionIdsRef.current.push(page.id);
+     setScanSessionIds([...scanSessionIdsRef.current]);
+     setPages(prev=>[...prev,page]);
+     setScanCameraNotice(`Đã lưu ${scanSessionIdsRef.current.length} trang gốc · ${scanPendingFrames.current.length} đang lưu`);
+     queueScanEdgeEstimate(page,frame.split,frame.sessionSerial); // Never wait for detection in shutter.
+     if(frame.mode==='single'){
+      setScanCameraOpen(false);setSelection([page.id]);setEditingId(page.id);
+      scannerEditingIdRef.current=page.id;
+      setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);
+      setFilterDraft(page.filter);setScanSharpnessDraft(page.sharpness||'off');
+      setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
+      setNotice('Ảnh gốc đã lưu. Kiểm tra bốn góc rồi làm phẳng khi cần.');
+     }
+    }catch(error){
+     const message='Chưa lưu được ảnh đang chờ. Ảnh vẫn giữ trong hàng đợi; bấm Thử lưu lại: '+String(error);
+     setScanQueueError(message);setScanCameraError(message);
+     break; // Retain the original uncompressed canvas for a retry.
+    }
+   }
+  }finally{
+   scanSavingRef.current=false;
+   if(!scanPendingFrames.current.length&&scanFinishRequestedRef.current){
+    scanFinishRequestedRef.current=false;
+    finishScanCamera();
+   }
+  }
+ };
  const captureScanFrame=async()=>{
-  if(scanCaptureLock.current||!scanCameraReady)return;
-  if(scanSessionIdsRef.current.length>=30){setScanCameraError('Một lượt tối đa 30 trang. Bấm Xong để chỉnh và lưu, rồi quét tiếp.');return;}
+  if(scanCaptureLock.current||!scanCameraReady||scanQueueError)return;
+  if(scanPendingFrames.current.length>=3){setScanCameraNotice('Bộ nhớ chụp đang đầy (3 ảnh); chờ lưu xong để chụp tiếp.');return;}
+  if(scanCaptureCounter.current>=30){setScanCameraError('Tối đa 30 lượt chụp. Bấm Xong để xử lý, rồi quét tiếp.');return;}
+  if(scanMode==='single'&&scanPendingFrames.current.length)return;
   const video=scanVideoRef.current;
   if(!video||video.readyState<2||!video.videoWidth||!video.videoHeight){
    setScanCameraError('Khung camera chưa có hình. Hãy thử chụp lại.');return;
@@ -322,58 +404,51 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   scanCaptureLock.current=true;setScanCameraBusy(true);setScanCameraError('');
   try{
    const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
-   const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không thể tạo khung ảnh scan');
+   const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không thể lấy khung ảnh camera');
    const zoom=scanZoomNativeRef.current?1:scanZoomRef.current;
    const srcW=video.videoWidth/zoom,srcH=video.videoHeight/zoom;
    if(!scanExposureNativeRef.current)ctx.filter=`brightness(${Math.max(.35,1+scanExposureRef.current*.2)})`;
    ctx.drawImage(video,(video.videoWidth-srcW)/2,(video.videoHeight-srcH)/2,srcW,srcH,0,0,canvas.width,canvas.height);
    ctx.filter='none';
-   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(
-    b=>b&&b.size?resolve(b):reject(Error('Camera không xuất được ảnh JPEG')),'image/jpeg',.94));
-   const id=newScanId(),date=Date.now();
    const snapshot=scanLiveSnapshotRef.current;
    const live=snapshot&&performance.now()-snapshot.at<1600&&
     snapshot.width===video.videoWidth&&snapshot.height===video.videoHeight&&
     Math.abs(snapshot.zoom-scanZoomRef.current)<.01&&snapshot.facing===cameraFacing&&validCorners(snapshot.corners)
     ?snapshot.corners.map(p=>({...p})) as ScanCorners:null;
-   const page:ScanPage={id,folderId:currentFolder==='*'?'':currentFolder,
-    name:`Scan_${new Date(date).toISOString().replace(/[:.]/g,'-')}_${scanSessionIdsRef.current.length+1}`,
-    original:blob,corners:live||emptyCorners(),filter:'enhance',documentType:scanDocumentType,
-    detectionConfidence:live?'estimated':'manual',createdAt:date,order:date+scanSessionIdsRef.current.length};
-   await putScan(page); // Commit untouched JPEG before reporting capture success.
-   scanSessionIdsRef.current.push(id);setScanSessionIds([...scanSessionIdsRef.current]);
-   setPages(prev=>[...prev,page]);setScanCameraNotice(`Đã lưu ${scanSessionIdsRef.current.length} trang gốc`);
-   if(scanMode==='single'){
-    setScanCameraOpen(false);
-    setSelection([id]);setEditingId(id);
-    scannerEditingIdRef.current=id;
-    setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);
-    setFilterDraft(page.filter);setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
-    setNotice('Đã chụp 1 trang. Có thể chỉnh 4 góc rồi lưu bản scan.');
-   }
-   // No extra image processing in the shutter path. Live stable corners are
-   // already in the saved page; otherwise analyze later without blocking.
-   queueScanEdgeEstimate(page); // Always check against saved JPEG, even with live green corners.
-  }catch(error){setScanCameraError('Không lưu được ảnh quét. Chưa xóa dữ liệu cũ: '+String(error));}
+   const date=Date.now(),sequence=++scanCaptureCounter.current;
+   scanPendingFrames.current.push({canvas,id:newScanId(),time:date,
+    name:`Scan_${new Date(date).toISOString().replace(/[:.]/g,'-')}_${sequence}`,
+    folder:currentFolder==='*'?'':currentFolder,kind:scanDocumentType,
+    live,mode:scanMode,split:scanSplitMode,sessionSerial:scanCaptureSessionSerial.current});
+   setScanPendingCount(scanPendingFrames.current.length);
+   setScanCameraNotice(`${scanPendingFrames.current.length} ảnh đang lưu · vẫn có thể chụp tiếp`);
+  }catch(error){setScanCameraError('Không tạo được ảnh quét; chưa thay đổi thư viện: '+String(error));}
   finally{scanCaptureLock.current=false;setScanCameraBusy(false);}
+  if(scanPendingFrames.current.length&&!scanSavingRef.current)void flushCapturedScanQueue();
  };
  const startScanCamera=()=>{
-  if(working)return;
-  scanSessionIdsRef.current=[];setScanSessionIds([]);
+  if(working||scanPendingFrames.current.length)return;
+  scanCaptureSessionSerial.current++;scanCaptureCounter.current=0;scanSessionSavedPages.current=[];scanFinishRequestedRef.current=false;
+  scanSessionIdsRef.current=[];setScanSessionIds([]);setScanPendingCount(0);setScanQueueError('');
   scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');
   setScanCameraNotice('');setScanCameraError('');setScanCameraReady(false);
   setScanMode('continuous');setCameraFacing('environment');setScanCameraOpen(true);
  };
  const finishScanCamera=()=>{
-  if(scanCaptureLock.current)return; // Don't interrupt an IndexedDB write.
+  if(scanCaptureLock.current||scanPendingFrames.current.length||scanSavingRef.current){
+   scanFinishRequestedRef.current=true;
+   setScanCameraNotice(`Đang hoàn tất lưu ${scanPendingFrames.current.length} ảnh trước khi đóng…`);
+   return;
+  }
   const ids=[...scanSessionIdsRef.current];
   setScanCameraOpen(false);
   if(ids.length){
    setSelection(ids);
-   const first=pages.find(p=>p.id===ids[0]);
+   const first=scanSessionSavedPages.current.find(p=>p.id===ids[0])||pages.find(p=>p.id===ids[0]);
    if(first){setEditingId(first.id);setCornerDraft(first.corners.map(p=>({...p})) as ScanCorners);
-    setFilterDraft(first.filter);setScanOpsDraft(safeScanOps(first.transformOps));setScanColorDraft(safeScanColor(first.colorAdjust));setShowResult(false);}
-   setNotice(`Đã lưu ${ids.length} trang gốc. Có thể chỉnh 4 góc từng trang rồi xuất PDF hoặc ảnh.`);
+    setFilterDraft(first.filter);setScanSharpnessDraft(first.sharpness||'off');
+    setScanOpsDraft(safeScanOps(first.transformOps));setScanColorDraft(safeScanColor(first.colorAdjust));setShowResult(false);}
+   setNotice(`Đã lưu ${ids.length} trang gốc. Kiểm tra bốn góc và xuất PDF khi cần.`);
   }
  };
  // After a capture session, show the chosen page rather than leaving the user
@@ -399,7 +474,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setFolders(prev=>prev.filter(p=>p.id!==f.id));setCurrentFolder('');setNotice('Đã xóa thư mục, giữ nguyên tất cả ảnh');
   });
  };
- const editPage=(page:ScanPage)=>{if(working)return;setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setFilterDraft(page.filter);setScanOpsDraft(safeScanOps(page.transformOps));setScanColorDraft(safeScanColor(page.colorAdjust));setShowResult(false);setProblem('');};
+ const editPage=(page:ScanPage)=>{if(working)return;setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setFilterDraft(page.filter);setScanSharpnessDraft(page.sharpness||'off');setScanOpsDraft(safeScanOps(page.transformOps));setScanColorDraft(safeScanColor(page.colorAdjust));setShowResult(false);setProblem('');};
  const transformScan=(op:ScanImageOp)=>{
   if(working||dragPointerId.current!==null)return;
   if(editingId)scanDirtyDrafts.current.add(editingId);
@@ -456,19 +531,45 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  useEffect(()=>{dragPoint.current=null;dragPointerId.current=null;setDragFocus(null);setLensViewport(null);},[editingId,showResult]);
  const applyEdit=async()=>{if(!editing)return;if(!validCorners(cornerDraft)){setProblem('Bốn góc đang giao nhau hoặc quá sát nhau. Hãy kéo lại.');return;}
   await task('Đang làm phẳng và lọc ảnh…',async()=>{const controller=new AbortController();abortProcessing.current=controller;
-   try{const blob=await flattenDocument(editing.original,cornerDraft,filterDraft,controller.signal,{operations:scanOpsDraft,adjustments:scanColorDraft});
-    const next:ScanPage={...editing,processed:blob,corners:cornerDraft,filter:filterDraft,transformOps:[...scanOpsDraft],colorAdjust:{...scanColorDraft},detectionConfidence:'estimated'};await putScan(next);
+   try{const blob=await flattenDocument(editing.original,cornerDraft,filterDraft,controller.signal,{operations:scanOpsDraft,adjustments:scanColorDraft,sharpness:scanSharpnessDraft});
+    const next:ScanPage={...editing,processed:blob,corners:cornerDraft,filter:filterDraft,sharpness:scanSharpnessDraft,transformOps:[...scanOpsDraft],colorAdjust:{...scanColorDraft},detectionConfidence:'estimated'};await putScan(next);
     setPages(prev=>prev.map(p=>p.id===next.id?next:p));setShowResult(true);setNotice('Đã làm phẳng ảnh và lưu bản scan; ảnh gốc giữ nguyên.');
    }finally{abortProcessing.current=null;}
   });
  };
  const getProcessed=async(p:ScanPage):Promise<Blob>=>{
   if(p.processed)return p.processed;
-  const processed=await flattenDocument(p.original,p.corners,p.filter,abortProcessing.current?.signal,{operations:p.transformOps,adjustments:p.colorAdjust});
+  const processed=await flattenDocument(p.original,p.corners,p.filter,abortProcessing.current?.signal,{operations:p.transformOps,adjustments:p.colorAdjust,sharpness:p.sharpness||'off'});
   const next={...p,processed};await putScan(next);
   setPages(old=>old.map(item=>item.id===p.id?next:item));return processed;
  };
- const editingHasUnsavedCorners=!!editing&&(cornerDraft.some((p,i)=>Math.abs(p.x-editing.corners[i].x)>1e-6||Math.abs(p.y-editing.corners[i].y)>1e-6)||filterDraft!==editing.filter||JSON.stringify(scanOpsDraft)!==JSON.stringify(safeScanOps(editing.transformOps))||JSON.stringify(scanColorDraft)!==JSON.stringify(safeScanColor(editing.colorAdjust)));
+ const editingHasUnsavedCorners=!!editing&&(cornerDraft.some((p,i)=>Math.abs(p.x-editing.corners[i].x)>1e-6||Math.abs(p.y-editing.corners[i].y)>1e-6)||filterDraft!==editing.filter||scanSharpnessDraft!==(editing.sharpness||'off')||JSON.stringify(scanOpsDraft)!==JSON.stringify(safeScanOps(editing.transformOps))||JSON.stringify(scanColorDraft)!==JSON.stringify(safeScanColor(editing.colorAdjust)));
+ const splitCurrentPage=async()=>{
+  if(!editing)return;
+  if(editingHasUnsavedCorners){setProblem('Hãy lưu hoặc hoàn tác các góc đang chỉnh trước khi tự tách nhiều vùng.');return;}
+  await task('Đang tìm nhiều tài liệu trong ảnh gốc…',async()=>{
+   const candidates=await suggestMultipleDocumentEdges(editing.original,scanDocumentType);
+   if(candidates.length<2){setNotice('Chưa tìm chắc chắn từ 2 vùng; ảnh gốc được giữ. Dùng “Thêm vùng bằng tay”.');return;}
+   const saved=await splitStoredScanPage(editing.id,editing.corners,candidates.map(p=>p.corners),
+    ()=>!scanDirtyDrafts.current.has(editing.id));
+   if(saved.length<2){setNotice('Trang đã chỉnh hoặc đã tách; không ghi đè. Có thể thêm vùng bằng tay.');return;}
+   setPages(prev=>[...prev.filter(p=>p.id!==editing.id),...saved]);
+   setSelection(prev=>[...new Set([...prev,...saved.map(p=>p.id)])]);
+   setCornerDraft(saved[0].corners.map(p=>({...p})) as ScanCorners);
+   setNotice(`Đã tách ${saved.length} vùng từ một ảnh. Kiểm tra từng góc trước khi xuất.`);
+  });
+ };
+ const addManualScanRegion=async()=>{
+  if(!editing)return;
+  await task('Đang thêm vùng quét thủ công…',async()=>{
+   const added=await addScanRegionManually(editing);
+   setPages(prev=>[...prev,added]);setSelection(prev=>[...new Set([...prev,added.id])]);
+   setEditingId(added.id);setCornerDraft(added.corners.map(p=>({...p})) as ScanCorners);
+   setFilterDraft(added.filter);setScanSharpnessDraft(added.sharpness||'off');
+   setScanOpsDraft(safeScanOps(added.transformOps));setScanColorDraft(safeScanColor(added.colorAdjust));
+   setShowResult(false);setNotice('Đã thêm một vùng từ ảnh gốc. Kéo bốn góc để chọn tài liệu tiếp theo.');
+  });
+ };
  const exportSelected=async(kind:'pdf'|'images')=>{if(!chosen.length)return;
   if(editingHasUnsavedCorners&&chosen.some(p=>p.id===editingId)){
    setProblem('Bốn góc hoặc bộ lọc của ảnh đang chỉnh chưa được lưu. Hãy bấm “Làm phẳng & lưu bản scan” trước khi xuất.');
@@ -552,7 +653,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       <div className="shrink-0 flex items-center justify-between gap-2 px-3 pb-2">
         <button disabled={scanCameraBusy} type="button" aria-label="Đóng camera quét" onClick={finishScanCamera}
           className="min-w-10 min-h-10 grid place-items-center rounded-xl bg-[#17253D] disabled:opacity-50"><X size={19}/></button>
-        <span className="font-semibold text-sm truncate">Quét tài liệu · {scanSessionIds.length} trang</span>
+        <span className="font-semibold text-sm truncate">Quét tài liệu · {scanSessionIds.length} đã lưu{scanPendingCount?` · ${scanPendingCount} đang lưu`:""}</span>
         <button type="button" disabled={scanCameraBusy} aria-label="Đổi camera trước sau" onClick={()=>setCameraFacing(f=>f==='environment'?'user':'environment')}
           className="min-w-10 min-h-10 grid place-items-center rounded-xl bg-[#17253D] disabled:opacity-50"><RotateCcw size={19}/></button>
       </div>
@@ -563,6 +664,13 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
           <option value="auto">Tự động</option><option value="id-card">CCCD / thẻ</option><option value="paper">Giấy A4 / tài liệu</option>
          </select>
         </label>
+      </div>
+      <div className="shrink-0 px-3 pb-2 flex items-center justify-center gap-2">
+        <span className="text-[11px] text-[#AFC0D6]">Trong một ảnh:</span>
+        <button type="button" disabled={scanCaptureLock.current||scanPendingCount>0} onClick={()=>setScanSplitMode('one')}
+         aria-pressed={scanSplitMode==='one'} className={`min-h-9 px-3 rounded-lg text-xs ${scanSplitMode==='one'?'bg-[#E2B74B] text-[#06101E]':'bg-[#14243B]'}`}>1 tài liệu</button>
+        <button type="button" disabled={scanCaptureLock.current||scanPendingCount>0} onClick={()=>setScanSplitMode('multiple')}
+         aria-pressed={scanSplitMode==='multiple'} className={`min-h-9 px-3 rounded-lg text-xs ${scanSplitMode==='multiple'?'bg-[#E2B74B] text-[#06101E]':'bg-[#14243B]'}`}>Nhiều tài liệu</button>
       </div>
       <div className="shrink-0 px-3 pb-3 flex items-center justify-center gap-2">
         <button type="button" disabled={scanCameraBusy} onClick={()=>setScanMode('single')} aria-pressed={scanMode==='single'}
@@ -603,11 +711,13 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         </div>}
       </div>
       <div className="shrink-0 px-4 pt-3 space-y-2">
+        {scanQueueError&&<button type="button" onClick={()=>{setScanQueueError('');setScanCameraError('');void flushCapturedScanQueue();}}
+         className="min-h-10 w-full rounded-lg bg-[#E2B74B] text-[#071121] font-semibold text-xs px-3">Thử lưu lại ảnh đang chờ (không xóa ảnh)</button>}
         <p role="status" className="text-xs text-center text-[#AFC0D6] min-h-5">{scanCameraNotice||(scanMode==='continuous'?'Chụp liên tiếp, mỗi trang được lưu ngay.':'Chụp một trang rồi chỉnh mép giấy.')}</p>
         <div className="flex items-center justify-between gap-4">
           <span className="min-w-[72px] text-xs text-[#E2B74B]">{scanSessionIds.length} trang</span>
           <button type="button" aria-label="Chụp trang tài liệu" onClick={()=>void captureScanFrame()}
-            disabled={scanCameraBusy||!scanCameraReady} className="size-[70px] shrink-0 rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
+            disabled={scanCameraBusy||!scanCameraReady||scanPendingCount>=3||!!scanQueueError} className="size-[70px] shrink-0 rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
             <span className="size-12 rounded-full bg-[#E2B74B]"/>
           </button>
           <button type="button" disabled={scanCameraBusy} onClick={finishScanCamera}
@@ -695,6 +805,14 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       })} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center disabled:opacity-50"><ScanLine size={15}/>Nhận diện mép</button>
        <button onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setCornerDraft(emptyCorners());setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
      <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
+      <p className="text-xs font-semibold">Một ảnh có nhiều CCCD / giấy tờ</p>
+      <div className="grid grid-cols-2 gap-2">
+       <button type="button" disabled={working} onClick={()=>void splitCurrentPage()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Nhận diện & tách nhiều vùng</button>
+       <button type="button" disabled={working} onClick={()=>void addManualScanRegion()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Thêm vùng bằng tay</button>
+      </div>
+      <p className="text-[10px] text-[#94A3B8]">Mỗi vùng tạo một trang riêng để chỉnh góc; ảnh gốc vẫn có thể dùng lại. Nếu máy không nhận đủ vùng, dùng “Thêm vùng bằng tay”.</p>
+     </div>
+     <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
        <p className="text-xs text-[#CBD5E1] font-semibold">Xoay / lật ảnh quét (giữ ảnh gốc)</p>
        <div className="grid grid-cols-4 gap-2">
         <button type="button" disabled={working} onClick={()=>transformScan('ccw')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><RotateCcw size={15}/>Trái 90°</button>
@@ -712,6 +830,15 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
           onChange={e=>updateScanColor(key,Number(e.target.value))} className="flex-1 accent-[#E2B74B] min-w-0"/>
        </label>)}
        <p className="text-[10px] text-[#94A3B8]">Xem trước màu gần đúng. Bản xuất sau khi bấm Làm phẳng & lưu sử dụng cùng các giá trị đã chọn.</p>
+     </div>
+     <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
+       <label className="text-xs flex items-center justify-between gap-2"><span className="font-semibold">Tăng độ nét khi in / xuất PDF</span>
+        <select aria-label="Tăng độ nét ảnh scan" value={scanSharpnessDraft} onChange={e=>{setScanSharpnessDraft(e.target.value as ScanSharpness);setShowResult(false);}}
+          className="min-h-9 rounded-lg border border-white/15 bg-[#14243B] text-white px-2 text-xs">
+          <option value="off">Giữ nét gốc</option><option value="auto">Thông minh · Tự động</option>
+          <option value="text">Rõ nét chữ</option>
+        </select></label>
+       <p className="text-[10px] text-[#94A3B8]">Tăng nét cục bộ trên bản scan xuất, giảm hạt nền, giữ nguyên JPEG gốc. Không thể khôi phục chữ đã nhòe hoặc mất nét trong ảnh ban đầu.</p>
      </div>
      <div className="flex flex-wrap gap-2">{FILTERS.map(f=><button key={f.id} onClick={()=>{setFilterDraft(f.id);setShowResult(false);}} className={`px-3 min-h-9 rounded-lg text-xs border ${filterDraft===f.id?'border-[#E2B74B] text-[#E2B74B] bg-[#E2B74B]/10':'border-white/10 bg-[#14223A]'}`}>{f.name}</button>)}</div>
      <button disabled={working||!validCorners(cornerDraft)} onClick={()=>void applyEdit()} className="min-h-11 w-full rounded-xl bg-[#E2B74B] text-[#071121] font-semibold flex items-center justify-center gap-2 disabled:opacity-40"><Save size={18}/>Làm phẳng & lưu bản scan</button>

@@ -14,13 +14,14 @@ assert 'await video.play()' in scan
 assert 'scanCaptureLock.current' in scan
 assert "'image/jpeg',.94" in scan
 handler=scan.split('const captureScanFrame=async()=>')[1].split('const startScanCamera=')[0]
-assert handler.index('await putScan(page)') < handler.index('queueScanEdgeEstimate(page)')
+saving=scan.split('const flushCapturedScanQueue=async()=>')[1].split('const captureScanFrame=async()=>')[0]
+assert saving.index('await putScan(page)') < saving.index('queueScanEdgeEstimate(page,frame.split,frame.sessionSerial)')
 assert 'await suggestDocumentEdges(' not in handler  # Keep the shutter responsive
 assert 'estimateScanCornersIfUnedited(page.id,page.corners,detected.corners,' in scan
 assert "scanMode==='single'" in scan
 assert "setScanMode('continuous')" in scan
 assert 'Chụp trang tài liệu' in scan and 'Liên tục' in scan and 'Một trang' in scan
-assert 'scanSessionIdsRef.current.push(id)' in scan
+assert 'scanSessionIdsRef.current.push(page.id)' in scan
 assert 'setSelection(ids)' in scan
 assert 'scanStreamRef.current?.getTracks().forEach(track=>track.stop())' in scan
 assert 'Dùng camera hệ thống (dự phòng)' in scan

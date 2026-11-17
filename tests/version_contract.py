@@ -16,7 +16,7 @@ def assert_build_identity():
     release_version=name.group(1).removesuffix('-studio-test')
     assert re.fullmatch(r'\d+\.\d+\.\d+',release_version)
     assert name.group(1).endswith('-studio-test') or "versionNameSuffix '-studio-test'" in gradle
-    # TEST52 deliberately has a distinct debug package so an ephemeral GitHub
+    # TEST53 deliberately has a distinct debug package so an ephemeral GitHub
     # debug keystore can never force users to uninstall TEST51 (offline data).
     # Release applicationId, versionCode and signing remain untouched.
     assert re.fullmatch(r'\.trial\d+', suffix.group(1)),"Test APK must have its own package"

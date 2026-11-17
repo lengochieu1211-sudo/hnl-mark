@@ -5,6 +5,8 @@ import {scanOrientedSize,drawScannerOriented,adjustScanRgb,safeScanOps,safeScanC
 export type ScanPoint = {x:number;y:number};
 export type ScanCorners = [ScanPoint,ScanPoint,ScanPoint,ScanPoint]; // TL, TR, BR, BL
 export type ScanFilter = 'color'|'enhance'|'gray'|'bw'|'paper';
+/** Local enhancement only. Cannot restore details absent from the camera original. */
+export type ScanSharpness = 'off'|'auto'|'text';
 export type ScanPaper = 'A4'|'A5'|'Letter'|'custom';
 export type ScanDocumentType='auto'|'id-card'|'paper';
 export type ScanPage = {
@@ -12,6 +14,7 @@ export type ScanPage = {
   corners:ScanCorners; filter:ScanFilter; order:number; createdAt:number;
   transformOps?:ScanImageOp[]; colorAdjust?:ScanColorAdjust;
   detectionConfidence?:ScanDetection['confidence']; documentType?:ScanDocumentType;
+  sharpness?:ScanSharpness; splitParentId?:string; splitRegionCount?:number;
 };
 export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
@@ -83,6 +86,45 @@ export async function estimateScanCornersIfUnedited(id:string,expected:ScanCorne
 /** Restore every scanned page and folder in ONE IndexedDB transaction. If any
  * image fails to be stored (quota, ID collision, corruption), the transaction
  * rolls back completely and existing user scans remain untouched. */
+/** Turn one saved camera frame into separate editable regions, atomically.
+ * Every region still contains its original (not a destructively cropped JPEG).
+ * A duplicate or stale request never overwrites previously edited pages.
+ * IndexedDB may account for a cloned source blob in each child; cap at four. */
+export async function splitStoredScanPage(id:string,expected:ScanCorners,regions:ScanCorners[],
+ shouldApply:()=>boolean=()=>true):Promise<ScanPage[]>{
+ if(regions.length<2||regions.length>4||regions.some(q=>!validCorners(q)))return [];
+ const db=await database();return new Promise<ScanPage[]>((resolve,reject)=>{
+  const tr=db.transaction('pages','readwrite'),store=tr.objectStore('pages');let created:ScanPage[]=[];
+  tr.oncomplete=()=>{db.close();resolve(created)};
+  tr.onabort=()=>{db.close();reject(tr.error||new Error('Không tách được trọn bộ vùng tài liệu'))};
+  const req=store.get(id);
+  req.onsuccess=()=>{
+   const current=req.result as ScanPage|undefined;
+   if(!shouldApply()||!current||current.processed||current.splitRegionCount||
+    current.corners.some((c,i)=>Math.hypot(c.x-expected[i].x,c.y-expected[i].y)>1e-6))return;
+   const first={...current,corners:regions[0],detectionConfidence:'estimated' as const,splitRegionCount:regions.length};
+   store.put(first);
+   created=[first];
+   for(let n=1;n<regions.length;n++){
+    const child:ScanPage={...current,id:newScanId(),name:`${current.name}_vung_${n+1}`,
+     processed:undefined,corners:regions[n],detectionConfidence:'estimated',splitParentId:id,
+     splitRegionCount:undefined,order:current.order+n*.001};
+    store.add(child);created.push(child);
+   }
+  };
+ });
+}
+
+/** Create one manual additional crop from a still-preserved source image. */
+export async function addScanRegionManually(source:ScanPage):Promise<ScanPage>{
+ const child:ScanPage={...source,id:newScanId(),name:`${source.name}_vung_them`,
+  processed:undefined,corners:DEFAULT_CORNERS.map(p=>({...p})) as ScanCorners,
+  detectionConfidence:'manual',splitParentId:source.splitParentId||source.id,
+  splitRegionCount:undefined,order:source.order+.0005,createdAt:Date.now()};
+ await transact<void>('pages','readwrite',(store,done)=>{store.add(child);done()});
+ return child;
+}
+
 export async function restoreScanBatch(folders:ScanFolder[],pages:ScanPage[]):Promise<void>{
  const db=await database();
  return new Promise<void>((resolve,reject)=>{
@@ -516,6 +558,120 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  return color;
 }
 
+/** Find distinct, spatially separate documents from one photo.
+ * This is intentionally conservative: only isolated well-shaped cyan IDs or
+ * bright neutral paper regions are proposed. Users can add missing regions
+ * by hand; weak guesses must never silently crop or discard the source. */
+export function detectMultipleDocumentEdges(image:ImageData,kind:ScanDocumentType='auto',limit=4):ScanDetection[]{
+ const {width:w,height:h,data}=image;
+ if(w<100||h<100||data.length<w*h*4)return [];
+ const stride=2,cols=Math.floor((w-4)/stride)+1,rows=Math.floor((h-4)/stride)+1;
+ const borderSamples:number[]=[];
+ for(let j=0;j<24;j++){
+  const x=Math.round(j*(w-1)/23),y=Math.round(j*(h-1)/23);
+  for(const [xx,yy] of [[x,2],[x,h-3],[2,y],[w-3,y]]){
+   const k=(yy*w+xx)*4;
+   borderSamples.push(.2126*data[k]+.7152*data[k+1]+.0722*data[k+2]);
+  }
+ }
+ borderSamples.sort((a,b)=>a-b);
+ const borderLum=borderSamples[Math.floor(borderSamples.length*.50)];
+ const masks:{mask:Uint8Array;type:'cool'|'paper'}[]=[];
+ for(const type of (kind==='id-card'?['cool']:kind==='paper'?['paper']:['cool','paper']) as ('cool'|'paper')[]){
+  const mask=new Uint8Array(cols*rows);
+  let count=0;
+  for(let y=2,yy=0;yy<rows;yy++,y+=stride)for(let x=2,xx=0;xx<cols;xx++,x+=stride){
+   const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2],hi=Math.max(r,g,b),lo=Math.min(r,g,b);
+   const cool=(g-r>14&&b-r>0)||(g-r>27&&b-r>-10);
+   const white=(.2126*r+.7152*g+.0722*b>Math.max(168,borderLum+27))&&hi-lo<44;
+   if(type==='cool'?cool:white){mask[yy*cols+xx]=1;count++;}
+  }
+  if(count>75&&count<mask.length*.78)masks.push({mask,type});
+ }
+ const candidates:{quad:ScanCorners;area:number;centroid:ScanPoint;type:string}[]=[];
+ for(const {mask,type} of masks){
+  const close=morphClose(mask,cols,rows),seen=new Uint8Array(close.length);
+  const queue=new Int32Array(close.length);
+  for(let seed=0;seed<close.length;seed++){
+   if(!close[seed]||seen[seed])continue;
+   let front=0,back=0;
+   queue[back++]=seed;seen[seed]=1;
+   const points:PixelPoint[]=[];
+   let left=w,top=h,right=0,bottom=0;
+   while(front<back){
+    const k=queue[front++],cx=k%cols,cy=Math.floor(k/cols);
+    if(mask[k]){const x=2+cx*stride,y=2+cy*stride;
+     points.push({x,y});left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+    }
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+     if(!dx&&!dy)continue;
+     const nx=cx+dx,ny=cy+dy;if(nx<0||nx>=cols||ny<0||ny>=rows)continue;
+     const nk=ny*cols+nx;if(close[nk]&&!seen[nk]){seen[nk]=1;queue[back++]=nk;}
+    }
+   }
+   if(points.length<Math.max(45,w*h*.0017)||left<4||top<4||right>w-5||bottom>h-5)continue;
+   const hull=convexHull(points);if(hull.length<4)continue;
+   let best:{area:number;ux:number;uy:number;loU:number;hiU:number;loV:number;hiV:number}|null=null;
+   for(let i=0;i<hull.length;i++){
+    const a=hull[i],b=hull[(i+1)%hull.length],len=Math.hypot(b.x-a.x,b.y-a.y);
+    if(len<.1)continue;
+    const ux=(b.x-a.x)/len,uy=(b.y-a.y)/len;
+    let loU=Infinity,hiU=-Infinity,loV=Infinity,hiV=-Infinity;
+    for(const pt of hull){const u=pt.x*ux+pt.y*uy,v=-pt.x*uy+pt.y*ux;
+     loU=Math.min(loU,u);hiU=Math.max(hiU,u);loV=Math.min(loV,v);hiV=Math.max(hiV,v);}
+    const area=(hiU-loU)*(hiV-loV);
+    if(!best||area<best.area)best={area,ux,uy,loU,hiU,loV,hiV};
+   }
+   if(!best)continue;
+   const frac=best.area/(w*h),fill=points.length*stride*stride/Math.max(1,best.area);
+   const sideA=best.hiU-best.loU,sideB=best.hiV-best.loV;
+   const ratio=Math.max(sideA,sideB)/Math.max(1,Math.min(sideA,sideB));
+   if(frac<.023||frac>.58||ratio<1.17||ratio>2.37||fill<(type==='cool'?.14:.43))continue;
+   const pu=Math.max(2,sideA*(type==='cool'?.035:.012));
+   const pv=Math.max(2,sideB*(type==='cool'?.035:.012));
+   const coords:[[number,number],[number,number],[number,number],[number,number]]=[
+    [best.loU-pu,best.loV-pv],[best.hiU+pu,best.loV-pv],
+    [best.hiU+pu,best.hiV+pv],[best.loU-pu,best.hiV+pv]
+   ];
+   const {ux,uy}=best;
+   const normalized=orderQuad(coords.map(([u,v])=>({x:(ux*u-uy*v)/(w-1),y:(uy*u+ux*v)/(h-1)})));
+   if(!normalized||!validCorners(normalized))continue;
+   const q=normalized as ScanCorners;
+   const center={x:q.reduce((sum,p)=>sum+p.x,0)/4,y:q.reduce((sum,p)=>sum+p.y,0)/4};
+   const area=frac;
+   if(candidates.some(c=>Math.hypot(c.centroid.x-center.x,c.centroid.y-center.y)<.13))continue;
+   candidates.push({quad:q,area,centroid:center,type});
+  }
+ }
+ // Require two clearly separated regions before automatically splitting.
+ // Suppress a nested bright portrait or glare patch mistaken for another
+ // document. A second region must be spatially separate, not inside the first.
+ const bounds=(c:typeof candidates[number])=>{
+  const xs=c.quad.map(p=>p.x),ys=c.quad.map(p=>p.y);
+  return {left:Math.min(...xs),right:Math.max(...xs),top:Math.min(...ys),bottom:Math.max(...ys)};
+ };
+ const result:typeof candidates=[];
+ for(const c of candidates.sort((a,b)=>b.area-a.area)){
+  const a=bounds(c);
+  const overlaps=result.some(other=>{
+   const b=bounds(other);
+   const iw=Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left));
+   const ih=Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+   const smaller=Math.min((a.right-a.left)*(a.bottom-a.top),(b.right-b.left)*(b.bottom-b.top));
+   return iw*ih/Math.max(1e-6,smaller)>.25;
+  });
+  if(!overlaps)result.push(c);
+  if(result.length>=Math.min(4,limit))break;
+ }
+ if(result.length<2)return [];
+ result.sort((a,b)=>a.centroid.y-b.centroid.y||a.centroid.x-b.centroid.x);
+ return result.map(r=>({corners:r.quad,confidence:'estimated'}));
+}
+export async function suggestMultipleDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):
+ Promise<ScanDetection[]>{
+ return detectMultipleDocumentEdges(await sourcePixels(blob,520),kind);
+}
+
 /** A stored JPEG is the only authoritative raster for its persisted corners.
  * Cyan card evidence is needed before replacing a live camera quadrilateral:
  * when the shutter frame differs from the last video-analysis frame, an old
@@ -610,8 +766,41 @@ function modifyFilter(r:number,g:number,b:number,filter:ScanFilter):[number,numb
  if(filter==='paper'){const v=clamp((lum-105)*2.1+180,0,255);return [v,v,v];}
  return [clamp((r-110)*1.18+132,0,255),clamp((g-110)*1.18+132,0,255),clamp((b-110)*1.18+132,0,255)];
 }
+/** Bounded edge-aware unsharp mask. Uses actual sampled pixels only; it does
+ * not invent missing text. A local luminance difference avoids color halos,
+ * smooth photographic regions are left alone, and output stays within 8-bit.
+ * Processing is chunked so mobile WebView controls remain responsive. */
+export async function sharpenScanPixels(pixels:Uint8ClampedArray,w:number,h:number,
+ mode:ScanSharpness,signal?:AbortSignal):Promise<Uint8ClampedArray>{
+ if(mode==='off'||w<3||h<3)return pixels;
+ if(pixels.length!==w*h*4)throw Error('Sai kích thước dữ liệu ảnh cần làm nét');
+ const luminances=new Uint8Array(w*h);
+ for(let k=0;k<w*h;k++){
+  const i=k*4;luminances[k]=Math.round(.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2]);
+ }
+ const gain=mode==='text'?1.05:.67,threshold=mode==='text'?3:5;
+ for(let y=1;y<h-1;y++){
+  if(signal?.aborted)throw Error('Đã hủy xử lý ảnh');
+  const row=y*w;
+  for(let x=1;x<w-1;x++){
+   const k=row+x,i=k*4;
+   const smooth=(luminances[k-w-1]+2*luminances[k-w]+luminances[k-w+1]+
+       2*luminances[k-1]+4*luminances[k]+2*luminances[k+1]+
+       luminances[k+w-1]+2*luminances[k+w]+luminances[k+w+1])/16;
+   const detail=luminances[k]-smooth;
+   if(Math.abs(detail)<threshold)continue; // Ignore paper grain and JPEG noise.
+   // Prevent prominent halos on faces, highlights and black QR finder blocks.
+   const strength=mode==='auto'?Math.min(1,Math.abs(detail)/17):1;
+   const delta=clamp(detail*gain*strength,-19,19);
+   for(let c=0;c<3;c++)pixels[i+c]=clamp(pixels[i+c]+delta,0,255);
+  }
+  if(y%40===0)await new Promise<void>(resolve=>setTimeout(resolve,0));
+ }
+ return pixels;
+}
+
 export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanFilter,signal?:AbortSignal,
- options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust}):Promise<Blob>{
+ options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust;sharpness?:ScanSharpness}):Promise<Blob>{
  if(!validCorners(corners))throw Error('Vùng quét không hợp lệ. Hãy chỉnh lại 4 góc.');
  const input=await sourcePixels(blob,2400,safeScanOps(options?.operations));const {width:iw,height:ih,data}=input;
  const pix=(a:ScanPoint,b:ScanPoint)=>Math.hypot((a.x-b.x)*iw,(a.y-b.y)*ih);
@@ -637,10 +826,11 @@ export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanF
   }
   if(y%24===0)await new Promise<void>(resolve=>setTimeout(resolve,0)); // keep Android UI responsive
  }
+ await sharpenScanPixels(out,w,h,options?.sharpness||'off',signal);
  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
  const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không tạo được ảnh tài liệu');
  ctx.putImageData(new ImageData(out,w,h),0,0);
- return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không thể xuất ảnh quét')),'image/jpeg',.91));
+ return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không thể xuất ảnh quét')),'image/jpeg',.94));
 }
 
 export interface PdfExportOptions {paper:ScanPaper;landscape:boolean;marginMm:number;customWidthMm:number;customHeightMm:number;twoPerPage:boolean;idCardPrintSize?:boolean;}
@@ -657,9 +847,14 @@ export async function createScannerPdf(images:Blob[],opts:PdfExportOptions):Prom
  if(images.length>80)throw Error('Giới hạn 80 ảnh mỗi lần xuất PDF để tránh hết bộ nhớ');
  const imgs:{data:Uint8Array;w:number;h:number}[]=[];
  for(const image of images){const bmp=await openBitmap(image);try{
-  const canvas=document.createElement('canvas');canvas.width=bmp.width;canvas.height=bmp.height;
-  const g=canvas.getContext('2d');if(!g)throw Error('Không thể mở ảnh');g.drawImage(bmp,0,0);
-  const jpeg=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Lỗi nén PDF')),'image/jpeg',.89));
+  // Processed scans are JPEG already: preserve these bytes in the PDF.
+  // A second lossy JPEG encode erases fine print and QR edges.
+  let jpeg=image;
+  if(image.type!=='image/jpeg'){
+   const canvas=document.createElement('canvas');canvas.width=bmp.width;canvas.height=bmp.height;
+   const g=canvas.getContext('2d');if(!g)throw Error('Không thể mở ảnh');g.drawImage(bmp,0,0);
+   jpeg=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Lỗi nén PDF')),'image/jpeg',.94));
+  }
   imgs.push({data:new Uint8Array(await jpeg.arrayBuffer()),w:bmp.width,h:bmp.height});
  }finally{bmp.close();}}
  const [pw,ph]=paperSize(opts),margin=pt(clamp(opts.marginMm,0,30));

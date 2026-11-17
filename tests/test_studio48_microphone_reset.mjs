@@ -40,5 +40,5 @@ const gradle=readFileSync(new URL('../android/app/build.gradle',import.meta.url)
 assert.match(ui,/Khôi phục mặc định tùy chỉnh dấu/);
 assert.match(ui,/buildStampDetailResetPatch\(DEFAULT_WATERMARK_CONFIG,activeTemplate\.accentHex\)/);
 assert.match(ui,/activeMedia\.kind==='video'&&!!activeMedia\.isStamped&&!activeMedia\.stampedBlob/);
-assert.match(gradle,/applicationIdSuffix '\.trial2552'/);
+assert.match(gradle,/applicationIdSuffix '\.trial2553'/);
 console.log('PASS TEST48: muted microphone recovery, safe visual-only reset, standalone APK package');
