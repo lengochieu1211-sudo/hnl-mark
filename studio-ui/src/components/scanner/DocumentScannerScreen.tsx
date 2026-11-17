@@ -649,7 +649,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
     documentType:page.documentType==='id-card'||page.documentType==='paper'?page.documentType:'auto',
     detectionConfidence:page.detectionConfidence==='estimated'?'estimated':'manual',
     splitParentId:typeof page.splitParentId==='string'?restoredPageIds.get(page.splitParentId):undefined,
-    splitRegionCount:Number.isInteger(page.splitRegionCount)&&page.splitRegionCount!>=2&&page.splitRegionCount!<=4?page.splitRegionCount:undefined,
+    splitRegionCount:typeof page.splitRegionCount==='number'&&Number.isInteger(page.splitRegionCount)&&page.splitRegionCount>=2&&page.splitRegionCount<=4?page.splitRegionCount:undefined,
     transformOps:safeScanOps(page.transformOps),colorAdjust:safeScanColor(page.colorAdjust),
     order:Number(page.order)||Date.now(),createdAt:Date.now()};
    newPages.push(newPage);
