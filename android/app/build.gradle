@@ -18,8 +18,8 @@ android {
             versionNameSuffix '-studio-test'
             // Parallel installation: NEVER uninstall a previous HNLMark
             // while its offline photo library has not been ZIP-backed up.
-            applicationIdSuffix '.trial2555'
-            resValue 'string', 'hnlmark_application_name', 'HNLMark STUDIO 55'
+            applicationIdSuffix '.trial2556'
+            resValue 'string', 'hnlmark_application_name', 'HNLMark STUDIO 56'
         }
         release {
             resValue 'string', 'hnlmark_application_name', 'HNL Mark'

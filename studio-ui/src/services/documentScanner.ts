@@ -7,6 +7,11 @@ export type ScanCorners = [ScanPoint,ScanPoint,ScanPoint,ScanPoint]; // TL, TR, 
 export type ScanFilter = 'color'|'enhance'|'gray'|'bw'|'paper';
 /** Local enhancement only. Cannot restore details absent from the camera original. */
 export type ScanSharpness = 'off'|'auto'|'text';
+/** Legacy three-level settings map to 0/45/90%; new scans use continuous 0–100. */
+export function scanSharpnessPercent(p:Pick<ScanPage,'sharpness'|'sharpnessLevel'>):number{
+ if(typeof p.sharpnessLevel==='number'&&Number.isFinite(p.sharpnessLevel))return Math.round(clamp(p.sharpnessLevel,0,100));
+ return p.sharpness==='text'?90:p.sharpness==='off'?0:45;
+}
 export type ScanPaper = 'A4'|'A5'|'Letter'|'custom';
 export type ScanDocumentType='auto'|'id-card'|'paper';
 export type ScanWarpGrid={axis:'vertical'|'horizontal';points:ScanPoint[]};
@@ -15,7 +20,9 @@ export type ScanPage = {
   corners:ScanCorners; filter:ScanFilter; order:number; createdAt:number;
   transformOps?:ScanImageOp[]; colorAdjust?:ScanColorAdjust;
   detectionConfidence?:ScanDetection['confidence']; documentType?:ScanDocumentType;
-  sharpness?:ScanSharpness; warpGrid?:ScanWarpGrid; splitParentId?:string; splitRegionCount?:number;
+  sharpness?:ScanSharpness; sharpnessLevel?:number; warpGrid?:ScanWarpGrid; splitParentId?:string; splitRegionCount?:number;
+  /** New captures only: source is committed first; resuming interrupted auto-processing is safe. */
+  autoProcessPending?:boolean;
 };
 export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
@@ -42,6 +49,7 @@ async function transact<T>(table:'pages'|'folders',mode:IDBTransactionMode,opera
  });
 }
 export const listScans=()=>transact<ScanPage[]>('pages','readonly',(s,done)=>{const r=s.getAll();r.onsuccess=()=>done(r.result||[]);});
+export const getScan=(id:string)=>transact<ScanPage|undefined>('pages','readonly',(s,done)=>{const r=s.get(id);r.onsuccess=()=>done(r.result as ScanPage|undefined);});
 export const listScanFolders=()=>transact<ScanFolder[]>('folders','readonly',(s,done)=>{const r=s.getAll();r.onsuccess=()=>done(r.result||[]);});
 export const putScan=(p:ScanPage)=>transact<void>('pages','readwrite',(s,done)=>{s.put(p);done();});
 export const removeScan=(id:string)=>transact<void>('pages','readwrite',(s,done)=>{s.delete(id);done();});
@@ -84,6 +92,31 @@ export async function estimateScanCornersIfUnedited(id:string,expected:ScanCorne
      current.corners.some((p,i)=>Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
    store.put({...current,corners:next,detectionConfidence:'estimated'});
    applied=true;
+  };
+ });
+}
+
+/** Save the derived scan ONLY if the original page is still unchanged and the
+ * user has not edited, deleted or already processed it. Guarantees an old
+ * asynchronous result cannot silently replace manual edits or remove source. */
+export async function saveAutomaticScanIfUnedited(
+ id:string,expected:ScanCorners,processed:Blob|null,nextCorners:ScanCorners,
+ shouldApply:()=>boolean=()=>true
+):Promise<ScanPage|null>{
+ if(!validCorners(nextCorners)||processed&&processed.type!=='image/jpeg')return null;
+ const db=await database();return new Promise<ScanPage|null>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let saved:ScanPage|null=null;
+  tx.oncomplete=()=>{db.close();resolve(saved);};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('Không thể hoàn tất bản scan tự động'));};
+  tx.onerror=()=>{};
+  const req=store.get(id);req.onsuccess=()=>{
+   const current=req.result as ScanPage|undefined;
+   if(!current||!current.autoProcessPending||current.processed||current.warpGrid||
+    safeScanOps(current.transformOps).length||!shouldApply()||
+    current.corners.some((p,i)=>Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
+   const next:ScanPage={...current,corners:nextCorners,processed:processed||undefined,
+    autoProcessPending:false,detectionConfidence:processed?'estimated':'manual'};
+   store.put(next);saved=next;
   };
  });
 }
@@ -853,14 +886,16 @@ function modifyFilter(r:number,g:number,b:number,filter:ScanFilter):[number,numb
  * smooth photographic regions are left alone, and output stays within 8-bit.
  * Processing is chunked so mobile WebView controls remain responsive. */
 export async function sharpenScanPixels(pixels:Uint8ClampedArray,w:number,h:number,
- mode:ScanSharpness,signal?:AbortSignal):Promise<Uint8ClampedArray>{
- if(mode==='off'||w<3||h<3)return pixels;
+ mode:ScanSharpness,signal?:AbortSignal,percent?:number):Promise<Uint8ClampedArray>{
+ const level=typeof percent==='number'&&Number.isFinite(percent)?clamp(percent,0,100):undefined;
+ if(mode==='off'||level===0||w<3||h<3)return pixels;
  if(pixels.length!==w*h*4)throw Error('Sai kích thước dữ liệu ảnh cần làm nét');
  const luminances=new Uint8Array(w*h);
  for(let k=0;k<w*h;k++){
   const i=k*4;luminances[k]=Math.round(.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2]);
  }
- const gain=mode==='text'?1.05:.67,threshold=mode==='text'?3:5;
+ const gain=level===undefined?(mode==='text'?1.05:.67):level*1.1/100;
+ const threshold=level===undefined?(mode==='text'?3:5):Math.max(3,7-Math.round(level/25));
  for(let y=1;y<h-1;y++){
   if(signal?.aborted)throw Error('Đã hủy xử lý ảnh');
   const row=y*w;
@@ -882,14 +917,16 @@ export async function sharpenScanPixels(pixels:Uint8ClampedArray,w:number,h:numb
 }
 
 export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanFilter,signal?:AbortSignal,
- options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust;sharpness?:ScanSharpness;warpGrid?:ScanWarpGrid|null}):Promise<Blob>{
+ options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust;sharpness?:ScanSharpness;sharpnessLevel?:number;warpGrid?:ScanWarpGrid|null;previewMaxEdge?:number}):Promise<Blob>{
  if(!validCorners(corners))throw Error('Vùng quét không hợp lệ. Hãy chỉnh lại 4 góc.');
- const input=await sourcePixels(blob,2400,safeScanOps(options?.operations));const {width:iw,height:ih,data}=input;
+ const maxEdge=options?.previewMaxEdge?clamp(options.previewMaxEdge,160,1100):2400;
+ const input=await sourcePixels(blob,maxEdge,safeScanOps(options?.operations));const {width:iw,height:ih,data}=input;
  const pix=(a:ScanPoint,b:ScanPoint)=>Math.hypot((a.x-b.x)*iw,(a.y-b.y)*ih);
  const rawW=Math.max(pix(corners[0],corners[1]),pix(corners[3],corners[2]));
  const rawH=Math.max(pix(corners[0],corners[3]),pix(corners[1],corners[2]));
- const factor=Math.min(1,2200/Math.max(rawW,rawH));
- const w=clamp(Math.round(rawW*factor),80,2200),h=clamp(Math.round(rawH*factor),80,2200);
+ const outputCap=options?.previewMaxEdge?clamp(options.previewMaxEdge,160,1100):2200;
+ const factor=Math.min(1,outputCap/Math.max(rawW,rawH));
+ const w=clamp(Math.round(rawW*factor),80,outputCap),h=clamp(Math.round(rawH*factor),80,outputCap);
  if(w*h>5_000_000)throw Error('Ảnh quá lớn; hãy giảm độ phân giải trước khi quét');
  const bands=scanWarpBands(corners,options?.warpGrid),axis=options?.warpGrid?.axis||'vertical';
  const out=new Uint8ClampedArray(w*h*4);
@@ -909,7 +946,7 @@ export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanF
   }
   if(y%24===0)await new Promise<void>(resolve=>setTimeout(resolve,0)); // keep Android UI responsive
  }
- await sharpenScanPixels(out,w,h,options?.sharpness||'off',signal);
+ await sharpenScanPixels(out,w,h,options?.sharpness||'off',signal,options?.sharpnessLevel);
  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
  const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không tạo được ảnh tài liệu');
  ctx.putImageData(new ImageData(out,w,h),0,0);

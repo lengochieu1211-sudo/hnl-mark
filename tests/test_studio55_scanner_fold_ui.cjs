@@ -42,7 +42,7 @@ for(const axis of ['vertical','horizontal'])for(const count of [6,8,10,12]){
 const ui=fs.readFileSync(path.join(__dirname,'../studio-ui/src/components/scanner/DocumentScannerScreen.tsx'),'utf8');
 assert.ok(ui.includes('aria-label="Số điểm chỉnh nếp gấp"'));
 assert.ok(ui.includes('aria-label="Hướng nếp gấp"'));
-assert.ok(ui.indexOf('Chỉnh màu ảnh scan')<ui.indexOf('Tăng độ nét khi in / xuất PDF'));
+assert.ok(ui.indexOf('Chỉnh màu ảnh scan')<ui.indexOf('Tăng độ nét {scanSharpnessLevelDraft}%'));
 assert.ok(ui.includes('scanWarpDraft?.points||cornerDraft'),'mesh control points on preview');
 assert.ok(ui.includes('warpGrid:scanWarpDraft'),'mesh used when flattening');
 assert.ok(ui.includes('min-w-0 flex-1 truncate'),'long names stay inside header');

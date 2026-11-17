@@ -4,7 +4,7 @@ read=lambda p:(r/p).read_text()
 ui=read('studio-ui/src/components/scanner/DocumentScannerScreen.tsx')
 engine=read('studio-ui/src/services/documentScanner.ts')
 for part in ["scannerPinchStart","scannerPinchMove","scannerFocusAt","scannerZoomTo","scannerExposureTo","aria-label=\"Zoom camera scan\"","aria-label=\"Bù sáng camera scan\"","transformScan('cw')","transformScan('ccw')","transformScan('flip-h')","transformScan('flip-v')","scanColorDraft.brightness","scanColorDraft.contrast","scanColorDraft.saturation","scannerOrientedPreview(editing.original,scanOpsDraft)","editingHasUnsavedCorners"]:assert part in ui,part
-for part in ['drawScannerOriented(ctx,bmp','transformOps?:ScanImageOp[]','colorAdjust?:ScanColorAdjust','adjustScanRgb','scannerOrientedPreview','options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust;sharpness?:ScanSharpness;warpGrid?:ScanWarpGrid|null}']:
+for part in ['drawScannerOriented(ctx,bmp','transformOps?:ScanImageOp[]','colorAdjust?:ScanColorAdjust','adjustScanRgb','scannerOrientedPreview','options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust;sharpness?:ScanSharpness;sharpnessLevel?:number;warpGrid?:ScanWarpGrid|null;previewMaxEdge?:number}']:
  assert part in engine,part
 assert 'const zoom=scanZoomNativeRef.current?1:scanZoomRef.current' in ui
 assert 'ctx.drawImage(video,(video.videoWidth-srcW)/2' in ui

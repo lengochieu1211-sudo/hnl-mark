@@ -52,7 +52,7 @@ assert.equal(detectMultipleDocumentEdges(synthetic('cyan'),'paper').length,0,'Do
  assert.ok(ui.includes("await putScan(page)"),'original must persist before saved count');
  assert.ok(ui.includes("queueScanEdgeEstimate(page,frame.split,frame.sessionSerial)"),'deferred detection');
  assert.ok(ui.includes("'image/jpeg',.94"),'preserve full-resolution source at good quality');
- assert.ok(ui.includes("<option value=\"auto\">Thông minh · Tự động</option>"),'sharpen preset visible');
+ assert.ok(ui.includes('aria-label="Tăng độ nét ảnh scan" type="range"'),'live sharpening slider visible');
  assert.ok(ui.includes('Nhận diện & tách nhiều vùng')&&ui.includes('Thêm vùng bằng tay'));
  assert.ok(service.includes("if(image.type!=='image/jpeg')"),'no double lossy JPEG encode in PDF export');
  assert.ok(service.includes('splitStoredScanPage')&&service.includes('store.add(child)'),'create multiple safe scan rows');
