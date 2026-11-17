@@ -103,3 +103,4 @@ jobs:
           node tests/test_studio51_scanner_wood_fast.cjs
           node tests/test_studio52_scanner_capture_alignment.cjs
           node tests/test_studio53_scanner_fast_multi_sharp.cjs
+          node tests/test_studio54_scanner_restore_pdf.cjs

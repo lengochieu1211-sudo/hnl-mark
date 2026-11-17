@@ -621,6 +621,11 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   if(parsed.format!=='hnlmark-scan-backup-v1'||!Array.isArray(parsed.pages)||!Array.isArray(parsed.folders)||parsed.pages.length>80)throw Error('Bản sao lưu scan không hợp lệ');
   const folderMap=new Map<string,string>(),newFolders:ScanFolder[]=[];
   for(const folder of parsed.folders){const id=newScanId();folderMap.set(folder.id,id);newFolders.push({id,name:String(folder.name).slice(0,70),createdAt:Date.now()});}
+  const restoredPageIds=new Map<string,string>();
+  for(const page of parsed.pages){
+   if(typeof page.id!=='string'||restoredPageIds.has(page.id))throw Error('ID trang scan trong ZIP thiếu hoặc trùng lặp');
+   restoredPageIds.set(page.id,newScanId());
+  }
   const newPages:ScanPage[]=[];let restoredBytes=0;
   for(const page of parsed.pages){
    if(!/^original\/[\w-]+\.bin$/.test(page.originalPath)||page.processedPath&&!/^processed\/[\w-]+\.jpg$/.test(page.processedPath))throw Error('Đường dẫn ZIP không hợp lệ');
@@ -630,11 +635,23 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    const original=new Blob([raw],{type:page.originalType?.startsWith('image/')?page.originalType:'image/jpeg'});
    let processed:Blob|undefined;const p=page.processedPath&&zip.file(page.processedPath);
    if(page.processedPath&&!p)throw Error('Thiếu ảnh đã quét trong ZIP');
-   if(p){processed=await p.async('blob');restoredBytes+=processed.size;}
+   if(p){
+    // JSZip blobs do not preserve a JPEG MIME type. Keep the exact compressed
+    // bytes and tag them so PDF export can embed without a second JPEG encode.
+    const jpegData=await p.async('blob');processed=new Blob([jpegData],{type:'image/jpeg'});
+    restoredBytes+=processed.size;
+   }
    if(restoredBytes>250*1024*1024)throw Error('Tổng dung lượng giải nén vượt giới hạn 250 MB');
    const corners=(page.corners&&Array.isArray(page.corners)&&page.corners.length===4&&validCorners(page.corners)?page.corners:emptyCorners());
-   const newPage:ScanPage={id:newScanId(),folderId:folderMap.get(page.folderId)||'',name:tidy(page.name),original,processed,
-    filter:FILTERS.some(x=>x.id===page.filter)?page.filter:'color',corners,transformOps:safeScanOps(page.transformOps),colorAdjust:safeScanColor(page.colorAdjust),order:Number(page.order)||Date.now(),createdAt:Date.now()};
+   const newPage:ScanPage={id:restoredPageIds.get(page.id)!,folderId:folderMap.get(page.folderId)||'',name:tidy(page.name),original,processed,
+    filter:FILTERS.some(x=>x.id===page.filter)?page.filter:'color',corners,
+    sharpness:page.sharpness==='text'||page.sharpness==='auto'?page.sharpness:'off',
+    documentType:page.documentType==='id-card'||page.documentType==='paper'?page.documentType:'auto',
+    detectionConfidence:page.detectionConfidence==='estimated'?'estimated':'manual',
+    splitParentId:typeof page.splitParentId==='string'?restoredPageIds.get(page.splitParentId):undefined,
+    splitRegionCount:Number.isInteger(page.splitRegionCount)&&page.splitRegionCount!>=2&&page.splitRegionCount!<=4?page.splitRegionCount:undefined,
+    transformOps:safeScanOps(page.transformOps),colorAdjust:safeScanColor(page.colorAdjust),
+    order:Number(page.order)||Date.now(),createdAt:Date.now()};
    newPages.push(newPage);
   }
   // A single readwrite transaction ensures all-or-nothing restoration and no overwrite.
