@@ -858,7 +858,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         </select>
        </label>
       </div>
-      <p className="text-[11px] text-[#94A3B8]">Kéo cặp điểm xanh đến chỗ nếp gấp trên hai cạnh đối diện của tờ giấy. Khi lưu ảnh hoặc PDF, mỗi dải được nắn phối cảnh riêng. Đổi số điểm/hướng sẽ đặt lại điểm giữa. Không thể khôi phục chữ bị che khuất trong nếp gấp.</p>
+      <p className="text-[11px] text-[#94A3B8]">Kéo cặp điểm xanh đến chỗ nếp gấp trên hai cạnh đối diện của tờ giấy. Khi lưu ảnh hoặc PDF, các dải được nắn theo nếp gấp và nối liền mép nhau. Đổi số điểm/hướng sẽ đặt lại điểm giữa. Không thể khôi phục chữ bị che khuất trong nếp gấp.</p>
      </div>
      <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
       <p className="text-xs font-semibold">Một ảnh có nhiều CCCD / giấy tờ</p>
