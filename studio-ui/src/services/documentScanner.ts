@@ -798,7 +798,7 @@ export function transformScanWarpGrid(g:ScanWarpGrid,op:ScanImageOp):ScanWarpGri
  groups.forEach(a=>a.sort((p,q)=>primary(p)-primary(q)));
  return {axis,points:groups.flat()};
 }
-export type ScanWarpBand={start:number;end:number;coeff:number[]};
+export type ScanWarpBand={start:number;end:number;coeff:number[];quad?:ScanCorners};
 export function scanWarpBands(c:ScanCorners,g?:ScanWarpGrid|null):ScanWarpBand[]{
  if(!g)return [{start:0,end:1,coeff:squareToQuadrilateral(c)}];
  if(!validScanWarp(c,g))throw Error('Các điểm nếp gấp giao nhau hoặc quá sát nhau');
@@ -807,12 +807,20 @@ export function scanWarpBands(c:ScanCorners,g?:ScanWarpGrid|null):ScanWarpBand[]
   (dist(q[0],q[3])+dist(q[1],q[2]))/2);
  const total=widths.reduce((s,v)=>s+v,0);let start=0;
  return quads.map((q,i)=>{const end=i===quads.length-1?1:start+widths[i]/total;
-  const out={start,end,coeff:squareToQuadrilateral(q,true)};start=end;return out;});
+  const out={start,end,coeff:squareToQuadrilateral(q,true),quad:q};start=end;return out;});
 }
 export function mapScanWarpOutput(u:number,v:number,bands:ScanWarpBand[],axis:'vertical'|'horizontal'='vertical'):ScanPoint{
  const t=axis==='vertical'?u:v,b=bands.find(b=>t<=b.end)||bands[bands.length-1];
  const fraction=clamp((t-b.start)/(b.end-b.start),0,1);
- const x=axis==='vertical'?fraction:u,y=axis==='vertical'?v:fraction,c=b.coeff,den=c[6]*x+c[7]*y+1;
+ const x=axis==='vertical'?fraction:u,y=axis==='vertical'?v:fraction;
+ // A bilinear sheet strip parameterizes the shared crease in the same way
+ // from both adjacent strips. Independent homographies may assign different
+ // coordinates along a shared edge and introduce tears through printed text.
+ if(b.quad){const q=b.quad;
+  const lerp=(key:'x'|'y')=>(1-x)*(1-y)*q[0][key]+x*(1-y)*q[1][key]+x*y*q[2][key]+(1-x)*y*q[3][key];
+  return {x:lerp('x'),y:lerp('y')};
+ }
+ const c=b.coeff,den=c[6]*x+c[7]*y+1;
  return {x:(c[0]*x+c[1]*y+c[2])/den,y:(c[3]*x+c[4]*y+c[5])/den};
 }
 
