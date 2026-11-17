@@ -24,7 +24,7 @@ export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.98
 export const newScanId=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 const clamp=(v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
 export function compactScanRegionName(name:string,index:number):string{
- const base=String(name||'Scan').replace(/(?:_vung_(?:them|\\d+)|_V\\d{2,})+$/gi,'').slice(0,42)||'Scan';
+ const base=String(name||'Scan').replace(/(?:_vung_(?:them|\d+)|_V\d{2,})+$/gi,'').slice(0,42)||'Scan';
  return `${base}_V${String(index).padStart(2,'0')}`;
 }
 function database():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{
