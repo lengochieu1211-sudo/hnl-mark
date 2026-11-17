@@ -8,7 +8,7 @@ import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scanne
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
  DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,newScanId,putScan,putScanFolder,
- removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,detectDocumentEdges,validCorners,scannerOrientedPreview,
+ removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,reconcileSavedScanCorners,detectDocumentEdges,validCorners,scannerOrientedPreview,
  type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';
 import {scanQuadAfterOp,normalizeScanOps,safeScanOps,safeScanColor,DEFAULT_SCAN_COLOR,type ScanImageOp,type ScanColorAdjust} from '../../services/scannerEdits';
@@ -62,6 +62,8 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const scanVideoRef=useRef<HTMLVideoElement>(null),scanStreamRef=useRef<MediaStream|null>(null);
  const scanCaptureLock=useRef(false);
  const scanAutoDetectQueue=useRef<Promise<void>>(Promise.resolve());
+ const scanDirtyDrafts=useRef<Set<string>>(new Set());
+ const scanLiveSnapshotRef=useRef<{corners:ScanCorners;at:number;width:number;height:number;zoom:number;facing:string}|null>(null);
  const scannerEditingIdRef=useRef<string|null>(null);
  scannerEditingIdRef.current=editingId;
  const scanPreviewViewportRef=useRef<HTMLDivElement>(null);
@@ -71,6 +73,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const scannerZoomTo=async(value:number)=>{
   const zoom=Math.max(1,Math.min(scanZoomMax,Math.round(value*10)/10));
   scanZoomRef.current=zoom;setScanZoom(zoom);
+  scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');
   if(!scanZoomNativeRef.current)return;
   const track=scanStreamRef.current?.getVideoTracks()[0];
   if(!track)return;
@@ -181,9 +184,10 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  // passes work entirely offline. No edge is shown as "found" until two nearby
  // estimates agree. Stop on screen close / camera swap / camera not ready.
  useEffect(()=>{
+  scanLiveSnapshotRef.current=null;
   setScanLiveCorners(null);setScanLiveFrameRect(null);setScanLiveStatus('searching');
   if(!scanCameraOpen||!scanCameraReady)return;
-  let disposed=false,timeout=0,previous:ScanCorners|null=null,streak=0,misses=0;
+  let disposed=false,timeout=0,previous:ScanCorners|null=null,tracked:ScanCorners|null=null,streak=0,misses=0;
   const canvas=document.createElement('canvas');
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
   if(!ctx){setScanLiveStatus('unavailable');return;}
@@ -212,20 +216,22 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       if(previous&&scannerLiveQuadDelta(previous,found.corners)<.085){
        streak++;
        if(streak>=2){
-        setScanLiveCorners(old=>old?scannerLiveBlendQuad(old,found.corners):found.corners);
-        setScanLiveStatus('tracking');
+        tracked=tracked?scannerLiveBlendQuad(tracked,found.corners):found.corners;
+        scanLiveSnapshotRef.current={corners:tracked,at:performance.now(),width:video.videoWidth,
+         height:video.videoHeight,zoom:scanZoomRef.current,facing:cameraFacing};
+        setScanLiveCorners(tracked);setScanLiveStatus('tracking');
        }
       }else{
-       streak=1;setScanLiveCorners(null);setScanLiveStatus('searching');
+       streak=1;tracked=null;scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');
       }
       previous=found.corners;
      }else{
       previous=null;streak=0;misses++;
-      if(misses>=2){setScanLiveCorners(null);setScanLiveStatus('searching');}
+      if(misses>=2){tracked=null;scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');}
      }
     }catch(error){
      previous=null;streak=0;misses++;
-     if(misses>=2){setScanLiveCorners(null);setScanLiveStatus('unavailable');}
+     if(misses>=2){tracked=null;scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('unavailable');}
      console.warn('Scanner live edges unavailable; manual capture remains available:',error);
      nextDelay=2100;
     }
@@ -233,7 +239,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    if(!disposed)timeout=window.setTimeout(check,nextDelay);
   };
   timeout=window.setTimeout(check,500);
-  return()=>{disposed=true;window.clearTimeout(timeout);};
+  return()=>{disposed=true;scanLiveSnapshotRef.current=null;window.clearTimeout(timeout);};
  },[scanCameraOpen,scanCameraReady,cameraFacing,scanDocumentType]);
 
  useEffect(()=>{let alive=true;Promise.all([listScans(),listScanFolders()]).then(([p,f])=>{if(alive){setPages(p);setFolders(f);}}).catch(e=>{if(alive)setProblem('Không mở được thư viện quét: '+String(e));});return()=>{alive=false;abortProcessing.current?.abort();};},[]);
@@ -288,9 +294,12 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   scanAutoDetectQueue.current=scanAutoDetectQueue.current.catch(()=>{}).then(async()=>{
    // Give the next camera frame and user controls time to paint first.
    await new Promise<void>(resolve=>window.setTimeout(resolve,100));
-   const detected=await suggestDocumentEdges(page.original,page.documentType);
-   if(detected.confidence!=='estimated'||!validCorners(detected.corners))return;
-   const applied=await estimateScanCornersIfUnedited(page.id,page.corners,detected.corners);
+   const detected=await reconcileSavedScanCorners(page.original,page.detectionConfidence==='estimated'?page.corners:null,page.documentType);
+   if(!detected||scanDirtyDrafts.current.has(page.id))return;
+   // A user moving a handle has priority over an in-flight estimate.
+   if(scanDirtyDrafts.current.has(page.id))return;
+   const applied=await estimateScanCornersIfUnedited(page.id,page.corners,detected.corners,
+    ()=>!scanDirtyDrafts.current.has(page.id));
    if(!applied)return;
    setPages(prev=>prev.map(p=>p.id===page.id&&!p.processed&&
     p.corners.every((c,i)=>Math.hypot(c.x-page.corners[i].x,c.y-page.corners[i].y)<1e-6)
@@ -322,8 +331,11 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(
     b=>b&&b.size?resolve(b):reject(Error('Camera không xuất được ảnh JPEG')),'image/jpeg',.94));
    const id=newScanId(),date=Date.now();
-   const live=scanLiveStatus==='tracking'&&scanLiveCorners&&validCorners(scanLiveCorners)
-    ?scanLiveCorners.map(p=>({...p})) as ScanCorners:null;
+   const snapshot=scanLiveSnapshotRef.current;
+   const live=snapshot&&performance.now()-snapshot.at<1600&&
+    snapshot.width===video.videoWidth&&snapshot.height===video.videoHeight&&
+    Math.abs(snapshot.zoom-scanZoomRef.current)<.01&&snapshot.facing===cameraFacing&&validCorners(snapshot.corners)
+    ?snapshot.corners.map(p=>({...p})) as ScanCorners:null;
    const page:ScanPage={id,folderId:currentFolder==='*'?'':currentFolder,
     name:`Scan_${new Date(date).toISOString().replace(/[:.]/g,'-')}_${scanSessionIdsRef.current.length+1}`,
     original:blob,corners:live||emptyCorners(),filter:'enhance',documentType:scanDocumentType,
@@ -341,13 +353,14 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    }
    // No extra image processing in the shutter path. Live stable corners are
    // already in the saved page; otherwise analyze later without blocking.
-   if(!live)queueScanEdgeEstimate(page);
+   queueScanEdgeEstimate(page); // Always check against saved JPEG, even with live green corners.
   }catch(error){setScanCameraError('Không lưu được ảnh quét. Chưa xóa dữ liệu cũ: '+String(error));}
   finally{scanCaptureLock.current=false;setScanCameraBusy(false);}
  };
  const startScanCamera=()=>{
   if(working)return;
   scanSessionIdsRef.current=[];setScanSessionIds([]);
+  scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');
   setScanCameraNotice('');setScanCameraError('');setScanCameraReady(false);
   setScanMode('continuous');setCameraFacing('environment');setScanCameraOpen(true);
  };
@@ -389,6 +402,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const editPage=(page:ScanPage)=>{if(working)return;setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setFilterDraft(page.filter);setScanOpsDraft(safeScanOps(page.transformOps));setScanColorDraft(safeScanColor(page.colorAdjust));setShowResult(false);setProblem('');};
  const transformScan=(op:ScanImageOp)=>{
   if(working||dragPointerId.current!==null)return;
+  if(editingId)scanDirtyDrafts.current.add(editingId);
   setCornerDraft(old=>scanQuadAfterOp(old,op));
   setScanOpsDraft(old=>normalizeScanOps([...old,op]));setShowResult(false);
  };
@@ -400,7 +414,8 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   dragPoint.current=null;dragPointerId.current=null;setDragFocus(null);setLensViewport(null);
  };
  const handleDragCorner=(e:React.PointerEvent<SVGCircleElement>,i:number)=>{
-  if(dragPointerId.current!==null)return; // A second finger must not move another corner.
+  if(dragPointerId.current!==null)return;
+  if(editingId)scanDirtyDrafts.current.add(editingId); // A second finger must not move another corner.
   if(!stageRef.current)return;
   e.preventDefault();e.stopPropagation();
   const picked=scannerPointAtPointer(e,stageRef.current.getBoundingClientRect());
@@ -674,10 +689,11 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
        if(!editing)return;
        const found=await suggestDocumentEdges(editing.original,scanDocumentType);
        if(!validCorners(found.corners))throw Error('Không thể dựng tứ giác hợp lệ từ ảnh');
+       scanDirtyDrafts.current.add(editing.id);
        setCornerDraft(found.corners);setShowResult(false);
        setNotice(found.confidence==='estimated'?'Đã nhận diện tứ giác; hãy xem kỹ từng góc rồi lưu.':'Độ tin cậy thấp; đã giữ khung gần toàn ảnh để tránh cắt mất góc.');
       })} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center disabled:opacity-50"><ScanLine size={15}/>Nhận diện mép</button>
-       <button onClick={()=>{setCornerDraft(emptyCorners());setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
+       <button onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setCornerDraft(emptyCorners());setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
      <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
        <p className="text-xs text-[#CBD5E1] font-semibold">Xoay / lật ảnh quét (giữ ảnh gốc)</p>
        <div className="grid grid-cols-4 gap-2">

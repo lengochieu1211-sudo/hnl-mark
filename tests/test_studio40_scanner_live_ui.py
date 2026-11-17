@@ -10,6 +10,7 @@ for k in ['detectDocumentEdges(ctx.getImageData(0,0,width,height),scanDocumentTy
           "scanLiveStatus==='tracking'",'scanPreviewViewportRef',
           'Chưa quét mép trực tiếp được · vẫn chụp thủ công']:
  assert k in s,k
-assert 'await putScan(page)' in s and 'suggestDocumentEdges(page.original,page.documentType)' in s
+assert 'await putScan(page)' in s and 'reconcileSavedScanCorners(page.original' in s
+assert 'queueScanEdgeEstimate(page)' in s and 'if(!live)queueScanEdgeEstimate(page)' not in s
 assert 'scanCaptureLock.current=true' in s
 print('PASS TEST40 scanner live overlay: stable estimated quadrilateral, fallback guide, cleanup and preserved original')

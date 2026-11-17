@@ -60,7 +60,8 @@ export async function updateScanBatch(pages:ScanPage[],removeFolderId?:string):P
 /** Apply deferred automatic corners only if the source page has not been edited.
  * The transaction reads the latest stored row and never replaces processed
  * output, manual corner changes, or a deleted page with an old snapshot. */
-export async function estimateScanCornersIfUnedited(id:string,expected:ScanCorners,next:ScanCorners):Promise<boolean>{
+export async function estimateScanCornersIfUnedited(id:string,expected:ScanCorners,next:ScanCorners,
+ shouldApply:()=>boolean=()=>true):Promise<boolean>{
  if(!validCorners(next))return false;
  const db=await database();
  return new Promise<boolean>((resolve,reject)=>{
@@ -71,7 +72,7 @@ export async function estimateScanCornersIfUnedited(id:string,expected:ScanCorne
   const req=store.get(id);
   req.onsuccess=()=>{
    const current=req.result as ScanPage|undefined;
-   if(!current||current.processed||safeScanOps(current.transformOps).length||
+   if(!shouldApply()||!current||current.processed||safeScanOps(current.transformOps).length||
      current.corners.some((p,i)=>Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
    store.put({...current,corners:next,detectionConfidence:'estimated'});
    applied=true;
@@ -415,13 +416,15 @@ function findCoolCardQuadrilateral(image:ImageData,kind:ScanDocumentType):ScanDe
  const {width:w,height:h,data}=image;
  if(w<90||h<90)return null;
  const sampled:PixelPoint[]=[];
+ const cols=Math.ceil((w-4)/2),rows=Math.ceil((h-4)/2);
+ const coolMask=new Uint8Array(cols*rows);
  let cool=0,border=0,minX=w,minY=h,maxX=0,maxY=0;
  const inset=Math.max(4,Math.round(Math.min(w,h)*.025));
  for(let y=2;y<h-2;y+=2)for(let x=2;x<w-2;x+=2){
   const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
   // Test cool chroma, not luminance. White glare and text may be holes.
   if(!((g-r>14&&b-r>0)||(g-r>27&&b-r>-10)))continue;
-  cool++;
+  cool++;coolMask[((y-2)/2)*cols+(x-2)/2]=1;
   if(x<=inset||x>=w-1-inset||y<=inset||y>=h-1-inset)border++;
   minX=Math.min(minX,x);maxX=Math.max(maxX,x);
   minY=Math.min(minY,y);maxY=Math.max(maxY,y);
@@ -431,7 +434,32 @@ function findCoolCardQuadrilateral(image:ImageData,kind:ScanDocumentType):ScanDe
  if(cool<130||share<.025||share>.34||border>cool*.014||
   minX<=inset||minY<=inset||maxX>=w-1-inset||maxY>=h-1-inset||
   maxX-minX<w*.18||maxY-minY<h*.18)return null;
- const hull=convexHull(sampled);
+ // Teal specks in shiny wood/glare can pull an all-pixel hull far away
+ // from the card. Prefer the dominant CLOSED cyan component, while retaining
+ // the original sample geometry for accurate, uncropped rounded corners.
+ const closed=morphClose(coolMask,cols,rows);
+ const visited=new Uint8Array(closed.length),queue=new Int32Array(closed.length);
+ let primary:PixelPoint[]=[];
+ for(let k=0;k<closed.length;k++){
+  if(!closed[k]||visited[k])continue;
+  let head=0,tail=0;queue[tail++]=k;visited[k]=1;
+  const component:PixelPoint[]=[];
+  while(head<tail){
+   const curr=queue[head++],xx=curr%cols,yy=Math.floor(curr/cols);
+   if(coolMask[curr])component.push({x:2+xx*2,y:2+yy*2});
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    if(!dx&&!dy)continue;
+    const nx=xx+dx,ny=yy+dy;
+    if(nx<0||nx>=cols||ny<0||ny>=rows)continue;
+    const nk=ny*cols+nx;
+    if(closed[nk]&&!visited[nk]){visited[nk]=1;queue[tail++]=nk;}
+   }
+  }
+  if(component.length>primary.length)primary=component;
+ }
+ // Retain the previous candidate on fragmented/two-tone cards rather than
+ // risk selecting just one half (portrait and QR zones often split the mask).
+ const hull=convexHull(primary.length>=cool*.70?primary:sampled);
  if(hull.length<4)return null;
  // A minimum-area rotated rectangle spans separated teal sections of an ID
  // (the portrait, QR code and glare need not form a closed contour).
@@ -486,6 +514,65 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  // support, otherwise preserve the previous conservative color candidate.
  if(edge.support>.93)return {corners:edge.corners,confidence:'estimated'};
  return color;
+}
+
+/** A stored JPEG is the only authoritative raster for its persisted corners.
+ * Cyan card evidence is needed before replacing a live camera quadrilateral:
+ * when the shutter frame differs from the last video-analysis frame, an old
+ * green overlay may otherwise leave the four saved points on bare wood.
+ * No screenshot or document content leaves the device. */
+function scanCoolEvidence(image:ImageData,quad:ScanCorners):{covered:number;density:number;total:number}{
+ if(!validCorners(quad))return {covered:0,density:0,total:0};
+ const {width:w,height:h,data}=image;
+ let coolTotal=0,coolInside=0,insideCount=0;
+ const inQuad=(x:number,y:number)=>{
+  let sign=0;
+  for(let i=0;i<4;i++){
+   const a=quad[i],b=quad[(i+1)%4];
+   const cross=(b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x);
+   if(Math.abs(cross)<1e-7)continue;
+   if(sign&&cross*sign<0)return false;
+   sign=Math.sign(cross);
+  }
+  return true;
+ };
+ for(let y=2;y<h-2;y+=3)for(let x=2;x<w-2;x+=3){
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  const cool=(g-r>14&&b-r>0)||(g-r>27&&b-r>-10);
+  const inside=inQuad(x/(w-1),y/(h-1));
+  if(inside)insideCount++;
+  if(cool){coolTotal++;if(inside)coolInside++;}
+ }
+ return {covered:coolInside/Math.max(1,coolTotal),density:coolInside/Math.max(1,insideCount),total:coolTotal};
+}
+
+/** Return a correction only with evidence in the exact saved image; return null
+ * if the preview is already aligned or evidence is too weak to cut safely. */
+export function selectSavedScanCorners(image:ImageData,live:ScanCorners|null,found:ScanDetection,
+ kind:ScanDocumentType='auto'):ScanDetection|null{
+ if(found.confidence!=='estimated'||!validCorners(found.corners))return null;
+ const current=live&&validCorners(live)?live:null;
+ const difference=current?current.reduce((sum,p,i)=>sum+Math.hypot(p.x-found.corners[i].x,p.y-found.corners[i].y),0)/4:Infinity;
+ if(difference<.075)return null; // Hold already-correct live corners.
+ if(kind==='paper')return current?null:found; // Neutral paper has no cyan proof.
+ const proposed=scanCoolEvidence(image,found.corners);
+ const prior=current?scanCoolEvidence(image,current):null;
+ // If a cyan card is visible, never promote a false positive on wood.
+ if(proposed.total>90){
+  if(proposed.covered<.72||proposed.density<.085)return null;
+  if(prior&&(proposed.covered-prior.covered<.28||proposed.density<prior.density*1.25))return null;
+ }
+ // On paper without a cool card, don't replace an existing stable live quad.
+ else if(current)return null;
+ return found;
+}
+
+/** Execute only after the original JPEG is committed. This decoder reads the
+ * captured image, not any moving camera video frame or DOM preview overlay. */
+export async function reconcileSavedScanCorners(blob:Blob,live:ScanCorners|null,
+ kind:ScanDocumentType='auto'):Promise<ScanDetection|null>{
+ const pixels=await sourcePixels(blob,360);
+ return selectSavedScanCorners(pixels,live,detectDocumentEdges(pixels,kind),kind);
 }
 
 export async function suggestDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):Promise<ScanDetection>{return detectDocumentEdges(await sourcePixels(blob,360),kind);}

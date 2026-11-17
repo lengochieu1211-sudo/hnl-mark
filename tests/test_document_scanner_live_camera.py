@@ -16,7 +16,7 @@ assert "'image/jpeg',.94" in scan
 handler=scan.split('const captureScanFrame=async()=>')[1].split('const startScanCamera=')[0]
 assert handler.index('await putScan(page)') < handler.index('queueScanEdgeEstimate(page)')
 assert 'await suggestDocumentEdges(' not in handler  # Keep the shutter responsive
-assert 'estimateScanCornersIfUnedited(page.id,page.corners,detected.corners)' in scan
+assert 'estimateScanCornersIfUnedited(page.id,page.corners,detected.corners,' in scan
 assert "scanMode==='single'" in scan
 assert "setScanMode('continuous')" in scan
 assert 'Chụp trang tài liệu' in scan and 'Liên tục' in scan and 'Một trang' in scan

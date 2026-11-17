@@ -36,7 +36,8 @@ const ui=fs.readFileSync(path.join(__dirname,'../studio-ui/src/components/scanne
 const handler=ui.split('const captureScanFrame=async()=>')[1].split('const startScanCamera=')[0];
 assert.ok(handler.includes('await putScan(page)')&&handler.includes('queueScanEdgeEstimate(page)'));
 assert.ok(!handler.includes('await suggestDocumentEdges('),'Do not block the shutter on edge analysis');
-assert.ok(handler.includes('scanLiveStatus'));
+assert.ok(handler.includes('scanLiveSnapshotRef.current'),'Capture must use recent live snapshot');
+assert.ok(handler.includes('queueScanEdgeEstimate(page)'),'Always validate saved JPEG');
 const engine=fs.readFileSync(path.join(root,'documentScanner.ts'),'utf8');
 assert.ok(engine.includes('current.processed')&&engine.includes('current.corners.some('),'Do not overwrite edited scan');
 console.log('PASS TEST51 synthetic wood / cyan card; no-card fallback; non-blocking shutter; edit safety');
