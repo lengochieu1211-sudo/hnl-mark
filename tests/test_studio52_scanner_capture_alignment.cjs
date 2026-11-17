@@ -1,7 +1,7 @@
 /** TEST52: a green live quad must match the exact saved JPEG, not stale wood.
  * Synthetic card/wood only; never commit real identity documents to CI. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
-const ts=require('typescript');
+let ts;try{ts=require('../studio-ui/node_modules/typescript')}catch{ts=require('typescript')}
 const root=path.join(__dirname,'../studio-ui/src/services');
 const load=(name,imports={})=>{const text=fs.readFileSync(path.join(root,name+'.ts'),'utf8');
  const js=ts.transpileModule(text,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText;
