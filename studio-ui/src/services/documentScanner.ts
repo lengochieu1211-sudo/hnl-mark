@@ -9,12 +9,13 @@ export type ScanFilter = 'color'|'enhance'|'gray'|'bw'|'paper';
 export type ScanSharpness = 'off'|'auto'|'text';
 export type ScanPaper = 'A4'|'A5'|'Letter'|'custom';
 export type ScanDocumentType='auto'|'id-card'|'paper';
+export type ScanWarpGrid={axis:'vertical'|'horizontal';points:ScanPoint[]};
 export type ScanPage = {
   id:string; folderId:string; name:string; original:Blob; processed?:Blob;
   corners:ScanCorners; filter:ScanFilter; order:number; createdAt:number;
   transformOps?:ScanImageOp[]; colorAdjust?:ScanColorAdjust;
   detectionConfidence?:ScanDetection['confidence']; documentType?:ScanDocumentType;
-  sharpness?:ScanSharpness; splitParentId?:string; splitRegionCount?:number;
+  sharpness?:ScanSharpness; warpGrid?:ScanWarpGrid; splitParentId?:string; splitRegionCount?:number;
 };
 export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
@@ -22,6 +23,10 @@ const DB='hnlmark-document-scanner-v1', VERSION=1;
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
 export const newScanId=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 const clamp=(v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
+export function compactScanRegionName(name:string,index:number):string{
+ const base=String(name||'Scan').replace(/(?:_vung_(?:them|\\d+)|_V\\d{2,})+$/gi,'').slice(0,42)||'Scan';
+ return `${base}_V${String(index).padStart(2,'0')}`;
+}
 function database():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{
  const req=indexedDB.open(DB,VERSION);
  req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains('pages'))db.createObjectStore('pages',{keyPath:'id'});if(!db.objectStoreNames.contains('folders'))db.createObjectStore('folders',{keyPath:'id'});};
@@ -106,9 +111,9 @@ export async function splitStoredScanPage(id:string,expected:ScanCorners,regions
    store.put(first);
    created=[first];
    for(let n=1;n<regions.length;n++){
-    const child:ScanPage={...current,id:newScanId(),name:`${current.name}_vung_${n+1}`,
+    const child:ScanPage={...current,id:newScanId(),name:compactScanRegionName(current.name,n+1),
      processed:undefined,corners:regions[n],detectionConfidence:'estimated',splitParentId:id,
-     splitRegionCount:undefined,order:current.order+n*.001};
+     splitRegionCount:undefined,warpGrid:undefined,order:current.order+n*.001};
     store.add(child);created.push(child);
    }
   };
@@ -116,11 +121,13 @@ export async function splitStoredScanPage(id:string,expected:ScanCorners,regions
 }
 
 /** Create one manual additional crop from a still-preserved source image. */
-export async function addScanRegionManually(source:ScanPage):Promise<ScanPage>{
- const child:ScanPage={...source,id:newScanId(),name:`${source.name}_vung_them`,
+export async function addScanRegionManually(source:ScanPage,existingNames:string[]=[]):Promise<ScanPage>{
+ const used=new Set([source.name,...existingNames]);let index=2;
+ while(used.has(compactScanRegionName(source.name,index)))index++;
+ const child:ScanPage={...source,id:newScanId(),name:compactScanRegionName(source.name,index),
   processed:undefined,corners:DEFAULT_CORNERS.map(p=>({...p})) as ScanCorners,
   detectionConfidence:'manual',splitParentId:source.splitParentId||source.id,
-  splitRegionCount:undefined,order:source.order+.0005,createdAt:Date.now()};
+  splitRegionCount:undefined,warpGrid:undefined,order:source.order+.0005,createdAt:Date.now()};
  await transact<void>('pages','readwrite',(store,done)=>{store.add(child);done()});
  return child;
 }
@@ -742,9 +749,76 @@ export function validCorners(points:ScanCorners):boolean{
  }
  return Math.abs(area)>.025;
 }
+
+/** Vertically or horizontally segmented paper flattening. Two opposing edge
+ * polylines, each with 3-6 nodes, form 2-5 planar strips at fold creases. */
+export function initScanWarpGrid(c:ScanCorners,count:6|8|10|12,axis:'vertical'|'horizontal'='vertical'):ScanWarpGrid{
+ if(!validCorners(c))throw Error('Hãy chỉnh 4 góc hợp lệ trước khi thêm điểm nếp gấp');
+ const lerp=(a:ScanPoint,b:ScanPoint,t:number)=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
+ const a:ScanPoint[]=[],b:ScanPoint[]=[];
+ for(let i=0;i<count/2;i++){const t=i/(count/2-1);
+  a.push(axis==='vertical'?lerp(c[0],c[1],t):lerp(c[0],c[3],t));
+  b.push(axis==='vertical'?lerp(c[3],c[2],t):lerp(c[1],c[2],t));
+ }
+ return {axis,points:[...a,...b]};
+}
+export function scanWarpOuterCorners(g:ScanWarpGrid):ScanCorners{
+ const n=g.points.length/2,p=g.points;
+ return g.axis==='vertical'?[p[0],p[n-1],p[2*n-1],p[n]]:[p[0],p[n],p[2*n-1],p[n-1]];
+}
+export function scanWarpQuads(g:ScanWarpGrid):ScanCorners[]{
+ const n=g.points.length/2,p=g.points;const out:ScanCorners[]=[];
+ for(let i=0;i<n-1;i++)out.push(g.axis==='vertical'?[p[i],p[i+1],p[n+i+1],p[n+i]]:[p[i],p[n+i],p[n+i+1],p[i+1]]);
+ return out;
+}
+function validStrip(q:ScanCorners):boolean{
+ if(q.some(p=>!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return false;
+ let sign=0,area=0;
+ for(let i=0;i<4;i++){const a=q[i],b=q[(i+1)%4],c=q[(i+2)%4];
+  const cross=(b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x);
+  if(Math.abs(cross)<.00002||sign&&Math.sign(cross)!==sign)return false;
+  sign=Math.sign(cross);area+=a.x*b.y-b.x*a.y;
+ }return Math.abs(area)>.0005;
+}
+export function validScanWarp(c:ScanCorners,g:ScanWarpGrid|null|undefined):boolean{
+ if(!g||!['vertical','horizontal'].includes(g.axis)||!Array.isArray(g.points)||
+  ![6,8,10,12].includes(g.points.length)||!validCorners(c))return false;
+ if(scanWarpOuterCorners(g).some((p,i)=>!p||Math.hypot(p.x-c[i].x,p.y-c[i].y)>.00001))return false;
+ return scanWarpQuads(g).every(validStrip);
+}
+export function transformScanWarpGrid(g:ScanWarpGrid,op:ScanImageOp):ScanWarpGrid{
+ const n=g.points.length/2;
+ const axis=op==='cw'||op==='ccw'?(g.axis==='vertical'?'horizontal':'vertical'):g.axis;
+ const tr=(p:ScanPoint):ScanPoint=>op==='cw'?{x:1-p.y,y:p.x}:op==='ccw'?{x:p.y,y:1-p.x}:
+  op==='flip-h'?{x:1-p.x,y:p.y}:{x:p.x,y:1-p.y};
+ const groups=[g.points.slice(0,n).map(tr),g.points.slice(n).map(tr)];
+ const secondary=(p:ScanPoint)=>axis==='vertical'?p.y:p.x;
+ const primary=(p:ScanPoint)=>axis==='vertical'?p.x:p.y;
+ groups.sort((a,b)=>a.reduce((sum,p)=>sum+secondary(p),0)-b.reduce((sum,p)=>sum+secondary(p),0));
+ groups.forEach(a=>a.sort((p,q)=>primary(p)-primary(q)));
+ return {axis,points:groups.flat()};
+}
+export type ScanWarpBand={start:number;end:number;coeff:number[]};
+export function scanWarpBands(c:ScanCorners,g?:ScanWarpGrid|null):ScanWarpBand[]{
+ if(!g)return [{start:0,end:1,coeff:squareToQuadrilateral(c)}];
+ if(!validScanWarp(c,g))throw Error('Các điểm nếp gấp giao nhau hoặc quá sát nhau');
+ const quads=scanWarpQuads(g),dist=(a:ScanPoint,b:ScanPoint)=>Math.hypot(a.x-b.x,a.y-b.y);
+ const widths=quads.map(q=>g.axis==='vertical'?(dist(q[0],q[1])+dist(q[3],q[2]))/2:
+  (dist(q[0],q[3])+dist(q[1],q[2]))/2);
+ const total=widths.reduce((s,v)=>s+v,0);let start=0;
+ return quads.map((q,i)=>{const end=i===quads.length-1?1:start+widths[i]/total;
+  const out={start,end,coeff:squareToQuadrilateral(q,true)};start=end;return out;});
+}
+export function mapScanWarpOutput(u:number,v:number,bands:ScanWarpBand[],axis:'vertical'|'horizontal'='vertical'):ScanPoint{
+ const t=axis==='vertical'?u:v,b=bands.find(b=>t<=b.end)||bands[bands.length-1];
+ const fraction=clamp((t-b.start)/(b.end-b.start),0,1);
+ const x=axis==='vertical'?fraction:u,y=axis==='vertical'?v:fraction,c=b.coeff,den=c[6]*x+c[7]*y+1;
+ return {x:(c[0]*x+c[1]*y+c[2])/den,y:(c[3]*x+c[4]*y+c[5])/den};
+}
+
 /** Solve inverse homography: output unit square -> quadrilateral in input image. */
-export function squareToQuadrilateral(points:ScanCorners):number[]{
- if(!validCorners(points))throw Error('Bốn góc tạo thành vùng không hợp lệ. Hãy kéo lại các góc.');
+export function squareToQuadrilateral(points:ScanCorners,allowNarrowStrip=false):number[]{
+ if(!(allowNarrowStrip?validStrip(points):validCorners(points)))throw Error('Bốn góc tạo thành vùng không hợp lệ. Hãy kéo lại các góc.');
  const pairs:[number,number,ScanPoint][]=[[0,0,points[0]],[1,0,points[1]],[1,1,points[2]],[0,1,points[3]]];
  const m:number[][]=[];
  for(const [u,v,p] of pairs){m.push([u,v,1,0,0,0,-u*p.x,-v*p.x,p.x]);m.push([0,0,0,u,v,1,-u*p.y,-v*p.y,p.y]);}
@@ -800,7 +874,7 @@ export async function sharpenScanPixels(pixels:Uint8ClampedArray,w:number,h:numb
 }
 
 export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanFilter,signal?:AbortSignal,
- options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust;sharpness?:ScanSharpness}):Promise<Blob>{
+ options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust;sharpness?:ScanSharpness;warpGrid?:ScanWarpGrid|null}):Promise<Blob>{
  if(!validCorners(corners))throw Error('Vùng quét không hợp lệ. Hãy chỉnh lại 4 góc.');
  const input=await sourcePixels(blob,2400,safeScanOps(options?.operations));const {width:iw,height:ih,data}=input;
  const pix=(a:ScanPoint,b:ScanPoint)=>Math.hypot((a.x-b.x)*iw,(a.y-b.y)*ih);
@@ -809,14 +883,15 @@ export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanF
  const factor=Math.min(1,2200/Math.max(rawW,rawH));
  const w=clamp(Math.round(rawW*factor),80,2200),h=clamp(Math.round(rawH*factor),80,2200);
  if(w*h>5_000_000)throw Error('Ảnh quá lớn; hãy giảm độ phân giải trước khi quét');
- const coeff=squareToQuadrilateral(corners),out=new Uint8ClampedArray(w*h*4);
+ const bands=scanWarpBands(corners,options?.warpGrid),axis=options?.warpGrid?.axis||'vertical';
+ const out=new Uint8ClampedArray(w*h*4);
  for(let y=0;y<h;y++){
   if(signal?.aborted)throw Error('Đã hủy xử lý ảnh');
   const v=(y+.5)/h;
   for(let x=0;x<w;x++){
-   const u=(x+.5)/w,den=coeff[6]*u+coeff[7]*v+1;
-   const xx=clamp(((coeff[0]*u+coeff[1]*v+coeff[2])/den)*(iw-1),0,iw-1);
-   const yy=clamp(((coeff[3]*u+coeff[4]*v+coeff[5])/den)*(ih-1),0,ih-1);
+   const u=(x+.5)/w,source=mapScanWarpOutput(u,v,bands,axis);
+   const xx=clamp(source.x*(iw-1),0,iw-1);
+   const yy=clamp(source.y*(ih-1),0,ih-1);
    const sx=Math.floor(xx),sy=Math.floor(yy),rx=Math.min(iw-1,sx+1),ry=Math.min(ih-1,sy+1),fx=xx-sx,fy=yy-sy;
    const k00=(sy*iw+sx)*4,k10=(sy*iw+rx)*4,k01=(ry*iw+sx)*4,k11=(ry*iw+rx)*4;
    const rgb=[0,1,2].map(c=>(1-fy)*((1-fx)*data[k00+c]+fx*data[k10+c])+fy*((1-fx)*data[k01+c]+fx*data[k11+c]));
