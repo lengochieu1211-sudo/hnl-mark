@@ -8,7 +8,7 @@ import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scanne
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
  DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,newScanId,putScan,putScanFolder,
- removeScan,restoreScanBatch,updateScanBatch,suggestDocumentEdges,detectDocumentEdges,validCorners,scannerOrientedPreview,
+ removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,detectDocumentEdges,validCorners,scannerOrientedPreview,
  type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';
 import {scanQuadAfterOp,normalizeScanOps,safeScanOps,safeScanColor,DEFAULT_SCAN_COLOR,type ScanImageOp,type ScanColorAdjust} from '../../services/scannerEdits';
@@ -61,6 +61,9 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const scanSessionIdsRef=useRef<string[]>([]);
  const scanVideoRef=useRef<HTMLVideoElement>(null),scanStreamRef=useRef<MediaStream|null>(null);
  const scanCaptureLock=useRef(false);
+ const scanAutoDetectQueue=useRef<Promise<void>>(Promise.resolve());
+ const scannerEditingIdRef=useRef<string|null>(null);
+ scannerEditingIdRef.current=editingId;
  const scanPreviewViewportRef=useRef<HTMLDivElement>(null);
  const [scanLiveCorners,setScanLiveCorners]=useState<ScanCorners|null>(null);
  const [scanLiveFrameRect,setScanLiveFrameRect]=useState<LiveFrameRect|null>(null);
@@ -187,7 +190,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   const check=()=>{
    if(disposed)return;
    const video=scanVideoRef.current,viewport=scanPreviewViewportRef.current;
-   let nextDelay=1150;
+   let nextDelay=800;
    if(video&&viewport&&video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
     const display=scannerLiveContainRect(viewport.clientWidth,viewport.clientHeight,video.videoWidth,video.videoHeight);
     if(display)setScanLiveFrameRect(old=>old&&Math.abs(old.left-display.left)<.5&&Math.abs(old.top-display.top)<.5&&Math.abs(old.width-display.width)<.5&&Math.abs(old.height-display.height)<.5?old:display);
@@ -201,7 +204,9 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
      ctx.filter='none';
      const start=performance.now();
      const found=detectDocumentEdges(ctx.getImageData(0,0,width,height),scanDocumentType);
-     if(performance.now()-start>400)nextDelay=1900;
+     const analysisMs=performance.now()-start;
+     if(analysisMs>400)nextDelay=1900;
+     else if(analysisMs>170)nextDelay=1150;
      if(found.confidence==='estimated'&&validCorners(found.corners)){
       misses=0;
       if(previous&&scannerLiveQuadDelta(previous,found.corners)<.085){
@@ -276,6 +281,26 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setNotice(`Đã giữ ${created.length} ảnh gốc trong ứng dụng. Kéo 4 điểm để chỉnh mép giấy.`);
   });
  };
+ /** The shutter is released after committing the original, not after expensive
+  * JPEG decoding and edge detection. Queue fallback analysis separately so
+  * continuous scanning remains responsive and page edits are never replaced. */
+ const queueScanEdgeEstimate=(page:ScanPage)=>{
+  scanAutoDetectQueue.current=scanAutoDetectQueue.current.catch(()=>{}).then(async()=>{
+   // Give the next camera frame and user controls time to paint first.
+   await new Promise<void>(resolve=>window.setTimeout(resolve,100));
+   const detected=await suggestDocumentEdges(page.original,page.documentType);
+   if(detected.confidence!=='estimated'||!validCorners(detected.corners))return;
+   const applied=await estimateScanCornersIfUnedited(page.id,page.corners,detected.corners);
+   if(!applied)return;
+   setPages(prev=>prev.map(p=>p.id===page.id&&!p.processed&&
+    p.corners.every((c,i)=>Math.hypot(c.x-page.corners[i].x,c.y-page.corners[i].y)<1e-6)
+     ?{...p,corners:detected.corners,detectionConfidence:'estimated'}:p));
+   if(scannerEditingIdRef.current===page.id){
+    setCornerDraft(prev=>prev.every((c,i)=>Math.hypot(c.x-page.corners[i].x,c.y-page.corners[i].y)<1e-6)
+     ?detected.corners.map(c=>({...c})) as ScanCorners:prev);
+   }
+  }).catch(error=>console.warn('Không nhận diện được mép; ảnh gốc vẫn giữ nguyên:',error));
+ };
  /** Capture one immutable source JPEG, persist it, and only then detect edges.
   * A failed edge detector must never lose the newly photographed page. */
  const captureScanFrame=async()=>{
@@ -297,28 +322,26 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(
     b=>b&&b.size?resolve(b):reject(Error('Camera không xuất được ảnh JPEG')),'image/jpeg',.94));
    const id=newScanId(),date=Date.now();
+   const live=scanLiveStatus==='tracking'&&scanLiveCorners&&validCorners(scanLiveCorners)
+    ?scanLiveCorners.map(p=>({...p})) as ScanCorners:null;
    const page:ScanPage={id,folderId:currentFolder==='*'?'':currentFolder,
     name:`Scan_${new Date(date).toISOString().replace(/[:.]/g,'-')}_${scanSessionIdsRef.current.length+1}`,
-    original:blob,corners:emptyCorners(),filter:'enhance',documentType:scanDocumentType,detectionConfidence:'manual',createdAt:date,order:date+scanSessionIdsRef.current.length};
-   await putScan(page); // Mandatory transaction completion before showing success.
+    original:blob,corners:live||emptyCorners(),filter:'enhance',documentType:scanDocumentType,
+    detectionConfidence:live?'estimated':'manual',createdAt:date,order:date+scanSessionIdsRef.current.length};
+   await putScan(page); // Commit untouched JPEG before reporting capture success.
    scanSessionIdsRef.current.push(id);setScanSessionIds([...scanSessionIdsRef.current]);
    setPages(prev=>[...prev,page]);setScanCameraNotice(`Đã lưu ${scanSessionIdsRef.current.length} trang gốc`);
-   // Estimate corners after persistence. Edge-detection failure is nonfatal.
-   let saved=page;
-   try{
-    const detected=await suggestDocumentEdges(blob,scanDocumentType);
-    if(validCorners(detected.corners)){
-     saved={...page,corners:detected.corners,detectionConfidence:detected.confidence};await putScan(saved);
-     setPages(prev=>prev.map(p=>p.id===id?saved:p));
-    }
-   }catch(error){console.warn('Không nhận diện được mép; giữ bản gốc:',error);}
    if(scanMode==='single'){
     setScanCameraOpen(false);
     setSelection([id]);setEditingId(id);
-    setCornerDraft(saved.corners.map(p=>({...p})) as ScanCorners);
-    setFilterDraft(saved.filter);setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
-    setNotice('Đã chụp 1 trang. Kéo 4 góc rồi bấm Làm phẳng & lưu bản scan.');
+    scannerEditingIdRef.current=id;
+    setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);
+    setFilterDraft(page.filter);setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
+    setNotice('Đã chụp 1 trang. Có thể chỉnh 4 góc rồi lưu bản scan.');
    }
+   // No extra image processing in the shutter path. Live stable corners are
+   // already in the saved page; otherwise analyze later without blocking.
+   if(!live)queueScanEdgeEstimate(page);
   }catch(error){setScanCameraError('Không lưu được ảnh quét. Chưa xóa dữ liệu cũ: '+String(error));}
   finally{scanCaptureLock.current=false;setScanCameraBusy(false);}
  };

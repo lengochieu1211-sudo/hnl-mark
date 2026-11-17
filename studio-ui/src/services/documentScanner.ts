@@ -57,6 +57,28 @@ export async function updateScanBatch(pages:ScanPage[],removeFolderId?:string):P
  });
 }
 
+/** Apply deferred automatic corners only if the source page has not been edited.
+ * The transaction reads the latest stored row and never replaces processed
+ * output, manual corner changes, or a deleted page with an old snapshot. */
+export async function estimateScanCornersIfUnedited(id:string,expected:ScanCorners,next:ScanCorners):Promise<boolean>{
+ if(!validCorners(next))return false;
+ const db=await database();
+ return new Promise<boolean>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let applied=false;
+  tx.oncomplete=()=>{db.close();resolve(applied)};
+  tx.onabort=()=>{db.close();reject(tx.error||new Error('Không lưu được bốn góc nhận diện'))};
+  tx.onerror=()=>{};
+  const req=store.get(id);
+  req.onsuccess=()=>{
+   const current=req.result as ScanPage|undefined;
+   if(!current||current.processed||safeScanOps(current.transformOps).length||
+     current.corners.some((p,i)=>Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
+   store.put({...current,corners:next,detectionConfidence:'estimated'});
+   applied=true;
+  };
+ });
+}
+
 /** Restore every scanned page and folder in ONE IndexedDB transaction. If any
  * image fails to be stored (quota, ID collision, corruption), the transaction
  * rolls back completely and existing user scans remain untouched. */
@@ -382,9 +404,77 @@ function findEdgeQuadrilateral(image:ImageData,kind:ScanDocumentType):{corners:S
  }
  return best;
 }
+/** A fast, conservative blue-green ID-card pass for warm/textured desks.
+ * Wood grain often defeats border-color segmentation and the card's photo can
+ * break gradient outlines. Pixel colors on a cyan ID card remain distinct from
+ * warm wood even when the middle of the card is white or heavily printed.
+ * Reject boundary-touching, tiny and low-density objects; preserve a 3% rim
+ * around the oriented rectangle so rounded physical corners are not cut. */
+function findCoolCardQuadrilateral(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='paper')return null;
+ const {width:w,height:h,data}=image;
+ if(w<90||h<90)return null;
+ const sampled:PixelPoint[]=[];
+ let cool=0,border=0,minX=w,minY=h,maxX=0,maxY=0;
+ const inset=Math.max(4,Math.round(Math.min(w,h)*.025));
+ for(let y=2;y<h-2;y+=2)for(let x=2;x<w-2;x+=2){
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  // Test cool chroma, not luminance. White glare and text may be holes.
+  if(!((g-r>14&&b-r>0)||(g-r>27&&b-r>-10)))continue;
+  cool++;
+  if(x<=inset||x>=w-1-inset||y<=inset||y>=h-1-inset)border++;
+  minX=Math.min(minX,x);maxX=Math.max(maxX,x);
+  minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+  sampled.push({x,y});
+ }
+ const total=Math.ceil((w-4)/2)*Math.ceil((h-4)/2),share=cool/Math.max(1,total);
+ if(cool<130||share<.025||share>.34||border>cool*.014||
+  minX<=inset||minY<=inset||maxX>=w-1-inset||maxY>=h-1-inset||
+  maxX-minX<w*.18||maxY-minY<h*.18)return null;
+ const hull=convexHull(sampled);
+ if(hull.length<4)return null;
+ // A minimum-area rotated rectangle spans separated teal sections of an ID
+ // (the portrait, QR code and glare need not form a closed contour).
+ let best:{area:number;ux:number;uy:number;loU:number;hiU:number;loV:number;hiV:number}|null=null;
+ for(let i=0;i<hull.length;i++){
+  const a=hull[i],b=hull[(i+1)%hull.length];
+  const len=Math.hypot(b.x-a.x,b.y-a.y);if(len<1)return null;
+  const ux=(b.x-a.x)/len,uy=(b.y-a.y)/len;
+  let loU=Infinity,hiU=-Infinity,loV=Infinity,hiV=-Infinity;
+  for(const p of hull){const u=p.x*ux+p.y*uy,v=-p.x*uy+p.y*ux;
+   loU=Math.min(loU,u);hiU=Math.max(hiU,u);
+   loV=Math.min(loV,v);hiV=Math.max(hiV,v);
+  }
+  const area=(hiU-loU)*(hiV-loV);
+  if(!best||area<best.area)best={area,ux,uy,loU,hiU,loV,hiV};
+ }
+ if(!best)return null;
+ const size=best.area/(w*h),fill=cool*4/Math.max(1,best.area);
+ const dimU=best.hiU-best.loU,dimV=best.hiV-best.loV;
+ const ratio=Math.max(dimU,dimV)/Math.max(1,Math.min(dimU,dimV));
+ if(size<.09||size>.74||fill<.19||ratio<1.24||ratio>2.35)return null;
+ // 3% extends the inferred color boundary to the true rounded outer edge.
+ const padU=Math.max(2,dimU*.03),padV=Math.max(2,dimV*.03);
+ const {ux,uy}=best;
+ const coords:[[number,number],[number,number],[number,number],[number,number]]=[
+  [best.loU-padU,best.loV-padV],[best.hiU+padU,best.loV-padV],
+  [best.hiU+padU,best.hiV+padV],[best.loU-padU,best.hiV+padV],
+ ];
+ const points=coords.map(([u,v])=>({x:(ux*u-uy*v)/(w-1),y:(uy*u+ux*v)/(h-1)}));
+ const ordered=orderQuad(points);
+ if(!ordered)return null;
+ const normalized=ordered.map(p=>({x:p.x,y:p.y})) as ScanCorners;
+ // Never clamp vertices outside the photo: that would distort perspective.
+ if(!validCorners(normalized))return null;
+ return {corners:normalized,confidence:'estimated'};
+}
+
 /** Higher-confidence 4-edge result replaces uncertain color-only segmentation.
  * Never force detection when edges do not close: manual frame retains source. */
 export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+ // Strong cyan-ID candidate: avoids both expensive contour passes on busy wood.
+ const coolCard=findCoolCardQuadrilateral(image,kind);
+ if(coolCard)return coolCard;
  const color=detectDocumentByColor(image,kind);
  const edge=findEdgeQuadrilateral(image,kind);
  if(!edge)return color;
