@@ -602,8 +602,9 @@ function findNeutralPaperOnWarmWood(image:ImageData,kind:ScanDocumentType):ScanD
  let neutralCount=0;
  for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
   const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
-  // Gray paper under soft shadows is neutral; wood has much less blue.
-  if(r<112||g<116||b<106||g-r< -13||g-r>23||r-b>18||b-r>17||g-b>28)continue;
+  // Paper may appear slightly blue under camera auto-white-balance, while wood remains warm.
+  // Permit a modest blue surplus without selecting strongly saturated blue objects.
+  if(r<112||g<116||b<106||g-r< -13||g-r>23||r-b>18||b-r>30||g-b>28)continue;
   mask[y*w+x]=1;neutralCount++;
  }
  if(neutralCount<w*h*.055||neutralCount>w*h*.76)return null;
