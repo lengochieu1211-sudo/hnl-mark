@@ -579,12 +579,81 @@ function findCoolCardQuadrilateral(image:ImageData,kind:ScanDocumentType):ScanDe
  return {corners:normalized,confidence:'estimated'};
 }
 
+/** Detect neutral gray paper on warm wood when busy drawings break edge contours.
+ * Refuse uncertain backgrounds rather than cropping the source incorrectly. */
+function findNeutralPaperOnWarmWood(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='id-card')return null;
+ const {width:w,height:h,data}=image;
+ if(w<90||h<90||data.length<w*h*4)return null;
+ let warm=0,valid=0;
+ const observe=(x:number,y:number)=>{
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  if(Math.max(r,g,b)<65)return;
+  valid++;
+  if(r-b>25&&r-g>6&&g-b>12)warm++;
+ };
+ for(let n=0;n<24;n++){
+  const x=Math.round((w-1)*(.04+.92*n/23)),y=Math.round((h-1)*(.04+.92*n/23));
+  observe(x,Math.round(h*.035));observe(x,Math.round(h*.965));
+  observe(Math.round(w*.035),y);observe(Math.round(w*.965),y);
+ }
+ if(valid<32||warm/valid<.47)return null;
+ const mask=new Uint8Array(w*h);
+ let neutralCount=0;
+ for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  // Gray paper under soft shadows is neutral; wood has much less blue.
+  if(r<112||g<116||b<106||g-r< -13||g-r>23||r-b>18||b-r>17||g-b>28)continue;
+  mask[y*w+x]=1;neutralCount++;
+ }
+ if(neutralCount<w*h*.055||neutralCount>w*h*.76)return null;
+ const filled=morphClose(mask,w,h),visited=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ let best:ScanDetection|null=null,bestArea=0;
+ for(let sy=5;sy<h-5;sy+=2)for(let sx=5;sx<w-5;sx+=2){
+  const first=sy*w+sx;
+  if(!filled[first]||visited[first])continue;
+  let front=0,tail=0;queue[tail++]=first;visited[first]=1;
+  let left=w,top=h,right=0,bottom=0,actual=0;
+  const edge:PixelPoint[]=[];
+  while(front<tail){
+   const k=queue[front++],x=k%w,y=(k/w)|0;
+   if(mask[k])actual++;
+   if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;
+   let boundary=false;
+   for(const next of [k-1,k+1,k-w,k+w]){
+    if(next<0||next>=w*h||Math.abs(next%w-x)>1){boundary=true;continue;}
+    if(!filled[next]){boundary=true;continue;}
+    if(!visited[next]){visited[next]=1;queue[tail++]=next;}
+   }
+   if(boundary&&front%3===0)edge.push({x,y});
+  }
+  const extent=(right-left)*(bottom-top),frac=tail/(w*h),fill=actual/Math.max(1,extent);
+  if(frac<.08||frac>.75||fill<.59||left<5||top<5||right>w-6||bottom>h-6||
+    right-left<w*.27||bottom-top<h*.28||edge.length<16)continue;
+  const ordered=orderQuad(hullToQuadrilateral(convexHull(edge))||[]);
+  if(!ordered)continue;
+  const area=quadPolygonArea(ordered);
+  if(area/(w*h)<.08||area/Math.max(1,extent)<.64)continue;
+  const lens=ordered.map((v,i)=>Math.hypot(v.x-ordered[(i+1)%4].x,v.y-ordered[(i+1)%4].y));
+  const aspect=((lens[0]+lens[2])/2)/Math.max(1,(lens[1]+lens[3])/2);
+  if(aspect<.35||aspect>2.85)continue;
+  const cx=ordered.reduce((n,p)=>n+p.x,0)/4,cy=ordered.reduce((n,p)=>n+p.y,0)/4;
+  const corners=ordered.map(p=>({x:(p.x+(p.x-cx)*.009)/(w-1),
+    y:(p.y+(p.y-cy)*.009)/(h-1)})) as ScanCorners;
+  if(!validCorners(corners))continue;
+  if(area>bestArea){bestArea=area;best={corners,confidence:'estimated'};}
+ }
+ return best;
+}
+
 /** Higher-confidence 4-edge result replaces uncertain color-only segmentation.
  * Never force detection when edges do not close: manual frame retains source. */
 export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
  // Strong cyan-ID candidate: avoids both expensive contour passes on busy wood.
  const coolCard=findCoolCardQuadrilateral(image,kind);
  if(coolCard)return coolCard;
+ const neutralPaper=findNeutralPaperOnWarmWood(image,kind);
+ if(neutralPaper)return neutralPaper;
  const color=detectDocumentByColor(image,kind);
  const edge=findEdgeQuadrilateral(image,kind);
  if(!edge)return color;

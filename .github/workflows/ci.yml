@@ -106,3 +106,4 @@ jobs:
           node tests/test_studio54_scanner_restore_pdf.cjs
           node tests/test_studio55_scanner_fold_ui.cjs
           node tests/test_studio56_scanner_auto_live_slider.cjs
+          node tests/test_studio57_neutral_paper_wood.cjs
