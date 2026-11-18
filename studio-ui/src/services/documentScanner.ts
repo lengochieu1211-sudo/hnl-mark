@@ -23,11 +23,24 @@ export type ScanPage = {
   sharpness?:ScanSharpness; sharpnessLevel?:number; warpGrid?:ScanWarpGrid; splitParentId?:string; splitRegionCount?:number;
   /** New captures only: source is committed first; resuming interrupted auto-processing is safe. */
   autoProcessPending?:boolean;
+  /** Revision of the last attempted detector; prevents repeat work for known failures. */
+  scanDetectorRevision?:number;
 };
 export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
 // 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
+export const SCAN_DETECTOR_REVISION=59;
+
+/** Only untouched, failed automatic scans qualify for one new detector attempt.
+ * Never change a manual 4-corner edit, an exported scan, or an existing split. */
+export function needsScanDetectorUpgrade(p:ScanPage):boolean{
+ return !!p.original?.size&&!p.processed&&!p.autoProcessPending&&!p.warpGrid&&!p.splitParentId&&
+   p.detectionConfidence!=='estimated'&&!(p.scanDetectorRevision&&p.scanDetectorRevision>=SCAN_DETECTOR_REVISION)&&
+   safeScanOps(p.transformOps).length===0&&Array.isArray(p.corners)&&p.corners.length===4&&
+   p.corners.every((q,i)=>Math.hypot(q.x-DEFAULT_CORNERS[i].x,q.y-DEFAULT_CORNERS[i].y)<1e-6);
+}
+
 export const newScanId=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 const clamp=(v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
 export function compactScanRegionName(name:string,index:number):string{
@@ -96,6 +109,22 @@ export async function estimateScanCornersIfUnedited(id:string,expected:ScanCorne
  });
 }
 
+/** Transactional recheck of old failed scans. Re-enable auto-processing just once
+ * after a newer detector is installed, with no change to any original bytes. */
+export async function queueFailedScanDetectorUpgrade(id:string):Promise<ScanPage|null>{
+ const db=await database();return new Promise<ScanPage|null>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let queued:ScanPage|null=null;
+  tx.oncomplete=()=>{db.close();resolve(queued)};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('Không thể thử nhận diện lại mép giấy'))};
+  tx.onerror=()=>{};
+  const request=store.get(id);request.onsuccess=()=>{
+   const current=request.result as ScanPage|undefined;
+   if(!current||!needsScanDetectorUpgrade(current))return;
+   queued={...current,autoProcessPending:true};store.put(queued);
+  };
+ });
+}
+
 /** Save the derived scan ONLY if the original page is still unchanged and the
  * user has not edited, deleted or already processed it. Guarantees an old
  * asynchronous result cannot silently replace manual edits or remove source. */
@@ -115,7 +144,7 @@ export async function saveAutomaticScanIfUnedited(
     safeScanOps(current.transformOps).length||!shouldApply()||
     current.corners.some((p,i)=>Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
    const next:ScanPage={...current,corners:nextCorners,processed:processed||undefined,
-    autoProcessPending:false,detectionConfidence:processed?'estimated':'manual'};
+    autoProcessPending:false,scanDetectorRevision:SCAN_DETECTOR_REVISION,detectionConfidence:processed?'estimated':'manual'};
    store.put(next);saved=next;
   };
  });
@@ -841,7 +870,14 @@ export async function reconcileSavedScanCorners(blob:Blob,live:ScanCorners|null,
  return selectSavedScanCorners(pixels,live,detectDocumentEdges(pixels,kind),kind);
 }
 
-export async function suggestDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):Promise<ScanDetection>{return detectDocumentEdges(await sourcePixels(blob,360),kind);}
+/** Retry only uncertain sources at higher resolution. Printed receipts can be too
+ * small at 360px for the color+contour masks to preserve all four edges. */
+export async function suggestDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):Promise<ScanDetection>{
+ const quick=detectDocumentEdges(await sourcePixels(blob,360),kind);
+ if(quick.confidence==='estimated')return quick;
+ const detailed=detectDocumentEdges(await sourcePixels(blob,560),kind);
+ return detailed.confidence==='estimated'?detailed:quick;
+}
 export function validCorners(points:ScanCorners):boolean{
  if(points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return false;
  let sign=0,area=0;

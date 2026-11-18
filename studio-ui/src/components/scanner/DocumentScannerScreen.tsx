@@ -7,7 +7,7 @@ import {scannerTapOnVideo} from '../../services/scannerFocusGeometry';
 import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scannerLiveBlendQuad,type LiveFrameRect} from '../../services/scannerLiveEdges';
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
- DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,getScan,newScanId,putScan,putScanFolder,saveAutomaticScanIfUnedited,scanSharpnessPercent,
+ DEFAULT_CORNERS,needsScanDetectorUpgrade,queueFailedScanDetectorUpgrade,createScannerPdf,flattenDocument,listScanFolders,listScans,getScan,newScanId,putScan,putScanFolder,saveAutomaticScanIfUnedited,scanSharpnessPercent,
  initScanWarpGrid,scanWarpOuterCorners,validScanWarp,transformScanWarpGrid,
  splitStoredScanPage,addScanRegionManually,suggestMultipleDocumentEdges,
  removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,reconcileSavedScanCorners,detectDocumentEdges,validCorners,scannerOrientedPreview,
@@ -537,7 +537,18 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setFolders(prev=>prev.filter(p=>p.id!==f.id));setCurrentFolder('');setNotice('Đã xóa thư mục, giữ nguyên tất cả ảnh');
   });
  };
- const editPage=(page:ScanPage)=>{if(working)return;setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setScanWarpDraft(page.warpGrid&&validScanWarp(page.corners,page.warpGrid)?{axis:page.warpGrid.axis,points:page.warpGrid.points.map(p=>({...p}))}:null);setFilterDraft(page.filter);setScanSharpnessDraft(page.sharpness||'off');setScanSharpnessLevelDraft(scanSharpnessPercent(page));setScanOpsDraft(safeScanOps(page.transformOps));setScanColorDraft(safeScanColor(page.colorAdjust));setShowResult(false);setProblem('');};
+ const editPage=(page:ScanPage)=>{if(working)return;
+  // Older, uncertain pages must not remain permanently stuck at the default
+  // full-image rectangle after the offline detector has been improved.
+  if(needsScanDetectorUpgrade(page)&&!scanDirtyDrafts.current.has(page.id)){
+   void queueFailedScanDetectorUpgrade(page.id).then(queued=>{
+    if(!queued||scanDirtyDrafts.current.has(page.id))return;
+    setPages(old=>old.map(p=>p.id===queued.id?queued:p));
+    queueScanEdgeEstimate(queued,'one',-1);
+    setNotice('Đang tự nhận diện lại mép giấy bằng thuật toán mới…');
+   }).catch(error=>console.warn('Giữ ảnh gốc khi nhận diện lại thất bại:',error));
+  }
+  setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setScanWarpDraft(page.warpGrid&&validScanWarp(page.corners,page.warpGrid)?{axis:page.warpGrid.axis,points:page.warpGrid.points.map(p=>({...p}))}:null);setFilterDraft(page.filter);setScanSharpnessDraft(page.sharpness||'off');setScanSharpnessLevelDraft(scanSharpnessPercent(page));setScanOpsDraft(safeScanOps(page.transformOps));setScanColorDraft(safeScanColor(page.colorAdjust));setShowResult(false);setProblem('');};
  const transformScan=(op:ScanImageOp)=>{
   if(working||dragPointerId.current!==null)return;
   if(editingId)scanDirtyDrafts.current.add(editingId);
