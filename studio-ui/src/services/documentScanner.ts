@@ -780,11 +780,11 @@ function findBrightPaperOnDarkBackground(image:ImageData,kind:ScanDocumentType):
 function likelyInnerPrintedPanel(image:ImageData,corners:ScanCorners):boolean{
  const {width:w,height:h,data}=image;
  if(quadPolygonArea(corners.map(p=>({x:p.x*w,y:p.y*h})))>w*h*.62)return false;
- const luminance=(x:number,y:number):number|null=>{
+ const sample=(x:number,y:number):{light:number;range:number}|null=>{
   const xx=Math.round(x),yy=Math.round(y);
   if(xx<3||xx>=w-3||yy<3||yy>=h-3)return null;
-  const k=(yy*w+xx)*4;
-  return (data[k]+2*data[k+1]+data[k+2])/4;
+  const k=(yy*w+xx)*4,r=data[k],g=data[k+1],b=data[k+2];
+  return {light:(r+2*g+b)/4,range:Math.max(r,g,b)-Math.min(r,g,b)};
  };
  let sides=0;
  const points=corners.map(p=>({x:p.x*(w-1),y:p.y*(h-1)}));
@@ -797,11 +797,11 @@ function likelyInnerPrintedPanel(image:ImageData,corners:ScanCorners):boolean{
   let comparable=0,valid=0;
   for(const t of [.22,.5,.78]){
    const x=a.x+dx*t,y=a.y+dy*t;
-   const inner=luminance(x-ox*dist,y-oy*dist);
-   const outer=luminance(x+ox*dist,y+oy*dist);
+   const inner=sample(x-ox*dist,y-oy*dist);
+   const outer=sample(x+ox*dist,y+oy*dist);
    if(inner===null||outer===null)continue;
    valid++;
-   if(inner>122&&outer>122&&outer<220&&Math.abs(inner-outer)<23)comparable++;
+   if(inner.light>122&&outer.light>122&&outer.light<220&&inner.range<25&&outer.range<25&&Math.abs(inner.light-outer.light)<23)comparable++;
   }
   if(valid>=2&&comparable>=2)sides++;
  }
