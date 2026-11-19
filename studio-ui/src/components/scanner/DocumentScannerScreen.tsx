@@ -974,7 +974,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
        setNotice(found.confidence==='estimated'?'Đã nhận diện tứ giác; hãy xem kỹ từng góc rồi lưu.':'Độ tin cậy thấp; đã giữ khung gần toàn ảnh để tránh cắt mất góc.');
       })} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center disabled:opacity-50"><ScanLine size={15}/>Nhận diện mép</button>
        <button onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setCornerDraft(emptyCorners());setScanWarpDraft(scanWarpDraft?initScanWarpGrid(emptyCorners(),scanWarpDraft.points.length as 6|8|10|12,scanWarpDraft.axis):null);setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
-     <details data-hnl-scan-fold-section="true" key={`fold-${editing.id}`} defaultOpen={!!scanWarpDraft} className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
+     <details data-hnl-scan-fold-section="true" key={`fold-${editing.id}`} className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
       <summary className="list-none flex items-center justify-between min-h-9 cursor-pointer text-xs font-semibold">Nắn giấy bị gấp <span className="text-[#E2B74B] group-open:rotate-180 transition-transform">⌄</span></summary>
       <div className="space-y-2 mt-1">
       <div className="grid grid-cols-2 gap-2">
