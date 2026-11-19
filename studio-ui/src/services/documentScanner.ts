@@ -30,7 +30,7 @@ export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
 // 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
-export const SCAN_DETECTOR_REVISION=62;
+export const SCAN_DETECTOR_REVISION=63;
 
 /** Only untouched, failed automatic scans qualify for one new detector attempt.
  * Never change a manual 4-corner edit, an exported scan, or an existing split. */
@@ -796,6 +796,45 @@ function findCompactLightCardOnWarmBackground(image:ImageData,kind:ScanDocumentT
  return best;
 }
 
+/** A bright connected component is not necessarily the entire invoice.
+ * Folds, shadows and printed ruled tables can disconnect the upper sheet from
+ * its lower half. Never accept a bright-paper quad when unprinted paper still
+ * extends conspicuously OUTSIDE multiple proposed edges. In uncertain scenes
+ * leave the original image and manual four-corner frame intact. */
+function brightPaperContinuesOutside(image:ImageData,quad:ScanCorners):boolean{
+ const {width:w,height:h,data}=image;
+ const points=quad.map(p=>({x:p.x*(w-1),y:p.y*(h-1)}));
+ const distance=Math.max(8,Math.min(w,h)*.06);
+ const sample=(x:number,y:number)=>{
+  const px=Math.round(x),py=Math.round(y);
+  if(px<3||py<3||px>=w-3||py>=h-3)return null;
+  const k=(py*w+px)*4,r=data[k],g=data[k+1],b=data[k+2];
+  return {light:(r+2*g+b)/4,range:Math.max(r,g,b)-Math.min(r,g,b)};
+ };
+ let continuingSides=0;
+ for(let i=0;i<4;i++){
+  const a=points[i],b=points[(i+1)%4],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+  if(len<Math.min(w,h)*.16)continue;
+  // A clockwise (TL,TR,BR,BL) contour has its outside to the right.
+  const nx=dy/len,ny=-dx/len;
+  let following=0;
+  for(const t of [.20,.40,.60,.80]){
+   const x=a.x+dx*t,y=a.y+dy*t;
+   const inner=sample(x-nx*distance*1.10,y-ny*distance*1.10);
+   const outer=sample(x+nx*distance,y+ny*distance);
+   const beyond=sample(x+nx*distance*1.65,y+ny*distance*1.65);
+   if(!inner||!outer||!beyond)continue;
+   if(inner.light>104&&outer.light>104&&beyond.light>104&&
+      outer.range<95&&beyond.range<95&&
+      outer.light>=inner.light*.64&&beyond.light>=inner.light*.60&&
+      Math.abs(outer.light-inner.light)<82&&Math.abs(beyond.light-outer.light)<77)following++;
+  }
+  if(following>=2)continuingSides++;
+ }
+ const area=quadPolygonArea(points)/(w*h);
+ return continuingSides>=2||(continuingSides>=1&&area<.36);
+}
+
 /** A white document on dark/uneven plastic or wood must be found from its
  * outer light silhouette, not from rectangular blue lines inside the form.
  * Samples the photo perimeter for illumination, checks the full component and
@@ -855,7 +894,7 @@ function findBrightPaperOnDarkBackground(image:ImageData,kind:ScanDocumentType):
   const cx=ordered.reduce((sum,p)=>sum+p.x,0)/4,cy=ordered.reduce((sum,p)=>sum+p.y,0)/4;
   const corners=ordered.map(p=>({x:(p.x+(p.x-cx)*.008)/(w-1),
    y:(p.y+(p.y-cy)*.008)/(h-1)})) as ScanCorners;
-  if(!validCorners(corners))continue;
+  if(!validCorners(corners)||brightPaperContinuesOutside(image,corners))continue;
   if(area>bestArea){bestArea=area;best={corners,confidence:'estimated'};}
  }
  return best;
