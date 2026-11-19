@@ -403,8 +403,17 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
     }
    }
    await complete(page);
-  }).catch(error=>{console.warn('Tự scan không thành công; ảnh gốc vẫn lưu:',error);
-   setNotice('Chưa thể tự hoàn tất scan. Ảnh gốc vẫn an toàn trong thư viện; có thể chỉnh tay.');});
+  }).catch(async error=>{
+   console.warn('Tự scan không thành công; ảnh gốc vẫn lưu:',error);
+   // A failed decode or exhausted memory must not leave this page marked
+   // 'pending' forever. Clear only the original, still-unmodified record.
+   try{
+    const safe=await saveAutomaticScanIfUnedited(page.id,page.corners,null,page.corners,
+     ()=>!scanDirtyDrafts.current.has(page.id));
+    if(safe)setPages(prev=>prev.map(p=>p.id===safe.id?safe:p));
+   }catch(recoveryError){console.warn('Không thể kết thúc lượt scan thất bại:',recoveryError);}
+   setNotice('Không thể tự nhận diện: ảnh gốc vẫn an toàn. Có thể thử lại hoặc chỉnh góc bằng tay.');
+  });
  };
  /** Capture one immutable source JPEG, persist it, and only then detect edges.
   * A failed edge detector must never lose the newly photographed page. */
@@ -881,7 +890,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    </div>
    {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true">
      <div className="flex items-center justify-between gap-2 min-w-0"><h2 className="min-w-0 flex-1 truncate font-semibold text-sm" title={editing.name}>Chỉnh {scanWarpDraft?.points.length||4} điểm · {editing.name}</h2><button onClick={()=>setEditingId(null)} className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng chỉnh góc"><X size={18}/></button></div>
-     <p className="text-xs text-[#94A3B8]" role="status" aria-live="polite">{editing.autoProcessPending?
+     <p className="text-xs text-[#94A3B8]" role="status" aria-live="polite">{editing.autoProcessPending&&!scanDirtyDrafts.current.has(editing.id)?
       'Đang tự nhận diện và làm phẳng từ ảnh gốc đã lưu. Khung đang hiển thị chỉ là tạm thời; chưa cần chỉnh bốn góc.':
       editing.detectionConfidence==='estimated'?
       'Đã tìm được bốn góc: kiểm tra các mép và nếp gấp trước khi lưu.':

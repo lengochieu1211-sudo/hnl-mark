@@ -30,7 +30,7 @@ export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
 // 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
-export const SCAN_DETECTOR_REVISION=60;
+export const SCAN_DETECTOR_REVISION=61;
 
 /** Only untouched, failed automatic scans qualify for one new detector attempt.
  * Never change a manual 4-corner edit, an exported scan, or an existing split. */
@@ -686,6 +686,128 @@ function findNeutralPaperOnWarmWood(image:ImageData,kind:ScanDocumentType):ScanD
  return best;
 }
 
+/** A rotated label can have 5–8 irregular bright silhouette vertices.
+ * Keep a best-fit outer rectangle when reducing its hull produces duplicate
+ * extrema; never use this fallback for a large/uncertain multi-object region. */
+function minimumAreaQuad(points:PixelPoint[]):[PixelPoint,PixelPoint,PixelPoint,PixelPoint]|null{
+ const hull=convexHull(points);if(hull.length<3)return null;
+ let best:{area:number;ux:number;uy:number;loU:number;hiU:number;loV:number;hiV:number}|null=null;
+ for(let i=0;i<hull.length;i++){
+  const a=hull[i],b=hull[(i+1)%hull.length],len=Math.hypot(b.x-a.x,b.y-a.y);
+  if(len<1)continue;
+  const ux=(b.x-a.x)/len,uy=(b.y-a.y)/len;
+  let loU=Infinity,hiU=-Infinity,loV=Infinity,hiV=-Infinity;
+  for(const p of hull){const u=p.x*ux+p.y*uy,v=-p.x*uy+p.y*ux;
+   loU=Math.min(loU,u);hiU=Math.max(hiU,u);
+   loV=Math.min(loV,v);hiV=Math.max(hiV,v);
+  }
+  const area=(hiU-loU)*(hiV-loV);
+  if(!best||area<best.area)best={area,ux,uy,loU,hiU,loV,hiV};
+ }
+ if(!best)return null;
+ const {ux,uy,loU,hiU,loV,hiV}=best;
+ return orderQuad([[loU,loV],[hiU,loV],[hiU,hiV],[loU,hiV]].map(([u,v])=>({x:ux*u-uy*v,y:uy*u+ux*v})));
+}
+
+/** A white document on dark/uneven plastic or wood must be found from its
+ * outer light silhouette, not from rectangular blue lines inside the form.
+ * Samples the photo perimeter for illumination, checks the full component and
+ * rejects clipped or low-support shapes rather than auto-cropping text. */
+function findBrightPaperOnDarkBackground(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='id-card')return null;
+ const {width:w,height:h,data}=image;
+ if(w<90||h<90||data.length<w*h*4)return null;
+ const border:number[]=[];
+ for(let n=0;n<24;n++){
+  const x=Math.round((w-1)*(.04+.92*n/23)),y=Math.round((h-1)*(.04+.92*n/23));
+  for(const [xx,yy] of [[x,Math.round(h*.035)],[x,Math.round(h*.965)],
+   [Math.round(w*.035),y],[Math.round(w*.965),y]]){
+   const i=(yy*w+xx)*4;border.push((data[i]+2*data[i+1]+data[i+2])/4);
+  }
+ }
+ border.sort((a,b)=>a-b);
+ const background=border[Math.floor(border.length*.40)];
+ // A clipped sheet fills the perimeter and does not support reliable cropping.
+ if(background>155)return null;
+ const threshold=Math.max(104,Math.min(177,background+47));
+ const mask=new Uint8Array(w*h);let count=0;
+ for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+  const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+  const light=(r+2*g+b)/4,range=Math.max(r,g,b)-Math.min(r,g,b);
+  if(light>=threshold&&range<90){mask[y*w+x]=1;count++;}
+ }
+ if(count<w*h*.035||count>w*h*.82)return null;
+ const filled=morphClose(mask,w,h),visited=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ let best:ScanDetection|null=null,bestArea=0;
+ for(let sy=5;sy<h-5;sy+=2)for(let sx=5;sx<w-5;sx+=2){
+  const first=sy*w+sx;if(!filled[first]||visited[first])continue;
+  let front=0,tail=0;visited[first]=1;queue[tail++]=first;
+  let left=w,top=h,right=0,bottom=0,actual=0;
+  const edge:PixelPoint[]=[];
+  while(front<tail){
+   const k=queue[front++],x=k%w,y=(k/w)|0;
+   if(mask[k])actual++;
+   if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;
+   let boundary=false;
+   for(const next of [k-1,k+1,k-w,k+w]){
+    if(next<0||next>=w*h||Math.abs(next%w-x)>1){boundary=true;continue;}
+    if(!filled[next]){boundary=true;continue;}
+    if(!visited[next]){visited[next]=1;queue[tail++]=next;}
+   }
+   if(boundary&&front%3===0)edge.push({x,y});
+  }
+  const areaBox=(right-left)*(bottom-top),share=tail/(w*h),fill=actual/Math.max(1,areaBox);
+  if(share<.046||share>.86||fill<.43||left<6||top<6||right>w-3||bottom>h-3||
+    right-left<w*.19||bottom-top<h*.19||edge.length<16)continue;
+  const ordered=orderQuad(hullToQuadrilateral(convexHull(edge))||[])||minimumAreaQuad(edge);if(!ordered)continue;
+  const area=quadPolygonArea(ordered);
+  if(area/(w*h)<.063||area/Math.max(1,areaBox)<.46)continue;
+  const lens=ordered.map((p,i)=>Math.hypot(p.x-ordered[(i+1)%4].x,p.y-ordered[(i+1)%4].y));
+  const aspect=((lens[0]+lens[2])/2)/Math.max(1,(lens[1]+lens[3])/2);
+  if(aspect<.30||aspect>3.5)continue;
+  const cx=ordered.reduce((sum,p)=>sum+p.x,0)/4,cy=ordered.reduce((sum,p)=>sum+p.y,0)/4;
+  const corners=ordered.map(p=>({x:(p.x+(p.x-cx)*.008)/(w-1),
+   y:(p.y+(p.y-cy)*.008)/(h-1)})) as ScanCorners;
+  if(!validCorners(corners))continue;
+  if(area>bestArea){bestArea=area;best={corners,confidence:'estimated'};}
+ }
+ return best;
+}
+
+/** Reject an inner table or text rectangle when surrounding paper continues
+ * brightly beyond its proposed outline. Strong lines alone do not prove that
+ * an edge belongs to the outside of the sheet. */
+function likelyInnerPrintedPanel(image:ImageData,corners:ScanCorners):boolean{
+ const {width:w,height:h,data}=image;
+ if(quadPolygonArea(corners.map(p=>({x:p.x*w,y:p.y*h})))>w*h*.62)return false;
+ const luminance=(x:number,y:number):number|null=>{
+  const xx=Math.round(x),yy=Math.round(y);
+  if(xx<3||xx>=w-3||yy<3||yy>=h-3)return null;
+  const k=(yy*w+xx)*4;
+  return (data[k]+2*data[k+1]+data[k+2])/4;
+ };
+ let sides=0;
+ const points=corners.map(p=>({x:p.x*(w-1),y:p.y*(h-1)}));
+ const dist=Math.max(5,Math.min(w,h)*.035);
+ for(let i=0;i<4;i++){
+  const a=points[i],b=points[(i+1)%4],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+  if(len<12)continue;
+  // Clockwise image coordinates: rotate tangent clockwise-to-outside.
+  const ox=dy/len,oy=-dx/len;
+  let comparable=0,valid=0;
+  for(const t of [.22,.5,.78]){
+   const x=a.x+dx*t,y=a.y+dy*t;
+   const inner=luminance(x-ox*dist,y-oy*dist);
+   const outer=luminance(x+ox*dist,y+oy*dist);
+   if(inner===null||outer===null)continue;
+   valid++;
+   if(inner>122&&outer>122&&Math.abs(inner-outer)<23)comparable++;
+  }
+  if(valid>=2&&comparable>=2)sides++;
+ }
+ return sides>=2;
+}
+
 /** Higher-confidence 4-edge result replaces uncertain color-only segmentation.
  * Never force detection when edges do not close: manual frame retains source. */
 export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
@@ -694,9 +816,14 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  if(coolCard)return coolCard;
  const neutralPaper=findNeutralPaperOnWarmWood(image,kind);
  if(neutralPaper)return neutralPaper;
+ const brightPaper=findBrightPaperOnDarkBackground(image,kind);
+ if(brightPaper)return brightPaper;
  const color=detectDocumentByColor(image,kind);
  const edge=findEdgeQuadrilateral(image,kind);
  if(!edge)return color;
+ // Prevent four apparent corners of a printed table from taking the place of
+ // the actual paper edges when the silhouette detector has low confidence.
+ if(likelyInnerPrintedPanel(image,edge.corners))return color;
  if(color.confidence==='manual')return {corners:edge.corners,confidence:'estimated'};
  // When two independent methods agree, color pass already has generous outer rim.
  const difference=color.corners.reduce((d,p,i)=>d+Math.hypot(p.x-edge.corners[i].x,p.y-edge.corners[i].y),0)/4;

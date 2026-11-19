@@ -29,6 +29,6 @@ assert.ok(ui.includes('queueFailedScanDetectorUpgrade(page.id)'));
 assert.ok(ui.includes("queueScanEdgeEstimate(queued,'one',-1)"));
 assert.ok(ui.includes('scanDirtyDrafts.current.has(page.id)'),'manual draft wins over async retry');
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
-assert.match(gradle,/applicationIdSuffix '\.trial2560'/);
-assert.match(gradle,/HNLMark STUDIO 60/);
+assert.match(gradle,/applicationIdSuffix '\.trial2561'/);
+assert.match(gradle,/HNLMark STUDIO 61/);
 console.log('PASS TEST59: safe once-per-revision retry, high-resolution fallback, isolated APK identity');

@@ -40,14 +40,14 @@ for(const empty of [{paper:false},{paper:false,pen:true}]){
  assert.equal(found.confidence,'manual','Do not hallucinate sheet on wood or from blue pen');
 }
 const old={original:new Blob(['jpeg'],{type:'image/jpeg'}),corners:svc.DEFAULT_CORNERS,autoProcessPending:false,detectionConfidence:'manual',scanDetectorRevision:59};
-assert.equal(svc.SCAN_DETECTOR_REVISION,60);
+assert.ok(svc.SCAN_DETECTOR_REVISION>=60);
 assert.equal(svc.needsScanDetectorUpgrade(old),true,'Previous failed page should be retried on engine upgrade');
-assert.equal(svc.needsScanDetectorUpgrade({...old,scanDetectorRevision:60}),false,'No repeat after current revision');
+assert.equal(svc.needsScanDetectorUpgrade({...old,scanDetectorRevision:svc.SCAN_DETECTOR_REVISION}),false,'No repeat after current revision');
 const ui=fs.readFileSync(path.join(__dirname,'../studio-ui/src/components/scanner/DocumentScannerScreen.tsx'),'utf8');
 const source=fs.readFileSync(path.join(base,'documentScanner.ts'),'utf8');
 assert.ok(source.includes('[360,560,760]'),'Three bounded detail levels, not unlimited CPU');
-assert.ok(ui.includes('editing.autoProcessPending?')&&ui.includes('role="status"'),'Show ongoing work instead of prematurely warning');
+assert.ok(ui.includes('editing.autoProcessPending')&&ui.includes('role="status"'),'Show ongoing work instead of prematurely warning');
 assert.ok(ui.includes('SCAN_DETECTOR_REVISION'),'Display detector build for accurate bug triage');
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
-assert.match(gradle,/applicationIdSuffix '\.trial2560'/);assert.match(gradle,/HNLMark STUDIO 60/);
+assert.match(gradle,/applicationIdSuffix '\.trial2561'/);assert.match(gradle,/HNLMark STUDIO 61/);
 console.log('PASS TEST60: wood background, cool/warm sheets, shadows, safe no-page, revision upgrade, progress & APK isolation');
