@@ -114,3 +114,4 @@ jobs:
           node tests/test_studio62_compact_qr.cjs
           node tests/test_studio63_paper_continuity.cjs
           node tests/test_studio64_scanner_compact_ui.cjs
+          node tests/test_studio65_scanner_chevrons.cjs

@@ -1,7 +1,7 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import JSZip from 'jszip';
-import {ArrowDown,ArrowLeft,ArrowUp,Camera,Download,FileImage,FileText,Folder,FolderPlus,ImagePlus,Loader2,Move,RotateCcw,RotateCw,FlipHorizontal,FlipVertical,Save,ScanLine,Trash2,Upload,X} from 'lucide-react';
+import {ArrowDown,ArrowLeft,ArrowUp,Camera,Download,FileImage,FileText,Folder,FolderPlus,ImagePlus,Loader2,Move,RotateCcw,RotateCw,FlipHorizontal,FlipVertical,Save,ScanLine,Trash2,Upload,X,ChevronDown,ChevronRight} from 'lucide-react';
 import {saveToDevice} from '../../services/deviceBridge';
 import {scannerTapOnVideo} from '../../services/scannerFocusGeometry';
 import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scannerLiveBlendQuad,type LiveFrameRect} from '../../services/scannerLiveEdges';
@@ -910,7 +910,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
              <button title="Xóa ảnh quét" onClick={()=>void deletePage(page.id)} className="min-w-8 min-h-8 grid place-items-center text-red-300"><Trash2 size={14}/></button>
            </div></div></div>)}
      </div>
-     <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Sắp xếp trang</summary><p className="mt-1 flex items-center gap-1"><Move size={13}/>Kéo thả ảnh hoặc dùng mũi tên trên điện thoại.</p></details>
+     <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Sắp xếp trang</summary><p className="mt-1 flex items-center gap-1"><Move size={13}/>Kéo thả ảnh hoặc dùng mũi tên trên điện thoại.</p></details>
    </div>
    {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true" ref={scanEditorRegionRef}>
      <div className="flex items-center justify-between gap-2 min-w-0"><h2 className="min-w-0 flex-1 truncate font-semibold text-sm" title={editing.name}>Chỉnh {scanWarpDraft?.points.length||4} điểm · {editing.name}</h2><button onClick={()=>setEditingId(null)} className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng chỉnh góc"><X size={18}/></button></div>
@@ -919,7 +919,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
        editing.detectionConfidence==='estimated'?'Đã nhận diện 4 góc · kiểm tra mép':'Chưa nhận diện chắc chắn · giữ toàn ảnh'}</span>
       <span className="shrink-0">Offline R{SCAN_DETECTOR_REVISION}</span>
      </div>
-     <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Mẹo chỉnh góc</summary><p>Khi kéo sẽ có kính phóng đại 4,5×.</p></details>
+     <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Mẹo chỉnh góc</summary><p>Khi kéo sẽ có kính phóng đại 4,5×.</p></details>
      <label className="flex items-center gap-2 text-xs text-[#CBD5E1]">Loại tài liệu
       <select aria-label="Chọn loại tài liệu để nhận diện lại" value={scanDocumentType} onChange={e=>setScanDocumentType(e.target.value as ScanDocumentType)}
        className="min-h-9 flex-1 rounded-lg border border-white/15 bg-[#14243B] text-white px-2">
@@ -975,7 +975,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       })} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center disabled:opacity-50"><ScanLine size={15}/>Nhận diện mép</button>
        <button onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setCornerDraft(emptyCorners());setScanWarpDraft(scanWarpDraft?initScanWarpGrid(emptyCorners(),scanWarpDraft.points.length as 6|8|10|12,scanWarpDraft.axis):null);setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
      <details data-hnl-scan-fold-section="true" key={`fold-${editing.id}`} className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
-      <summary className="list-none flex items-center justify-between min-h-9 cursor-pointer text-xs font-semibold">Nắn giấy bị gấp <span className="text-[#E2B74B] group-open:rotate-180 transition-transform">⌄</span></summary>
+      <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 min-h-10 cursor-pointer select-none text-xs font-semibold">Nắn giấy bị gấp <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1B2A43]"><ChevronDown size={20} strokeWidth={2.25} aria-hidden="true" className="text-[#E2B74B] transition-transform duration-200 group-open:rotate-180"/></span></summary>
       <div className="space-y-2 mt-1">
       <div className="grid grid-cols-2 gap-2">
        <label className="text-xs">Số điểm nắn
@@ -999,11 +999,11 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         </select>
        </label>
       </div>
-      <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Hướng dẫn</summary><p className="mt-1">Đặt điểm xanh lên nếp gấp ở hai cạnh đối diện. Giấy gập che chữ không thể khôi phục hoàn toàn.</p></details>
+      <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Hướng dẫn</summary><p className="mt-1">Đặt điểm xanh lên nếp gấp ở hai cạnh đối diện. Giấy gập che chữ không thể khôi phục hoàn toàn.</p></details>
       </div>
      </details>
      <details data-hnl-scan-multi-section="true" className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
-      <summary className="list-none flex items-center justify-between min-h-9 cursor-pointer text-xs font-semibold">Tách nhiều giấy tờ <span className="text-[#E2B74B] group-open:rotate-180 transition-transform">⌄</span></summary>
+      <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 min-h-10 cursor-pointer select-none text-xs font-semibold">Tách nhiều giấy tờ <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1B2A43]"><ChevronDown size={20} strokeWidth={2.25} aria-hidden="true" className="text-[#E2B74B] transition-transform duration-200 group-open:rotate-180"/></span></summary>
       <div className="space-y-2 mt-1">
       <div className="grid grid-cols-2 gap-2">
        <button type="button" disabled={working} onClick={()=>void splitCurrentPage()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Nhận diện & tách nhiều vùng</button>
@@ -1013,7 +1013,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       </div>
      </details>
      <details data-hnl-scan-rotate-section="true" className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
-       <summary className="list-none flex items-center justify-between min-h-9 cursor-pointer text-xs font-semibold">Xoay / lật ảnh <span className="text-[#E2B74B] group-open:rotate-180 transition-transform">⌄</span></summary>
+       <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 min-h-10 cursor-pointer select-none text-xs font-semibold">Xoay / lật ảnh <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1B2A43]"><ChevronDown size={20} strokeWidth={2.25} aria-hidden="true" className="text-[#E2B74B] transition-transform duration-200 group-open:rotate-180"/></span></summary>
        <div className="space-y-2 mt-1">
        <div className="grid grid-cols-4 gap-2">
         <button type="button" disabled={working} onClick={()=>transformScan('ccw')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><RotateCcw size={15}/>Trái 90°</button>
@@ -1038,7 +1038,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
           setScanSharpnessLevelDraft(level);setScanSharpnessDraft(level===0?'off':'auto');setShowResult(true);}}
          className="min-w-0 flex-1 accent-[#E2B74B]"/></label>
        <div className="flex justify-between text-[10px] text-[#94A3B8]"><span>0 · Nét gốc</span><span>45 · Tự động</span><span>100 · Rõ chữ</span></div>
-       <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Hướng dẫn chỉnh màu</summary><p className="mt-1">Ảnh xem trước dùng cùng thiết lập với bản xuất. JPEG gốc không đổi; chữ đã mất nét không thể khôi phục hoàn toàn.</p></details>
+       <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Hướng dẫn chỉnh màu</summary><p className="mt-1">Ảnh xem trước dùng cùng thiết lập với bản xuất. JPEG gốc không đổi; chữ đã mất nét không thể khôi phục hoàn toàn.</p></details>
      </div>
      <div className="flex flex-wrap gap-2">{FILTERS.map(f=><button key={f.id} onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setFilterDraft(f.id);setShowResult(true);}} className={`px-3 min-h-9 rounded-lg text-xs border ${filterDraft===f.id?'border-[#E2B74B] text-[#E2B74B] bg-[#E2B74B]/10':'border-white/10 bg-[#14223A]'}`}>{f.name}</button>)}</div>
      <button disabled={working||!validCorners(cornerDraft)||!!(scanWarpDraft&&!validScanWarp(cornerDraft,scanWarpDraft))} onClick={()=>void applyEdit()} className="min-h-11 w-full rounded-xl bg-[#E2B74B] text-[#071121] font-semibold flex items-center justify-center gap-2 disabled:opacity-40"><Save size={18}/>Làm phẳng & lưu bản scan</button>
@@ -1059,7 +1059,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    </div>
    <div className="rounded-2xl bg-[#0D1729] border border-white/10 p-3 space-y-3">
      <h2 className="text-sm font-semibold flex gap-2 items-center"><Folder size={18} className="text-[#E2B74B]"/>An toàn và sao lưu</h2>
-     <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Lưu ý an toàn dữ liệu</summary><p className="mt-1">Dữ liệu scan lưu trong máy; hãy sao lưu ZIP trước khi xóa dữ liệu hoặc gỡ APK. Không tự gửi tài liệu lên đám mây.</p></details>
+     <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Lưu ý an toàn dữ liệu</summary><p className="mt-1">Dữ liệu scan lưu trong máy; hãy sao lưu ZIP trước khi xóa dữ liệu hoặc gỡ APK. Không tự gửi tài liệu lên đám mây.</p></details>
      <div className="grid grid-cols-2 gap-2"><button disabled={working||!pages.length} onClick={()=>void backupScans()} className="min-h-10 rounded-lg bg-[#17253D] flex items-center justify-center gap-2 text-xs disabled:opacity-40"><Download size={16}/>Sao lưu ZIP</button>
        <button disabled={working} onClick={()=>restoreInput.current?.click()} className="min-h-10 rounded-lg bg-[#17253D] flex items-center justify-center gap-2 text-xs"><Upload size={16}/>Khôi phục ZIP</button></div>
      <input ref={restoreInput} hidden type="file" accept=".zip,application/zip" onChange={e=>{const f=e.target.files?.[0];if(f)void restoreScans(f);e.currentTarget.value='';}}/>
