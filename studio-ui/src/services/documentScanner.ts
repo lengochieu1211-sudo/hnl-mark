@@ -30,7 +30,7 @@ export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
 // 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
-export const SCAN_DETECTOR_REVISION=61;
+export const SCAN_DETECTOR_REVISION=62;
 
 /** Only untouched, failed automatic scans qualify for one new detector attempt.
  * Never change a manual 4-corner edit, an exported scan, or an existing split. */
@@ -709,6 +709,89 @@ function minimumAreaQuad(points:PixelPoint[]):[PixelPoint,PixelPoint,PixelPoint,
  return orderQuad([[loU,loV],[hiU,loV],[hiU,hiV],[loU,hiV]].map(([u,v])=>({x:ux*u-uy*v,y:uy*u+ux*v})));
 }
 
+/** Compact light QR cards on wood must not inherit the hull of bright mugs
+ * or desk reflections. Confirm actual warm wood just outside >=3 card edges.
+ * Uncertain scenes keep the previous detector and their untouched source. */
+function findCompactLightCardOnWarmBackground(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='paper')return null;
+ const {width:w,height:h,data}=image;
+ if(w<100||h<100||data.length<w*h*4)return null;
+ let warm=0,observed=0;
+ for(let y=5;y<h-5;y+=11)for(let x=5;x<w-5;x+=11){
+  const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+  observed++;
+  if(r-b>21&&r-g>5&&g-b>9&&(r+2*g+b)/4>48)warm++;
+ }
+ if(warm/Math.max(1,observed)<.08)return null;
+ const mask=new Uint8Array(w*h);let count=0;
+ for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+  const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+  const light=(r+2*g+b)/4;
+  if(light<146||Math.max(r,g,b)-Math.min(r,g,b)>78||r-b>65||b-r>72||
+   g-r>55||g-r< -42||g-b>55)continue;
+  mask[y*w+x]=1;count++;
+ }
+ if(count<w*h*.02||count>w*h*.45)return null;
+ const filled=morphClose(mask,w,h),seen=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ let best:ScanDetection|null=null,bestArea=0;
+ const sample=(x:number,y:number)=>{
+  const xx=Math.round(x),yy=Math.round(y);
+  if(xx<3||yy<3||xx>=w-3||yy>=h-3)return null;
+  const i=(yy*w+xx)*4,r=data[i],g=data[i+1],b=data[i+2];
+  return {light:(r+2*g+b)/4,range:Math.max(r,g,b)-Math.min(r,g,b),
+   warm:r-b>18&&r-g>4&&g-b>8};
+ };
+ for(let sy=4;sy<h-4;sy+=2)for(let sx=4;sx<w-4;sx+=2){
+  const start=sy*w+sx;if(!filled[start]||seen[start])continue;
+  let front=0,tail=0;queue[tail++]=start;seen[start]=1;
+  let left=w,right=0,top=h,bottom=0,actual=0;
+  const boundary:PixelPoint[]=[];
+  while(front<tail){
+   const k=queue[front++],x=k%w,y=(k/w)|0;
+   left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+   if(mask[k])actual++;
+   let edge=false;
+   for(const next of [k-1,k+1,k-w,k+w]){
+    if(next<0||next>=w*h||Math.abs(next%w-x)>1){edge=true;continue;}
+    if(!filled[next]){edge=true;continue;}
+    if(!seen[next]){seen[next]=1;queue[tail++]=next;}
+   }
+   if(edge&&front%3===0)boundary.push({x,y});
+  }
+  const box=(right-left)*(bottom-top),share=tail/(w*h),fill=actual/Math.max(1,box);
+  if(share<.025||share>.46||fill<.38||left<6||top<6||right>w-7||bottom>h-7||
+   right-left<w*.15||bottom-top<h*.15||boundary.length<18)continue;
+  const quad=minimumAreaQuad(boundary);if(!quad)continue;
+  const area=quadPolygonArea(quad),frac=area/(w*h);
+  if(frac<.03||frac>.48||area/Math.max(1,box)<.48)continue;
+  const lens=quad.map((p,i)=>Math.hypot(p.x-quad[(i+1)%4].x,p.y-quad[(i+1)%4].y));
+  const dimA=(lens[0]+lens[2])/2,dimB=(lens[1]+lens[3])/2;
+  const ratio=Math.max(dimA,dimB)/Math.max(1,Math.min(dimA,dimB));
+  if(ratio<1.08||ratio>2.6)continue;
+  const dist=Math.max(4,Math.min(w,h)*.028);let sides=0;
+  for(let i=0;i<4;i++){
+   const a=quad[i],b=quad[(i+1)%4],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+   if(len<10)continue;
+   const ox=dy/len,oy=-dx/len;let good=0;
+   for(const t of [.23,.5,.77]){
+    const x=a.x+dx*t,y=a.y+dy*t;
+    const inside=sample(x-ox*dist,y-oy*dist),outside=sample(x+ox*dist,y+oy*dist);
+    if(inside&&outside&&inside.light>140&&inside.range<82&&
+     outside.warm&&outside.light<inside.light-12)good++;
+   }
+   if(good>=2)sides++;
+  }
+  if(sides<3)continue;
+  // Keep a 1.5% outside quiet-zone rim; never trim rounded printed corners.
+  const cx=quad.reduce((s,p)=>s+p.x,0)/4,cy=quad.reduce((s,p)=>s+p.y,0)/4;
+  const corners=quad.map(p=>({x:(p.x+(p.x-cx)*.015)/(w-1),
+   y:(p.y+(p.y-cy)*.015)/(h-1)})) as ScanCorners;
+  if(!validCorners(corners))continue;
+  if(area>bestArea){bestArea=area;best={corners,confidence:'estimated'};}
+ }
+ return best;
+}
+
 /** A white document on dark/uneven plastic or wood must be found from its
  * outer light silhouette, not from rectangular blue lines inside the form.
  * Samples the photo perimeter for illumination, checks the full component and
@@ -814,6 +897,8 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  // Strong cyan-ID candidate: avoids both expensive contour passes on busy wood.
  const coolCard=findCoolCardQuadrilateral(image,kind);
  if(coolCard)return coolCard;
+ const compactCard=findCompactLightCardOnWarmBackground(image,kind);
+ if(compactCard)return compactCard;
  const neutralPaper=findNeutralPaperOnWarmWood(image,kind);
  if(neutralPaper)return neutralPaper;
  const brightPaper=findBrightPaperOnDarkBackground(image,kind);
