@@ -49,6 +49,6 @@ assert.equal(scan.findCompactLightCardOnWarmBackground(scene(false),'auto'),null
 assert.equal(scan.findCompactLightCardOnWarmBackground(scene(),'paper'),null,'Keep paper detector unchanged');
 assert.equal(scan.SCAN_DETECTOR_REVISION,62);
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
-assert.match(gradle,/applicationIdSuffix '\\.trial2562'/);
+assert.match(gradle,/applicationIdSuffix '\.trial2562'/);
 assert.match(gradle,/HNLMark STUDIO 62/);
 console.log('PASS R62: isolated compact rotated QR, mugs/reflections excluded, previous paper path preserved');
