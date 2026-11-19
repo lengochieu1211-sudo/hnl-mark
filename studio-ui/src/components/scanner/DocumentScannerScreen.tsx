@@ -910,15 +910,16 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
              <button title="Xóa ảnh quét" onClick={()=>void deletePage(page.id)} className="min-w-8 min-h-8 grid place-items-center text-red-300"><Trash2 size={14}/></button>
            </div></div></div>)}
      </div>
-     <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Sắp xếp trang</summary><p className="mt-1 flex items-center gap-1"><Move size={13}/>Kéo thả hoặc dùng mũi tên trên điện thoại.</p></details>
+     <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Sắp xếp trang</summary><p className="mt-1 flex items-center gap-1"><Move size={13}/>Kéo thả ảnh hoặc dùng mũi tên trên điện thoại.</p></details>
    </div>
    {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true" ref={scanEditorRegionRef}>
      <div className="flex items-center justify-between gap-2 min-w-0"><h2 className="min-w-0 flex-1 truncate font-semibold text-sm" title={editing.name}>Chỉnh {scanWarpDraft?.points.length||4} điểm · {editing.name}</h2><button onClick={()=>setEditingId(null)} className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng chỉnh góc"><X size={18}/></button></div>
      <div className="flex items-center justify-between gap-2 text-[11px] text-[#94A3B8]" role="status" aria-live="polite">
       <span>{editing.autoProcessPending&&!scanDirtyDrafts.current.has(editing.id)?'Đang nhận diện từ ảnh gốc…':
-       editing.detectionConfidence==='estimated'?'Đã nhận diện 4 góc · kiểm tra mép':'Chưa chắc chắn · giữ toàn ảnh'}</span>
+       editing.detectionConfidence==='estimated'?'Đã nhận diện 4 góc · kiểm tra mép':'Chưa nhận diện chắc chắn · giữ toàn ảnh'}</span>
       <span className="shrink-0">Offline R{SCAN_DETECTOR_REVISION}</span>
      </div>
+     <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Mẹo chỉnh góc</summary><p>Khi kéo sẽ có kính phóng đại 4,5×.</p></details>
      <label className="flex items-center gap-2 text-xs text-[#CBD5E1]">Loại tài liệu
       <select aria-label="Chọn loại tài liệu để nhận diện lại" value={scanDocumentType} onChange={e=>setScanDocumentType(e.target.value as ScanDocumentType)}
        className="min-h-9 flex-1 rounded-lg border border-white/15 bg-[#14243B] text-white px-2">
