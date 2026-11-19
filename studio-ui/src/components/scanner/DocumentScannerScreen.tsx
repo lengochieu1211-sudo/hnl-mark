@@ -31,6 +31,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [selection,setSelection]=useState<string[]>([]);
  const [folderName,setFolderName]=useState('');
  const [editingId,setEditingId]=useState<string|null>(null),[showResult,setShowResult]=useState(false);
+ const [scanCompactPreview,setScanCompactPreview]=useState(false);
  const [cornerDraft,setCornerDraft]=useState<ScanCorners>(emptyCorners());
  const [scanWarpDraft,setScanWarpDraft]=useState<ScanWarpGrid|null>(null);
  const [filterDraft,setFilterDraft]=useState<ScanFilter>('enhance');
@@ -83,6 +84,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const scannerEditingIdRef=useRef<string|null>(null);
  scannerEditingIdRef.current=editingId;
  const scanPreviewViewportRef=useRef<HTMLDivElement>(null);
+ const scanMainPreviewRef=useRef<HTMLDivElement>(null),scanEditorRegionRef=useRef<HTMLDivElement>(null);
  const [scanLiveCorners,setScanLiveCorners]=useState<ScanCorners|null>(null);
  const [scanLiveFrameRect,setScanLiveFrameRect]=useState<LiveFrameRect|null>(null);
  const [scanLiveStatus,setScanLiveStatus]=useState<'searching'|'tracking'|'unavailable'>('searching');
@@ -262,6 +264,28 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const displayUrls=useMemo(()=>Object.fromEntries(pages.map(p=>[p.id,URL.createObjectURL(p.processed||p.original)])),[pages]);
  useEffect(()=>()=>Object.values(displayUrls).forEach(url=>URL.revokeObjectURL(url)),[displayUrls]);
  const editing=pages.find(p=>p.id===editingId);
+ // The workspace scrolls inside <main>, below the app header. Pin only a
+ // compact duplicate while the large draggable preview is off screen. Never
+ // create a second processing pass or obstruct the four-corner canvas.
+ useEffect(()=>{
+  if(!editingId){setScanCompactPreview(false);return;}
+  const preview=scanMainPreviewRef.current,region=scanEditorRegionRef.current;
+  const scroller=preview?.closest('main');
+  if(!preview||!region||!scroller)return;
+  let frame=0;
+  const check=()=>{
+   const top=scroller.getBoundingClientRect().top;
+   const previewBottom=preview.getBoundingClientRect().bottom;
+   const editorBottom=region.getBoundingClientRect().bottom;
+   const show=window.innerWidth<768&&previewBottom<top-4&&editorBottom>top+210;
+   setScanCompactPreview(current=>current===show?current:show);
+  };
+  const onScroll=()=>{if(frame)window.cancelAnimationFrame(frame);frame=window.requestAnimationFrame(check);};
+  scroller.addEventListener('scroll',onScroll,{passive:true});window.addEventListener('resize',onScroll);
+  check();
+  return()=>{scroller.removeEventListener('scroll',onScroll);window.removeEventListener('resize',onScroll);
+   if(frame)window.cancelAnimationFrame(frame);};
+ },[editingId]);
  const originalUrl=useMemo(()=>editing?URL.createObjectURL(editing.original):'',[editing?.id,editing?.original]);
  useEffect(()=>()=>{if(originalUrl)URL.revokeObjectURL(originalUrl);},[originalUrl]);
  const [previewScan,setPreviewScan]=useState<{key:string;url:string}|null>(null);
@@ -886,18 +910,15 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
              <button title="Xóa ảnh quét" onClick={()=>void deletePage(page.id)} className="min-w-8 min-h-8 grid place-items-center text-red-300"><Trash2 size={14}/></button>
            </div></div></div>)}
      </div>
-     <p className="text-[11px] text-[#94A3B8] flex items-center gap-1"><Move size={13}/>Kéo thả ảnh để đổi thứ tự, hoặc dùng mũi tên trên điện thoại.</p>
+     <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Sắp xếp trang</summary><p className="mt-1 flex items-center gap-1"><Move size={13}/>Kéo thả hoặc dùng mũi tên trên điện thoại.</p></details>
    </div>
-   {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true">
+   {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true" ref={scanEditorRegionRef}>
      <div className="flex items-center justify-between gap-2 min-w-0"><h2 className="min-w-0 flex-1 truncate font-semibold text-sm" title={editing.name}>Chỉnh {scanWarpDraft?.points.length||4} điểm · {editing.name}</h2><button onClick={()=>setEditingId(null)} className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng chỉnh góc"><X size={18}/></button></div>
-     <p className="text-xs text-[#94A3B8]" role="status" aria-live="polite">{editing.autoProcessPending&&!scanDirtyDrafts.current.has(editing.id)?
-      'Đang tự nhận diện và làm phẳng từ ảnh gốc đã lưu. Khung đang hiển thị chỉ là tạm thời; chưa cần chỉnh bốn góc.':
-      editing.detectionConfidence==='estimated'?
-      'Đã tìm được bốn góc: kiểm tra các mép và nếp gấp trước khi lưu.':
-      'Chưa nhận diện chắc chắn: khung gần toàn ảnh chỉ là dự phòng, không phải kết quả nhận diện từ ảnh gốc.'}
-      {' '}Khi kéo sẽ có kính phóng đại 4,5×.
-      <span className="block text-[10px] mt-1 text-[#64748B]">Smart Scan offline · bộ dò R{SCAN_DETECTOR_REVISION}</span>
-     </p>
+     <div className="flex items-center justify-between gap-2 text-[11px] text-[#94A3B8]" role="status" aria-live="polite">
+      <span>{editing.autoProcessPending&&!scanDirtyDrafts.current.has(editing.id)?'Đang nhận diện từ ảnh gốc…':
+       editing.detectionConfidence==='estimated'?'Đã nhận diện 4 góc · kiểm tra mép':'Chưa chắc chắn · giữ toàn ảnh'}</span>
+      <span className="shrink-0">Offline R{SCAN_DETECTOR_REVISION}</span>
+     </div>
      <label className="flex items-center gap-2 text-xs text-[#CBD5E1]">Loại tài liệu
       <select aria-label="Chọn loại tài liệu để nhận diện lại" value={scanDocumentType} onChange={e=>setScanDocumentType(e.target.value as ScanDocumentType)}
        className="min-h-9 flex-1 rounded-lg border border-white/15 bg-[#14243B] text-white px-2">
@@ -905,7 +926,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       </select></label>
      <div className="flex gap-2"><button onClick={()=>setShowResult(false)} className={`px-3 min-h-9 rounded-lg text-xs ${!showResult?'bg-[#E2B74B] text-[#071121]':'bg-[#17253D]'}`}>Ảnh gốc & góc</button>
        <button onClick={()=>setShowResult(true)} className={`px-3 min-h-9 rounded-lg text-xs disabled:opacity-40 ${showResult?'bg-[#E2B74B] text-[#071121]':'bg-[#17253D]'}`}>Ảnh đã làm phẳng</button></div>
-     <div className="max-w-xl mx-auto rounded-xl overflow-hidden bg-black border border-white/15">
+     <div ref={scanMainPreviewRef} data-hnl-scan-main-preview="true" className="max-w-xl mx-auto rounded-xl overflow-hidden bg-black border border-white/15">
        {showResult?(scanLiveResultUrl||(!editingHasUnsavedCorners&&editing.processed)?<img src={scanLiveResultUrl||processedUrl} className="block w-full max-h-[55vh] object-contain" alt="Ảnh tài liệu đã làm phẳng"/>:<div className="min-h-64 flex items-center justify-center text-xs text-[#94A3B8]">Đang tạo ảnh xem trước…</div>):
        <div ref={stageRef} className="relative w-fit max-w-full mx-auto">
          <img ref={sourceImageRef} src={orientedSourceUrl} alt="Ảnh gốc cần chỉnh bốn góc" className="block max-w-full max-h-[52vh] w-auto h-auto" draggable={false}
@@ -934,6 +955,15 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
           </div>,document.body)}
        </div>}
      </div>
+     {scanCompactPreview&&<div data-hnl-scan-compact-preview="true" className="md:hidden sticky top-0 z-30 rounded-xl border border-[#E2B74B]/50 bg-[#0B1729] p-2 shadow-2xl space-y-1">
+      <div className="flex justify-between items-center text-[11px] gap-2"><span className="font-semibold text-[#E2B74B]">Xem trước · {showResult?'Bản scan':'Ảnh gốc'}</span>
+       <button type="button" className="text-[#E2B74B] min-h-7 px-2 rounded-lg bg-[#17253D]" onClick={()=>scanMainPreviewRef.current?.scrollIntoView({behavior:'smooth',block:'start'})}>Xem lớn</button></div>
+      {showResult?(scanLiveResultUrl||(!editingHasUnsavedCorners&&editing.processed)?
+       <img src={scanLiveResultUrl||processedUrl} alt="Ảnh scan cập nhật khi chỉnh" className="h-[136px] w-full object-contain"/>:
+       <div className="h-[100px] flex items-center justify-center text-[11px] text-[#94A3B8]" role="status">Đang cập nhật ảnh…</div>):
+       <img src={orientedSourceUrl} alt="Ảnh gốc thu nhỏ khi chỉnh" className="h-[136px] w-full object-contain"
+        style={{filter:`brightness(${scanColorDraft.brightness}%) contrast(${scanColorDraft.contrast}%) saturate(${scanColorDraft.saturation}%)`}}/>}
+     </div>}
      <div className="flex gap-2 items-center justify-between"><button disabled={working} onClick={()=>void task('Đang nhận diện mép giấy…',async()=>{
        if(!editing)return;
        const found=await suggestDocumentEdges(editing.original,scanDocumentType);
@@ -943,8 +973,9 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
        setNotice(found.confidence==='estimated'?'Đã nhận diện tứ giác; hãy xem kỹ từng góc rồi lưu.':'Độ tin cậy thấp; đã giữ khung gần toàn ảnh để tránh cắt mất góc.');
       })} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center disabled:opacity-50"><ScanLine size={15}/>Nhận diện mép</button>
        <button onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setCornerDraft(emptyCorners());setScanWarpDraft(scanWarpDraft?initScanWarpGrid(emptyCorners(),scanWarpDraft.points.length as 6|8|10|12,scanWarpDraft.axis):null);setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
-     <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
-      <p className="text-xs font-semibold">Nắn giấy bị gấp theo nếp</p>
+     <details data-hnl-scan-fold-section="true" key={`fold-${editing.id}`} defaultOpen={!!scanWarpDraft} className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
+      <summary className="list-none flex items-center justify-between min-h-9 cursor-pointer text-xs font-semibold">Nắn giấy bị gấp <span className="text-[#E2B74B] group-open:rotate-180 transition-transform">⌄</span></summary>
+      <div className="space-y-2 mt-1">
       <div className="grid grid-cols-2 gap-2">
        <label className="text-xs">Số điểm nắn
         <select aria-label="Số điểm chỉnh nếp gấp" value={scanWarpDraft?.points.length||4}
@@ -967,26 +998,31 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         </select>
        </label>
       </div>
-      <p className="text-[11px] text-[#94A3B8]">Kéo cặp điểm xanh đến chỗ nếp gấp trên hai cạnh đối diện của tờ giấy. Khi lưu ảnh hoặc PDF, các dải được nắn theo nếp gấp và nối liền mép nhau. Đổi số điểm/hướng sẽ đặt lại điểm giữa. Không thể khôi phục chữ bị che khuất trong nếp gấp.</p>
-     </div>
-     <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
-      <p className="text-xs font-semibold">Một ảnh có nhiều CCCD / giấy tờ</p>
+      <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Hướng dẫn</summary><p className="mt-1">Đặt điểm xanh lên nếp gấp ở hai cạnh đối diện. Giấy gập che chữ không thể khôi phục hoàn toàn.</p></details>
+      </div>
+     </details>
+     <details data-hnl-scan-multi-section="true" className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
+      <summary className="list-none flex items-center justify-between min-h-9 cursor-pointer text-xs font-semibold">Tách nhiều giấy tờ <span className="text-[#E2B74B] group-open:rotate-180 transition-transform">⌄</span></summary>
+      <div className="space-y-2 mt-1">
       <div className="grid grid-cols-2 gap-2">
        <button type="button" disabled={working} onClick={()=>void splitCurrentPage()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Nhận diện & tách nhiều vùng</button>
        <button type="button" disabled={working} onClick={()=>void addManualScanRegion()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Thêm vùng bằng tay</button>
       </div>
-      <p className="text-[10px] text-[#94A3B8]">Mỗi vùng tạo một trang riêng để chỉnh góc; ảnh gốc vẫn có thể dùng lại. Nếu máy không nhận đủ vùng, dùng “Thêm vùng bằng tay”.</p>
-     </div>
-     <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
-       <p className="text-xs text-[#CBD5E1] font-semibold">Xoay / lật ảnh quét (giữ ảnh gốc)</p>
+      <p className="text-[11px] text-[#94A3B8]">Thiếu vùng? Chọn “Thêm vùng bằng tay”.</p>
+      </div>
+     </details>
+     <details data-hnl-scan-rotate-section="true" className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
+       <summary className="list-none flex items-center justify-between min-h-9 cursor-pointer text-xs font-semibold">Xoay / lật ảnh <span className="text-[#E2B74B] group-open:rotate-180 transition-transform">⌄</span></summary>
+       <div className="space-y-2 mt-1">
        <div className="grid grid-cols-4 gap-2">
         <button type="button" disabled={working} onClick={()=>transformScan('ccw')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><RotateCcw size={15}/>Trái 90°</button>
         <button type="button" disabled={working} onClick={()=>transformScan('cw')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><RotateCw size={15}/>Phải 90°</button>
         <button type="button" disabled={working} onClick={()=>transformScan('flip-h')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><FlipHorizontal size={15}/>Lật ngang</button>
         <button type="button" disabled={working} onClick={()=>transformScan('flip-v')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><FlipVertical size={15}/>Lật dọc</button>
        </div>
-       <p className="text-[10px] text-[#94A3B8]">Các điểm mép giấy chuyển theo ảnh. Bấm Lưu bản scan để ghi ảnh đã chỉnh; bản gốc không thay đổi.</p>
-     </div>
+       <p className="text-[11px] text-[#94A3B8]">Bản gốc được giữ nguyên.</p>
+       </div>
+     </details>
      <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
        <div className="flex justify-between items-center"><p className="text-xs font-semibold">Chỉnh màu ảnh scan</p><button disabled={working} onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(true);}} className="text-[11px] text-[#E2B74B]">Đặt lại màu</button></div>
        {([['brightness','Độ sáng'],['contrast','Tương phản'],['saturation','Độ bão hòa']] as const).map(([key,label])=><label key={key} className="flex gap-3 items-center text-xs">
@@ -994,7 +1030,6 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         <input aria-label={label+' ảnh scan'} type="range" min="0" max="200" step="5" value={scanColorDraft[key]}
           onChange={e=>updateScanColor(key,Number(e.target.value))} className="flex-1 accent-[#E2B74B] min-w-0"/>
        </label>)}
-       <p className="text-[10px] text-[#94A3B8]">Xem trước màu gần đúng. Bản xuất sau khi bấm Làm phẳng & lưu sử dụng cùng các giá trị đã chọn.</p>
        <label className="flex gap-3 items-center text-xs"><span className="w-[105px] shrink-0">Tăng độ nét {scanSharpnessLevelDraft}%</span>
         <input aria-label="Tăng độ nét ảnh scan" type="range" min="0" max="100" step="5"
          value={scanSharpnessLevelDraft} onChange={e=>{const level=Number(e.target.value);
@@ -1002,8 +1037,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
           setScanSharpnessLevelDraft(level);setScanSharpnessDraft(level===0?'off':'auto');setShowResult(true);}}
          className="min-w-0 flex-1 accent-[#E2B74B]"/></label>
        <div className="flex justify-between text-[10px] text-[#94A3B8]"><span>0 · Nét gốc</span><span>45 · Tự động</span><span>100 · Rõ chữ</span></div>
-       <p className="text-[10px] text-[#94A3B8]">Kéo thanh để xem ảnh sau làm phẳng ngay, không thay đổi ảnh gốc.</p>
-       <p className="text-[10px] text-[#94A3B8]">Tăng nét cục bộ trên bản scan xuất, giảm hạt nền, giữ nguyên JPEG gốc. Không thể khôi phục chữ đã nhòe hoặc mất nét trong ảnh ban đầu.</p>
+       <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Hướng dẫn chỉnh màu</summary><p className="mt-1">Ảnh xem trước dùng cùng thiết lập với bản xuất. JPEG gốc không đổi; chữ đã mất nét không thể khôi phục hoàn toàn.</p></details>
      </div>
      <div className="flex flex-wrap gap-2">{FILTERS.map(f=><button key={f.id} onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setFilterDraft(f.id);setShowResult(true);}} className={`px-3 min-h-9 rounded-lg text-xs border ${filterDraft===f.id?'border-[#E2B74B] text-[#E2B74B] bg-[#E2B74B]/10':'border-white/10 bg-[#14223A]'}`}>{f.name}</button>)}</div>
      <button disabled={working||!validCorners(cornerDraft)||!!(scanWarpDraft&&!validScanWarp(cornerDraft,scanWarpDraft))} onClick={()=>void applyEdit()} className="min-h-11 w-full rounded-xl bg-[#E2B74B] text-[#071121] font-semibold flex items-center justify-center gap-2 disabled:opacity-40"><Save size={18}/>Làm phẳng & lưu bản scan</button>
@@ -1024,7 +1058,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    </div>
    <div className="rounded-2xl bg-[#0D1729] border border-white/10 p-3 space-y-3">
      <h2 className="text-sm font-semibold flex gap-2 items-center"><Folder size={18} className="text-[#E2B74B]"/>An toàn và sao lưu</h2>
-     <p className="text-[11px] text-[#94A3B8]">Ảnh CCCD/tài liệu được xử lý và lưu cục bộ trong dữ liệu ứng dụng. Xóa dữ liệu ứng dụng hoặc gỡ APK TEST sẽ có nguy cơ mất bộ scan nếu chưa sao lưu. Không có OCR hay gửi tài liệu lên đám mây.</p>
+     <details className="text-[11px] text-[#94A3B8]"><summary className="cursor-pointer text-[#E2B74B]">Lưu ý an toàn dữ liệu</summary><p className="mt-1">Dữ liệu scan lưu trong máy; hãy sao lưu ZIP trước khi xóa dữ liệu hoặc gỡ APK. Không tự gửi tài liệu lên đám mây.</p></details>
      <div className="grid grid-cols-2 gap-2"><button disabled={working||!pages.length} onClick={()=>void backupScans()} className="min-h-10 rounded-lg bg-[#17253D] flex items-center justify-center gap-2 text-xs disabled:opacity-40"><Download size={16}/>Sao lưu ZIP</button>
        <button disabled={working} onClick={()=>restoreInput.current?.click()} className="min-h-10 rounded-lg bg-[#17253D] flex items-center justify-center gap-2 text-xs"><Upload size={16}/>Khôi phục ZIP</button></div>
      <input ref={restoreInput} hidden type="file" accept=".zip,application/zip" onChange={e=>{const f=e.target.files?.[0];if(f)void restoreScans(f);e.currentTarget.value='';}}/>
