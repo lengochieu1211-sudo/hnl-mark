@@ -801,7 +801,7 @@ function likelyInnerPrintedPanel(image:ImageData,corners:ScanCorners):boolean{
    const outer=luminance(x+ox*dist,y+oy*dist);
    if(inner===null||outer===null)continue;
    valid++;
-   if(inner>122&&outer>122&&Math.abs(inner-outer)<23)comparable++;
+   if(inner>122&&outer>122&&outer<220&&Math.abs(inner-outer)<23)comparable++;
   }
   if(valid>=2&&comparable>=2)sides++;
  }
