@@ -761,9 +761,13 @@ function findCompactLightCardOnWarmBackground(image:ImageData,kind:ScanDocumentT
   const box=(right-left)*(bottom-top),share=tail/(w*h),fill=actual/Math.max(1,box);
   if(share<.025||share>.46||fill<.38||left<6||top<6||right>w-7||bottom>h-7||
    right-left<w*.15||bottom-top<h*.15||boundary.length<18)continue;
-  const quad=minimumAreaQuad(boundary);if(!quad)continue;
+  // A tilted perspective card is not necessarily rectangular: retain its four
+  // outer hull vertices rather than projecting a minimum-area box into bare wood.
+  const simplified=hullToQuadrilateral(convexHull(boundary));
+  const quad=orderQuad(simplified||[])||
+   (simplified&&simplified.length===4?simplified:minimumAreaQuad(boundary));if(!quad)continue;
   const area=quadPolygonArea(quad),frac=area/(w*h);
-  if(frac<.03||frac>.48||area/Math.max(1,box)<.48)continue;
+  if(frac<.03||frac>.48||area/Math.max(1,box)<.44)continue;
   const lens=quad.map((p,i)=>Math.hypot(p.x-quad[(i+1)%4].x,p.y-quad[(i+1)%4].y));
   const dimA=(lens[0]+lens[2])/2,dimB=(lens[1]+lens[3])/2;
   const ratio=Math.max(dimA,dimB)/Math.max(1,Math.min(dimA,dimB));
@@ -781,7 +785,7 @@ function findCompactLightCardOnWarmBackground(image:ImageData,kind:ScanDocumentT
    }
    if(good>=2)sides++;
   }
-  if(sides<3)continue;
+  if(sides<2)continue;
   // Keep a 1.5% outside quiet-zone rim; never trim rounded printed corners.
   const cx=quad.reduce((s,p)=>s+p.x,0)/4,cy=quad.reduce((s,p)=>s+p.y,0)/4;
   const corners=quad.map(p=>({x:(p.x+(p.x-cx)*.015)/(w-1),
