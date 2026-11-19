@@ -111,3 +111,4 @@ jobs:
           node tests/test_studio59_retry_uncertain_scan.cjs
           node tests/test_studio60_wood_color_retry.cjs
           node tests/test_studio61_outer_silhouette.cjs
+          node tests/test_studio62_compact_qr.cjs
