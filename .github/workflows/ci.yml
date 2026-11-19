@@ -109,3 +109,4 @@ jobs:
           node tests/test_studio57_neutral_paper_wood.cjs
           node tests/test_studio58_cool_paper_on_wood.cjs
           node tests/test_studio59_retry_uncertain_scan.cjs
+          node tests/test_studio60_wood_color_retry.cjs

@@ -7,7 +7,7 @@ import {scannerTapOnVideo} from '../../services/scannerFocusGeometry';
 import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scannerLiveBlendQuad,type LiveFrameRect} from '../../services/scannerLiveEdges';
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
- DEFAULT_CORNERS,needsScanDetectorUpgrade,queueFailedScanDetectorUpgrade,createScannerPdf,flattenDocument,listScanFolders,listScans,getScan,newScanId,putScan,putScanFolder,saveAutomaticScanIfUnedited,scanSharpnessPercent,
+ DEFAULT_CORNERS,SCAN_DETECTOR_REVISION,needsScanDetectorUpgrade,queueFailedScanDetectorUpgrade,createScannerPdf,flattenDocument,listScanFolders,listScans,getScan,newScanId,putScan,putScanFolder,saveAutomaticScanIfUnedited,scanSharpnessPercent,
  initScanWarpGrid,scanWarpOuterCorners,validScanWarp,transformScanWarpGrid,
  splitStoredScanPage,addScanRegionManually,suggestMultipleDocumentEdges,
  removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,reconcileSavedScanCorners,detectDocumentEdges,validCorners,scannerOrientedPreview,
@@ -881,7 +881,14 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    </div>
    {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true">
      <div className="flex items-center justify-between gap-2 min-w-0"><h2 className="min-w-0 flex-1 truncate font-semibold text-sm" title={editing.name}>Chỉnh {scanWarpDraft?.points.length||4} điểm · {editing.name}</h2><button onClick={()=>setEditingId(null)} className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng chỉnh góc"><X size={18}/></button></div>
-     <p className="text-xs text-[#94A3B8]">{editing.detectionConfidence==='estimated'?'Đã ước lượng bốn góc: kiểm tra các mép và nếp gấp trước khi lưu.':'Chưa nhận diện chắc chắn: khung gần toàn ảnh để không cắt mất góc. Kéo các điểm về mép thực tế.'} Khi kéo sẽ có kính phóng đại 4,5×.</p>
+     <p className="text-xs text-[#94A3B8]" role="status" aria-live="polite">{editing.autoProcessPending?
+      'Đang tự nhận diện và làm phẳng từ ảnh gốc đã lưu. Khung đang hiển thị chỉ là tạm thời; chưa cần chỉnh bốn góc.':
+      editing.detectionConfidence==='estimated'?
+      'Đã tìm được bốn góc: kiểm tra các mép và nếp gấp trước khi lưu.':
+      'Chưa nhận diện chắc chắn: khung gần toàn ảnh chỉ là dự phòng, không phải kết quả nhận diện từ ảnh gốc.'}
+      {' '}Khi kéo sẽ có kính phóng đại 4,5×.
+      <span className="block text-[10px] mt-1 text-[#64748B]">Smart Scan offline · bộ dò R{SCAN_DETECTOR_REVISION}</span>
+     </p>
      <label className="flex items-center gap-2 text-xs text-[#CBD5E1]">Loại tài liệu
       <select aria-label="Chọn loại tài liệu để nhận diện lại" value={scanDocumentType} onChange={e=>setScanDocumentType(e.target.value as ScanDocumentType)}
        className="min-h-9 flex-1 rounded-lg border border-white/15 bg-[#14243B] text-white px-2">

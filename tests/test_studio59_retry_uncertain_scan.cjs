@@ -12,23 +12,23 @@ const edits=load('scannerEdits'),print=load('scannerPrintLayout');
 const svc=load('documentScanner',{'./scannerEdits':edits,'./scannerPrintLayout':print});
 const base={id:'old',original:new Blob([Uint8Array.from([255,216])],{type:'image/jpeg'}),
  corners:svc.DEFAULT_CORNERS.map(p=>({...p})),filter:'enhance',detectionConfidence:'manual',autoProcessPending:false};
-assert.equal(svc.SCAN_DETECTOR_REVISION,59);
+assert.ok(svc.SCAN_DETECTOR_REVISION>=59);
 assert.equal(svc.needsScanDetectorUpgrade(base),true);
 for(const variant of [
- {scanDetectorRevision:59},{autoProcessPending:true},{processed:new Blob(['jpg'])},
+ {scanDetectorRevision:svc.SCAN_DETECTOR_REVISION},{autoProcessPending:true},{processed:new Blob(['jpg'])},
  {warpGrid:{axis:'vertical',points:[]}},{detectionConfidence:'estimated'},
  {splitParentId:'parent'},{transformOps:['cw']},{original:new Blob([])},
  {corners:base.corners.map((p,i)=>i===0?{...p,x:p.x+.02}:p)}
 ])assert.equal(svc.needsScanDetectorUpgrade({...base,...variant}),false,'Never retry edited/finished sources');
 const source=fs.readFileSync(path.join(root,'documentScanner.ts'),'utf8');
 const ui=fs.readFileSync(path.join(__dirname,'../studio-ui/src/components/scanner/DocumentScannerScreen.tsx'),'utf8');
-assert.ok(source.includes('sourcePixels(blob,560)'),'second pass for uncertain small documents');
+assert.ok(source.includes('[360,560,760]'),'second pass for uncertain small documents');
 assert.ok(source.includes('scanDetectorRevision:SCAN_DETECTOR_REVISION'),'stamp detector attempt');
 assert.ok(source.includes('current||!needsScanDetectorUpgrade(current)'),'atomic retry checks');
 assert.ok(ui.includes('queueFailedScanDetectorUpgrade(page.id)'));
 assert.ok(ui.includes("queueScanEdgeEstimate(queued,'one',-1)"));
 assert.ok(ui.includes('scanDirtyDrafts.current.has(page.id)'),'manual draft wins over async retry');
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
-assert.match(gradle,/applicationIdSuffix '\.trial2559'/);
-assert.match(gradle,/HNLMark STUDIO 59/);
+assert.match(gradle,/applicationIdSuffix '\.trial2560'/);
+assert.match(gradle,/HNLMark STUDIO 60/);
 console.log('PASS TEST59: safe once-per-revision retry, high-resolution fallback, isolated APK identity');

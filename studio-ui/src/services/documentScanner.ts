@@ -30,7 +30,7 @@ export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
 // 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
-export const SCAN_DETECTOR_REVISION=59;
+export const SCAN_DETECTOR_REVISION=60;
 
 /** Only untouched, failed automatic scans qualify for one new detector attempt.
  * Never change a manual 4-corner edit, an exported scan, or an existing split. */
@@ -615,25 +615,35 @@ function findNeutralPaperOnWarmWood(image:ImageData,kind:ScanDocumentType):ScanD
  const {width:w,height:h,data}=image;
  if(w<90||h<90||data.length<w*h*4)return null;
  let warm=0,valid=0;
+ const warmDifferences:number[]=[],borderLights:number[]=[];
  const observe=(x:number,y:number)=>{
   const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
   if(Math.max(r,g,b)<65)return;
-  valid++;
-  if(r-b>25&&r-g>6&&g-b>12)warm++;
+  valid++;borderLights.push((r+2*g+b)/4);
+  if(r-b>25&&r-g>6&&g-b>12){warm++;warmDifferences.push(r-b);}
  };
  for(let n=0;n<24;n++){
   const x=Math.round((w-1)*(.04+.92*n/23)),y=Math.round((h-1)*(.04+.92*n/23));
   observe(x,Math.round(h*.035));observe(x,Math.round(h*.965));
   observe(Math.round(w*.035),y);observe(Math.round(w*.965),y);
  }
- if(valid<32||warm/valid<.47)return null;
+ if(valid<32||warm/valid<.47||warmDifferences.length<16)return null;
+ // Camera auto-white-balance can tint small receipts blue or yellow. Model
+ // the actual wood perimeter instead of rejecting paper at a fixed b-r cutoff.
+ warmDifferences.sort((a,b)=>a-b);borderLights.sort((a,b)=>a-b);
+ const woodRB=warmDifferences[(warmDifferences.length/2)|0];
+ const woodLight=borderLights[(borderLights.length/2)|0];
+ const paperRBMax=Math.min(44,Math.max(18,woodRB-19));
+ const paperLightMin=Math.max(74,woodLight+9);
  const mask=new Uint8Array(w*h);
  let neutralCount=0;
  for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
   const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
-  // Paper may appear slightly blue under camera auto-white-balance, while wood remains warm.
-  // Permit a modest blue surplus without selecting strongly saturated blue objects.
-  if(r<112||g<116||b<106||g-r< -13||g-r>23||r-b>18||b-r>30||g-b>28)continue;
+  // Work across camera exposure and white-balance changes, while rejecting
+  // orange timber, the dark printed lines and saturated pens on the table.
+  const brightness=(r+2*g+b)/4;
+  if(brightness<paperLightMin||r-b>paperRBMax||b-r>67||
+    g-r< -31||g-r>44||g-b>43)continue;
   mask[y*w+x]=1;neutralCount++;
  }
  if(neutralCount<w*h*.055||neutralCount>w*h*.76)return null;
@@ -870,13 +880,15 @@ export async function reconcileSavedScanCorners(blob:Blob,live:ScanCorners|null,
  return selectSavedScanCorners(pixels,live,detectDocumentEdges(pixels,kind),kind);
 }
 
-/** Retry only uncertain sources at higher resolution. Printed receipts can be too
- * small at 360px for the color+contour masks to preserve all four edges. */
+/** Bounded progressive offline detection. High-resolution retry occurs only
+ * on a failure and only after the source has already been saved, never during
+ * the continuous shutter loop. Do not invent corners for unrecognizable pages. */
 export async function suggestDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):Promise<ScanDetection>{
- const quick=detectDocumentEdges(await sourcePixels(blob,360),kind);
- if(quick.confidence==='estimated')return quick;
- const detailed=detectDocumentEdges(await sourcePixels(blob,560),kind);
- return detailed.confidence==='estimated'?detailed:quick;
+ for(const edge of [360,560,760]){
+  const result=detectDocumentEdges(await sourcePixels(blob,edge),kind);
+  if(result.confidence==='estimated'&&validCorners(result.corners))return result;
+ }
+ return defaultDetection();
 }
 export function validCorners(points:ScanCorners):boolean{
  if(points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return false;
