@@ -34,7 +34,7 @@ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
  assert.equal(strong[(18*W+10)*4],original[(18*W+10)*4],'smooth areas remain unchanged');
  const ui=fs.readFileSync(path.join(__dirname,'../studio-ui/src/components/scanner/DocumentScannerScreen.tsx'),'utf8');
  const service=fs.readFileSync(path.join(root,'documentScanner.ts'),'utf8');
- assert.ok(ui.includes('created.forEach(p=>queueScanEdgeEstimate(p,\'multiple\',-1))'),'Import auto-processing');
+ assert.ok(ui.includes('created.forEach(p=>queueScanEdgeEstimate(p,\'one\',-1))'),'Import auto-processing');
  assert.ok(ui.includes('autoProcessPending:true'),'persist interrupted jobs');
  const saving=ui.split('const flushCapturedScanQueue=async()=>')[1].split('const captureScanFrame=async()=>')[0];
  assert.ok(saving.indexOf('await putScan(page)')<saving.indexOf('queueScanEdgeEstimate(page,frame.split,frame.sessionSerial)'),'save raw source before processing');
