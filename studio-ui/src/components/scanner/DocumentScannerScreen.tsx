@@ -52,6 +52,9 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [scanCameraOpen,setScanCameraOpen]=useState(false);
  const [scanMode,setScanMode]=useState<'single'|'continuous'>('continuous');
  const [scanSplitMode,setScanSplitMode]=useState<'one'|'multiple'>('one');
+ // Proposed regions are draft-only until the user reviews the SOURCE image.
+ const [scanSplitPreview,setScanSplitPreview]=useState<{pageId:string;sourceCorners:ScanCorners;corners:ScanCorners[]}|null>(null);
+ const [scanSplitSelected,setScanSplitSelected]=useState<number[]>([]);
  const [cameraFacing,setCameraFacing]=useState<'environment'|'user'>('environment');
  const [scanCameraReady,setScanCameraReady]=useState(false);
  const [scanCameraError,setScanCameraError]=useState('');
@@ -260,7 +263,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   return()=>{disposed=true;scanLiveSnapshotRef.current=null;window.clearTimeout(timeout);};
  },[scanCameraOpen,scanCameraReady,cameraFacing,scanDocumentType]);
 
- useEffect(()=>{let alive=true;Promise.all([listScans(),listScanFolders()]).then(([p,f])=>{if(alive){setPages(p);setFolders(f);p.filter(page=>page.autoProcessPending&&!page.processed).forEach(page=>queueScanEdgeEstimate(page,'multiple',-1));}}).catch(e=>{if(alive)setProblem('Không mở được thư viện quét: '+String(e));});return()=>{alive=false;abortProcessing.current?.abort();};},[]);
+ useEffect(()=>{let alive=true;Promise.all([listScans(),listScanFolders()]).then(([p,f])=>{if(alive){setPages(p);setFolders(f);p.filter(page=>page.autoProcessPending&&!page.processed).forEach(page=>queueScanEdgeEstimate(page,'one',-1));}}).catch(e=>{if(alive)setProblem('Không mở được thư viện quét: '+String(e));});return()=>{alive=false;abortProcessing.current?.abort();};},[]);
  const displayUrls=useMemo(()=>Object.fromEntries(pages.map(p=>[p.id,URL.createObjectURL(p.processed||p.original)])),[pages]);
  useEffect(()=>()=>Object.values(displayUrls).forEach(url=>URL.revokeObjectURL(url)),[displayUrls]);
  const editing=pages.find(p=>p.id===editingId);
@@ -349,7 +352,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
    setNotice(`Đã an toàn lưu ${created.length} ảnh gốc. Đang tự nhận diện, làm phẳng và tăng nét…`);
    // Auto-detect separate pages too; never block the source import / UI.
-   created.forEach(p=>queueScanEdgeEstimate(p,'multiple',-1));
+   created.forEach(p=>queueScanEdgeEstimate(p,'one',-1));
   });
  };
  /** The shutter is released after committing the original, not after expensive
@@ -391,26 +394,11 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
     }
     setNotice('Đã tự làm phẳng và tăng nét bản scan. Ảnh gốc vẫn giữ nguyên; có thể chỉnh lại khi cần.');
    };
-   if(splitMode==='multiple'){
-    await allowHeavy();
-    const proposed=await suggestMultipleDocumentEdges(page.original,page.documentType);
-    if(proposed.length>=2&&!scanDirtyDrafts.current.has(page.id)){
-     const regions=await splitStoredScanPage(page.id,page.corners,proposed.map(p=>p.corners),
-      ()=>!scanDirtyDrafts.current.has(page.id));
-     if(regions.length>=2){
-      setPages(prev=>[...prev.filter(p=>p.id!==page.id),...regions]);
-      if(scanCaptureSessionSerial.current===sessionSerial){
-       scanSessionIdsRef.current.push(...regions.slice(1).map(p=>p.id));setScanSessionIds([...scanSessionIdsRef.current]);
-      }
-      setSelection(prev=>[...new Set([...prev,...regions.map(p=>p.id)])]);
-      setScanCameraNotice(`Đã tách ${regions.length} tài liệu từ một ảnh gốc`);
-      if(scannerEditingIdRef.current===page.id&&!scanDirtyDrafts.current.has(page.id))
-       setCornerDraft(regions[0].corners.map(c=>({...c})) as ScanCorners);
-      for(const region of regions)await complete(region);
-      return;
-     }
-    }
-   }
+   // MULTIPLE is an explicit REQUEST TO REVIEW, never permission to create
+   // persistent child scans from uncertain segmentation in the background.
+   // Original JPEG is still detected and safely processed as one page.
+   if(splitMode==='multiple'&&!scanDirtyDrafts.current.has(page.id))
+    setScanCameraNotice('Ảnh gốc đã lưu. Mở trang và duyệt vùng đề xuất tại “Tách nhiều giấy tờ”.');
    const detected=await reconcileSavedScanCorners(page.original,
     page.detectionConfidence==='estimated'?page.corners:null,page.documentType);
    if(detected&&!scanDirtyDrafts.current.has(page.id)){
@@ -678,17 +666,39 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const editingHasUnsavedCorners=!!editing&&(cornerDraft.some((p,i)=>Math.abs(p.x-editing.corners[i].x)>1e-6||Math.abs(p.y-editing.corners[i].y)>1e-6)||filterDraft!==editing.filter||scanSharpnessDraft!==(editing.sharpness||'off')||scanSharpnessLevelDraft!==scanSharpnessPercent(editing)||JSON.stringify(scanOpsDraft)!==JSON.stringify(safeScanOps(editing.transformOps))||JSON.stringify(scanColorDraft)!==JSON.stringify(safeScanColor(editing.colorAdjust))||JSON.stringify(scanWarpDraft)!==JSON.stringify(editing.warpGrid||null));
  const splitCurrentPage=async()=>{
   if(!editing)return;
-  if(editingHasUnsavedCorners){setProblem('Hãy lưu hoặc hoàn tác các góc đang chỉnh trước khi tự tách nhiều vùng.');return;}
-  await task('Đang tìm nhiều tài liệu trong ảnh gốc…',async()=>{
+  if(editingHasUnsavedCorners||editing.processed||safeScanOps(editing.transformOps).length||editing.warpGrid){
+   setProblem('Hãy dùng ảnh gốc chưa làm phẳng/xoay và lưu hoặc hoàn tác góc đang chỉnh trước khi đề xuất tách vùng.');return;
+  }
+  await task('Đang tìm các vùng để duyệt…',async()=>{
    const candidates=await suggestMultipleDocumentEdges(editing.original,scanDocumentType);
-   if(candidates.length<2){setNotice('Chưa tìm chắc chắn từ 2 vùng; ảnh gốc được giữ. Dùng “Thêm vùng bằng tay”.');return;}
-   const saved=await splitStoredScanPage(editing.id,editing.corners,candidates.map(p=>p.corners),
+   if(candidates.length<2){
+    setScanSplitPreview(null);
+    setNotice('Chưa tìm chắc chắn từ 2 vùng; ảnh gốc được giữ. Dùng “Thêm vùng bằng tay”.');return;
+   }
+   setScanSplitPreview({pageId:editing.id,sourceCorners:editing.corners.map(p=>({...p})) as ScanCorners,
+    corners:candidates.map(c=>c.corners.map(p=>({...p})) as ScanCorners)});
+   setScanSplitSelected(candidates.map((_,i)=>i));
+   setShowResult(false);
+   setNotice('Đây chỉ là vùng đề xuất. Kiểm tra chữ/QR sát mép, chọn ít nhất 2 vùng rồi bấm xác nhận.');
+  });
+ };
+ const confirmSplitCurrentPage=async()=>{
+  const draft=scanSplitPreview;
+  if(!editing||!draft||draft.pageId!==editing.id||editingHasUnsavedCorners||
+    editing.processed||safeScanOps(editing.transformOps).length||scanDirtyDrafts.current.has(editing.id)){
+   setProblem('Ảnh hoặc bốn góc đã thay đổi. Hãy nhận diện lại vùng trước khi tách.');return;
+  }
+  const approved=draft.corners.filter((_,i)=>scanSplitSelected.includes(i));
+  if(approved.length<2){setProblem('Hãy chọn ít nhất 2 vùng đã kiểm tra để tách.');return;}
+  await task('Đang lưu các vùng đã xác nhận…',async()=>{
+   const saved=await splitStoredScanPage(editing.id,draft.sourceCorners,approved,
     ()=>!scanDirtyDrafts.current.has(editing.id));
-   if(saved.length<2){setNotice('Trang đã chỉnh hoặc đã tách; không ghi đè. Có thể thêm vùng bằng tay.');return;}
+   if(saved.length<2){setScanSplitPreview(null);setNotice('Nguồn đã thay đổi hoặc đã tách; không ghi đè. Hãy kiểm tra lại.');return;}
    setPages(prev=>[...prev.filter(p=>p.id!==editing.id),...saved]);
    setSelection(prev=>[...new Set([...prev,...saved.map(p=>p.id)])]);
    setCornerDraft(saved[0].corners.map(p=>({...p})) as ScanCorners);setScanWarpDraft(null);
-   setNotice(`Đã tách ${saved.length} vùng từ một ảnh. Kiểm tra từng góc trước khi xuất.`);
+   setScanSplitPreview(null);setScanSplitSelected([]);
+   setNotice(`Đã tạo ${saved.length} vùng được duyệt, mỗi vùng vẫn giữ ảnh gốc. Kiểm tra góc trước khi xuất.`);
   });
  };
  const addManualScanRegion=async()=>{
@@ -822,7 +832,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         <button type="button" disabled={scanCaptureLock.current||scanPendingCount>0} onClick={()=>setScanSplitMode('one')}
          aria-pressed={scanSplitMode==='one'} className={`min-h-9 px-3 rounded-lg text-xs ${scanSplitMode==='one'?'bg-[#E2B74B] text-[#06101E]':'bg-[#14243B]'}`}>1 tài liệu</button>
         <button type="button" disabled={scanCaptureLock.current||scanPendingCount>0} onClick={()=>setScanSplitMode('multiple')}
-         aria-pressed={scanSplitMode==='multiple'} className={`min-h-9 px-3 rounded-lg text-xs ${scanSplitMode==='multiple'?'bg-[#E2B74B] text-[#06101E]':'bg-[#14243B]'}`}>Nhiều tài liệu</button>
+         aria-pressed={scanSplitMode==='multiple'} className={`min-h-9 px-3 rounded-lg text-xs ${scanSplitMode==='multiple'?'bg-[#E2B74B] text-[#06101E]':'bg-[#14243B]'}`}>Nhiều tài liệu · duyệt sau</button>
       </div>
       <div className="shrink-0 px-3 pb-3 flex items-center justify-center gap-2">
         <button type="button" disabled={scanCameraBusy} onClick={()=>setScanMode('single')} aria-pressed={scanMode==='single'}
@@ -1006,9 +1016,34 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 min-h-10 cursor-pointer select-none text-xs font-semibold">Tách nhiều giấy tờ <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1B2A43]"><ChevronDown size={20} strokeWidth={2.25} aria-hidden="true" className="text-[#E2B74B] transition-transform duration-200 group-open:rotate-180"/></span></summary>
       <div className="space-y-2 mt-1">
       <div className="grid grid-cols-2 gap-2">
-       <button type="button" disabled={working} onClick={()=>void splitCurrentPage()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Nhận diện & tách nhiều vùng</button>
+       <button type="button" disabled={working} onClick={()=>void splitCurrentPage()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Đề xuất vùng để duyệt</button>
        <button type="button" disabled={working} onClick={()=>void addManualScanRegion()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Thêm vùng bằng tay</button>
       </div>
+      {scanSplitPreview?.pageId===editing.id&&<div data-hnl-scan-split-review="true" className="rounded-xl border border-[#E2B74B]/40 bg-[#0B1729] p-2 space-y-2">
+       <p className="text-xs font-semibold text-[#E2B74B]">Duyệt các vùng trên ảnh gốc · chưa tách</p>
+       <p className="text-[11px] text-[#CBD5E1]">Kiểm tra tất cả chữ, dấu và mã QR sát mép. Bỏ chọn vùng nhận diện nhầm; ảnh gốc không thay đổi.</p>
+       <div className="relative w-fit max-w-full mx-auto bg-black rounded-lg overflow-hidden">
+        <img src={orientedSourceUrl} alt="Ảnh gốc có các vùng đề xuất để xác nhận" className="block w-auto max-w-full max-h-[44vh] h-auto" draggable={false}/>
+        <svg aria-hidden="true" className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+         {scanSplitPreview.corners.map((quad,i)=><polygon key={i} points={quad.map(p=>`${p.x*1000},${p.y*1000}`).join(' ')}
+          fill={scanSplitSelected.includes(i)?'rgba(226,183,75,.13)':'rgba(100,116,139,.12)'}
+          stroke={scanSplitSelected.includes(i)?'#E2B74B':'#94A3B8'} strokeWidth="5"/>)}
+        </svg>
+       </div>
+       <div className="grid grid-cols-2 gap-2">
+        {scanSplitPreview.corners.map((_,i)=><label key={i} className="flex items-center gap-2 min-h-9 rounded-lg bg-[#17253D] px-2 text-xs">
+         <input type="checkbox" aria-label={`Chọn vùng đề xuất ${i+1}`} checked={scanSplitSelected.includes(i)}
+          onChange={e=>setScanSplitSelected(prev=>e.target.checked?[...prev,i]:prev.filter(x=>x!==i))}
+          className="accent-[#E2B74B]"/>Vùng {i+1}
+        </label>)}
+       </div>
+       <div className="flex gap-2">
+        <button type="button" disabled={working||scanSplitSelected.length<2} onClick={()=>void confirmSplitCurrentPage()}
+         className="min-h-10 flex-1 rounded-lg bg-[#E2B74B] text-[#06101E] text-xs font-semibold disabled:opacity-40">Xác nhận tách {scanSplitSelected.length} vùng</button>
+        <button type="button" onClick={()=>{setScanSplitPreview(null);setScanSplitSelected([]);}}
+         className="min-h-10 px-3 rounded-lg bg-[#17253D] text-xs">Hủy</button>
+       </div>
+      </div>}
       <p className="text-[11px] text-[#94A3B8]">Thiếu vùng? Chọn “Thêm vùng bằng tay”.</p>
       </div>
      </details>
