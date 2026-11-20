@@ -1,15 +1,17 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import JSZip from 'jszip';
-import {ArrowDown,ArrowLeft,ArrowUp,Camera,Download,FileImage,FileText,Folder,FolderPlus,ImagePlus,Loader2,Move,RotateCcw,RotateCw,FlipHorizontal,FlipVertical,Save,ScanLine,Trash2,Upload,X} from 'lucide-react';
+import {ArrowDown,ArrowLeft,ArrowUp,Camera,Download,FileImage,FileText,Folder,FolderPlus,ImagePlus,Loader2,Move,RotateCcw,RotateCw,FlipHorizontal,FlipVertical,Save,ScanLine,Trash2,Upload,X,ChevronDown,ChevronRight} from 'lucide-react';
 import {saveToDevice} from '../../services/deviceBridge';
 import {scannerTapOnVideo} from '../../services/scannerFocusGeometry';
 import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scannerLiveBlendQuad,type LiveFrameRect} from '../../services/scannerLiveEdges';
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
- DEFAULT_CORNERS,createScannerPdf,flattenDocument,listScanFolders,listScans,newScanId,putScan,putScanFolder,
- removeScan,restoreScanBatch,updateScanBatch,suggestDocumentEdges,detectDocumentEdges,validCorners,scannerOrientedPreview,
- type ScanCorners,type ScanFilter,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
+ DEFAULT_CORNERS,SCAN_DETECTOR_REVISION,needsScanDetectorUpgrade,queueFailedScanDetectorUpgrade,createScannerPdf,flattenDocument,listScanFolders,listScans,getScan,newScanId,putScan,putScanFolder,saveAutomaticScanIfUnedited,scanSharpnessPercent,
+ initScanWarpGrid,scanWarpOuterCorners,validScanWarp,transformScanWarpGrid,
+ addApprovedScanRegions,addScanRegionManually,suggestMultipleDocumentEdges,suggestDocumentEdgesWithinRegion,
+ removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,reconcileSavedScanCorners,detectDocumentEdges,validCorners,scannerOrientedPreview,
+ type ScanCorners,type ScanFilter,type ScanSharpness,type ScanWarpGrid,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';
 import {scanQuadAfterOp,normalizeScanOps,safeScanOps,safeScanColor,DEFAULT_SCAN_COLOR,type ScanImageOp,type ScanColorAdjust} from '../../services/scannerEdits';
 
@@ -29,8 +31,12 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const [selection,setSelection]=useState<string[]>([]);
  const [folderName,setFolderName]=useState('');
  const [editingId,setEditingId]=useState<string|null>(null),[showResult,setShowResult]=useState(false);
+ const [scanCompactPreview,setScanCompactPreview]=useState(false);
  const [cornerDraft,setCornerDraft]=useState<ScanCorners>(emptyCorners());
+ const [scanWarpDraft,setScanWarpDraft]=useState<ScanWarpGrid|null>(null);
  const [filterDraft,setFilterDraft]=useState<ScanFilter>('enhance');
+ const [scanSharpnessDraft,setScanSharpnessDraft]=useState<ScanSharpness>('auto');
+ const [scanSharpnessLevelDraft,setScanSharpnessLevelDraft]=useState(45);
  const [scanOpsDraft,setScanOpsDraft]=useState<ScanImageOp[]>([]);
  const [scanColorDraft,setScanColorDraft]=useState<ScanColorAdjust>({...DEFAULT_SCAN_COLOR});
  const [scanDocumentType,setScanDocumentType]=useState<ScanDocumentType>('auto');
@@ -45,10 +51,16 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  // Use an actual in-app MediaStream, kept open across continuous page captures.
  const [scanCameraOpen,setScanCameraOpen]=useState(false);
  const [scanMode,setScanMode]=useState<'single'|'continuous'>('continuous');
+ const [scanSplitMode,setScanSplitMode]=useState<'one'|'multiple'>('one');
+ // Proposed regions are draft-only until the user reviews the SOURCE image.
+ const [scanSplitPreview,setScanSplitPreview]=useState<{pageId:string;sourceCorners:ScanCorners;corners:ScanCorners[]}|null>(null);
+ const [scanSplitSelected,setScanSplitSelected]=useState<number[]>([]);
  const [cameraFacing,setCameraFacing]=useState<'environment'|'user'>('environment');
  const [scanCameraReady,setScanCameraReady]=useState(false);
  const [scanCameraError,setScanCameraError]=useState('');
  const [scanCameraBusy,setScanCameraBusy]=useState(false);
+ const [scanPendingCount,setScanPendingCount]=useState(0);
+ const [scanQueueError,setScanQueueError]=useState('');
  const [scanCameraNotice,setScanCameraNotice]=useState('');
  const [scanZoom,setScanZoom]=useState(1),[scanZoomMax,setScanZoomMax]=useState(4),[scanNativeZoom,setScanNativeZoom]=useState(false);
  const [scanExposure,setScanExposure]=useState(0),[scanNativeExposure,setScanNativeExposure]=useState(false);
@@ -61,13 +73,28 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  const scanSessionIdsRef=useRef<string[]>([]);
  const scanVideoRef=useRef<HTMLVideoElement>(null),scanStreamRef=useRef<MediaStream|null>(null);
  const scanCaptureLock=useRef(false);
+ const scanCaptureCounter=useRef(0),scanCaptureSessionSerial=useRef(0);
+ // Queue at most three raw camera snapshots; JPEG encoding / IDB writing can
+ // happen after shutter release without keeping the user's button blocked.
+ type ScanPendingFrame={canvas:HTMLCanvasElement;id:string;time:number;folder:string;
+  kind:ScanDocumentType;live:ScanCorners|null;mode:'single'|'continuous';split:'one'|'multiple';name:string;sessionSerial:number};
+ const scanPendingFrames=useRef<ScanPendingFrame[]>([]),scanSavingRef=useRef(false);
+ const scanFinishRequestedRef=useRef(false),scanSessionSavedPages=useRef<ScanPage[]>([]);
+ const scanAutoDetectQueue=useRef<Promise<void>>(Promise.resolve());
+ const scanCameraOpenRef=useRef(false);scanCameraOpenRef.current=scanCameraOpen;
+ const scanDirtyDrafts=useRef<Set<string>>(new Set());
+ const scanLiveSnapshotRef=useRef<{corners:ScanCorners;at:number;width:number;height:number;zoom:number;facing:string}|null>(null);
+ const scannerEditingIdRef=useRef<string|null>(null);
+ scannerEditingIdRef.current=editingId;
  const scanPreviewViewportRef=useRef<HTMLDivElement>(null);
+ const scanMainPreviewRef=useRef<HTMLDivElement>(null),scanEditorRegionRef=useRef<HTMLDivElement>(null);
  const [scanLiveCorners,setScanLiveCorners]=useState<ScanCorners|null>(null);
  const [scanLiveFrameRect,setScanLiveFrameRect]=useState<LiveFrameRect|null>(null);
  const [scanLiveStatus,setScanLiveStatus]=useState<'searching'|'tracking'|'unavailable'>('searching');
  const scannerZoomTo=async(value:number)=>{
   const zoom=Math.max(1,Math.min(scanZoomMax,Math.round(value*10)/10));
   scanZoomRef.current=zoom;setScanZoom(zoom);
+  scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');
   if(!scanZoomNativeRef.current)return;
   const track=scanStreamRef.current?.getVideoTracks()[0];
   if(!track)return;
@@ -178,16 +205,17 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  // passes work entirely offline. No edge is shown as "found" until two nearby
  // estimates agree. Stop on screen close / camera swap / camera not ready.
  useEffect(()=>{
+  scanLiveSnapshotRef.current=null;
   setScanLiveCorners(null);setScanLiveFrameRect(null);setScanLiveStatus('searching');
   if(!scanCameraOpen||!scanCameraReady)return;
-  let disposed=false,timeout=0,previous:ScanCorners|null=null,streak=0,misses=0;
+  let disposed=false,timeout=0,previous:ScanCorners|null=null,tracked:ScanCorners|null=null,streak=0,misses=0;
   const canvas=document.createElement('canvas');
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
   if(!ctx){setScanLiveStatus('unavailable');return;}
   const check=()=>{
    if(disposed)return;
    const video=scanVideoRef.current,viewport=scanPreviewViewportRef.current;
-   let nextDelay=1150;
+   let nextDelay=800;
    if(video&&viewport&&video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
     const display=scannerLiveContainRect(viewport.clientWidth,viewport.clientHeight,video.videoWidth,video.videoHeight);
     if(display)setScanLiveFrameRect(old=>old&&Math.abs(old.left-display.left)<.5&&Math.abs(old.top-display.top)<.5&&Math.abs(old.width-display.width)<.5&&Math.abs(old.height-display.height)<.5?old:display);
@@ -201,26 +229,30 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
      ctx.filter='none';
      const start=performance.now();
      const found=detectDocumentEdges(ctx.getImageData(0,0,width,height),scanDocumentType);
-     if(performance.now()-start>400)nextDelay=1900;
+     const analysisMs=performance.now()-start;
+     if(analysisMs>400)nextDelay=1900;
+     else if(analysisMs>170)nextDelay=1150;
      if(found.confidence==='estimated'&&validCorners(found.corners)){
       misses=0;
       if(previous&&scannerLiveQuadDelta(previous,found.corners)<.085){
        streak++;
        if(streak>=2){
-        setScanLiveCorners(old=>old?scannerLiveBlendQuad(old,found.corners):found.corners);
-        setScanLiveStatus('tracking');
+        tracked=tracked?scannerLiveBlendQuad(tracked,found.corners):found.corners;
+        scanLiveSnapshotRef.current={corners:tracked,at:performance.now(),width:video.videoWidth,
+         height:video.videoHeight,zoom:scanZoomRef.current,facing:cameraFacing};
+        setScanLiveCorners(tracked);setScanLiveStatus('tracking');
        }
       }else{
-       streak=1;setScanLiveCorners(null);setScanLiveStatus('searching');
+       streak=1;tracked=null;scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');
       }
       previous=found.corners;
      }else{
       previous=null;streak=0;misses++;
-      if(misses>=2){setScanLiveCorners(null);setScanLiveStatus('searching');}
+      if(misses>=2){tracked=null;scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');}
      }
     }catch(error){
      previous=null;streak=0;misses++;
-     if(misses>=2){setScanLiveCorners(null);setScanLiveStatus('unavailable');}
+     if(misses>=2){tracked=null;scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('unavailable');}
      console.warn('Scanner live edges unavailable; manual capture remains available:',error);
      nextDelay=2100;
     }
@@ -228,16 +260,39 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    if(!disposed)timeout=window.setTimeout(check,nextDelay);
   };
   timeout=window.setTimeout(check,500);
-  return()=>{disposed=true;window.clearTimeout(timeout);};
+  return()=>{disposed=true;scanLiveSnapshotRef.current=null;window.clearTimeout(timeout);};
  },[scanCameraOpen,scanCameraReady,cameraFacing,scanDocumentType]);
 
- useEffect(()=>{let alive=true;Promise.all([listScans(),listScanFolders()]).then(([p,f])=>{if(alive){setPages(p);setFolders(f);}}).catch(e=>{if(alive)setProblem('Không mở được thư viện quét: '+String(e));});return()=>{alive=false;abortProcessing.current?.abort();};},[]);
+ useEffect(()=>{let alive=true;Promise.all([listScans(),listScanFolders()]).then(([p,f])=>{if(alive){setPages(p);setFolders(f);p.filter(page=>page.autoProcessPending&&!page.processed).forEach(page=>queueScanEdgeEstimate(page,'one',-1));}}).catch(e=>{if(alive)setProblem('Không mở được thư viện quét: '+String(e));});return()=>{alive=false;abortProcessing.current?.abort();};},[]);
  const displayUrls=useMemo(()=>Object.fromEntries(pages.map(p=>[p.id,URL.createObjectURL(p.processed||p.original)])),[pages]);
  useEffect(()=>()=>Object.values(displayUrls).forEach(url=>URL.revokeObjectURL(url)),[displayUrls]);
  const editing=pages.find(p=>p.id===editingId);
+ // The workspace scrolls inside <main>, below the app header. Pin only a
+ // compact duplicate while the large draggable preview is off screen. Never
+ // create a second processing pass or obstruct the four-corner canvas.
+ useEffect(()=>{
+  if(!editingId){setScanCompactPreview(false);return;}
+  const preview=scanMainPreviewRef.current,region=scanEditorRegionRef.current;
+  const scroller=preview?.closest('main');
+  if(!preview||!region||!scroller)return;
+  let frame=0;
+  const check=()=>{
+   const top=scroller.getBoundingClientRect().top;
+   const previewBottom=preview.getBoundingClientRect().bottom;
+   const editorBottom=region.getBoundingClientRect().bottom;
+   const show=window.innerWidth<768&&previewBottom<top-4&&editorBottom>top+210;
+   setScanCompactPreview(current=>current===show?current:show);
+  };
+  const onScroll=()=>{if(frame)window.cancelAnimationFrame(frame);frame=window.requestAnimationFrame(check);};
+  scroller.addEventListener('scroll',onScroll,{passive:true});window.addEventListener('resize',onScroll);
+  check();
+  return()=>{scroller.removeEventListener('scroll',onScroll);window.removeEventListener('resize',onScroll);
+   if(frame)window.cancelAnimationFrame(frame);};
+ },[editingId]);
  const originalUrl=useMemo(()=>editing?URL.createObjectURL(editing.original):'',[editing?.id,editing?.original]);
  useEffect(()=>()=>{if(originalUrl)URL.revokeObjectURL(originalUrl);},[originalUrl]);
  const [previewScan,setPreviewScan]=useState<{key:string;url:string}|null>(null);
+ const [scanLiveResultUrl,setScanLiveResultUrl]=useState('');
  const scanViewKey=`${editing?.id||''}:${scanOpsDraft.join(',')}`;
  useEffect(()=>{
   if(!editing||!scanOpsDraft.length){setPreviewScan(null);return;}
@@ -251,36 +306,181 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
  },[editing?.id,editing?.original,scanViewKey]);
  const orientedSourceUrl=scanOpsDraft.length?(previewScan?.key===scanViewKey?previewScan.url:''):originalUrl;
  const processedUrl=editing?displayUrls[editing.id]:undefined;
+ // Debounced 760px true-render preview: same perspective, filter and sharpening
+ // math as the exported JPEG; abort stale drags to prevent memory spikes.
+ useEffect(()=>{
+  if(!editing||!showResult){setScanLiveResultUrl('');return;}
+  const unchanged=!!editing.processed&&
+   cornerDraft.every((p,i)=>Math.hypot(p.x-editing.corners[i].x,p.y-editing.corners[i].y)<1e-6)&&
+   filterDraft===editing.filter&&scanSharpnessLevelDraft===scanSharpnessPercent(editing)&&
+   JSON.stringify(scanOpsDraft)===JSON.stringify(safeScanOps(editing.transformOps))&&
+   JSON.stringify(scanColorDraft)===JSON.stringify(safeScanColor(editing.colorAdjust))&&
+   JSON.stringify(scanWarpDraft)===JSON.stringify(editing.warpGrid||null);
+  if(unchanged){setScanLiveResultUrl('');return;}
+  let canceled=false,url='';const controller=new AbortController();setScanLiveResultUrl('');
+  const timer=window.setTimeout(()=>{
+   void flattenDocument(editing.original,cornerDraft,filterDraft,controller.signal,
+    {operations:scanOpsDraft,adjustments:scanColorDraft,sharpness:scanSharpnessDraft,
+     sharpnessLevel:scanSharpnessLevelDraft,warpGrid:scanWarpDraft,previewMaxEdge:760})
+    .then(blob=>{if(canceled)return;url=URL.createObjectURL(blob);setScanLiveResultUrl(url);})
+    .catch(e=>{if(!canceled&&e instanceof Error&&!e.message.includes('Đã hủy'))
+      console.warn('Xem trước scan chưa sẵn sàng:',e);});
+  },140);
+  return()=>{canceled=true;controller.abort();window.clearTimeout(timer);if(url)URL.revokeObjectURL(url);};
+ },[editing?.id,editing?.original,editing?.processed,showResult,cornerDraft,scanWarpDraft,filterDraft,
+   scanSharpnessDraft,scanSharpnessLevelDraft,scanOpsDraft,scanColorDraft]);
  const visible=useMemo(()=>pages.filter(p=>currentFolder==='*'||p.folderId===currentFolder).sort((a,b)=>a.order-b.order||a.createdAt-b.createdAt),[pages,currentFolder]);
  const chosen=visible.filter(p=>selection.includes(p.id));
  const scopeName=currentFolder==='*'?'Toàn bộ':currentFolder===''?'Chưa phân loại':folders.find(f=>f.id===currentFolder)?.name||'Thư mục';
  const task=async(label:string,run:()=>Promise<void>)=>{if(working)return;setWorking(true);setProblem('');setNotice(label);try{await run();}catch(e){setProblem(e instanceof Error?e.message:String(e));setNotice('');}finally{setWorking(false);}};
  const importFiles=async(files:FileList|null)=>{if(!files?.length)return;const list=Array.from(files).slice(0,30);
-  await task('Đang nhập ảnh gốc…',async()=>{
+  await task('Đang lưu ảnh gốc…',async()=>{
    const created:ScanPage[]=[];
-   for(const file of list){if(!file.type.startsWith('image/'))continue;if(file.size>35*1024*1024)throw Error('Ảnh '+file.name+' vượt giới hạn 35 MB');
+   for(const file of list){if(!file.type.startsWith('image/'))continue;
+    if(file.size>35*1024*1024)throw Error('Ảnh '+file.name+' vượt giới hạn 35 MB');
     const p:ScanPage={id:newScanId(),folderId:currentFolder==='*'?'':currentFolder,name:fileStem(file.name),original:file,
-      corners:emptyCorners(),filter:'enhance',documentType:scanDocumentType,detectionConfidence:'manual',createdAt:Date.now(),order:Date.now()+created.length};
-    // Commit unmodified source FIRST; a slow or failed detector cannot lose a picked photo.
-    await putScan(p);
-    let updated=p;
-    try{const detection=await suggestDocumentEdges(file,scanDocumentType);
-     updated={...p,corners:detection.corners,detectionConfidence:detection.confidence};
-     await putScan(updated);
-    }catch(e){console.warn('Tự nhận diện mép thất bại, giữ ảnh gốc:',e);}
-    created.push(updated);
+     corners:emptyCorners(),filter:'enhance',sharpness:'auto',sharpnessLevel:45,
+     autoProcessPending:true,documentType:scanDocumentType,detectionConfidence:'manual',
+     createdAt:Date.now(),order:Date.now()+created.length};
+    // Every unmodified source is committed before any lossy processing.
+    await putScan(p);created.push(p);
    }
    if(!created.length)throw Error('Không có ảnh JPEG/PNG/WebP hợp lệ để quét');
    setPages(prev=>[...prev,...created]);setSelection(created.map(p=>p.id));setEditingId(created[0].id);
-   setCornerDraft(created[0].corners.map(p=>({...p})) as ScanCorners);setFilterDraft(created[0].filter);setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
-   setNotice(`Đã giữ ${created.length} ảnh gốc trong ứng dụng. Kéo 4 điểm để chỉnh mép giấy.`);
+   setCornerDraft(created[0].corners.map(p=>({...p})) as ScanCorners);
+   setScanWarpDraft(null);setFilterDraft(created[0].filter);setScanSharpnessDraft('auto');setScanSharpnessLevelDraft(45);
+   setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
+   setNotice(`Đã an toàn lưu ${created.length} ảnh gốc. Đang tự nhận diện, làm phẳng và tăng nét…`);
+   // Auto-detect separate pages too; never block the source import / UI.
+   created.forEach(p=>queueScanEdgeEstimate(p,'one',-1));
+  });
+ };
+ /** The shutter is released after committing the original, not after expensive
+  * JPEG decoding and edge detection. Queue fallback analysis separately so
+  * continuous scanning remains responsive and page edits are never replaced. */
+ const queueScanEdgeEstimate=(page:ScanPage,splitMode:'one'|'multiple'='one',sessionSerial=scanCaptureSessionSerial.current)=>{
+  scanAutoDetectQueue.current=scanAutoDetectQueue.current.catch(()=>{}).then(async()=>{
+   await new Promise<void>(resolve=>window.setTimeout(resolve,120));
+   // Heavy 2MP perspective / sharpening must never interfere with continuous shutter.
+   const allowHeavy=async()=>{
+    while(scanCameraOpenRef.current){await new Promise<void>(resolve=>window.setTimeout(resolve,300));}
+   };
+   const complete=async(candidate:ScanPage)=>{
+    if(scanDirtyDrafts.current.has(candidate.id)||!candidate.autoProcessPending)return;
+    await allowHeavy();
+    if(scanDirtyDrafts.current.has(candidate.id))return;
+    // Saved JPEG is authoritative even when a live camera quadrilateral looked
+    // confident. Never auto-crop from stale video geometry or a weak detector.
+    const detection=await suggestDocumentEdges(candidate.original,candidate.documentType);
+    const finalCorners=detection.corners,confidence=detection.confidence;
+    if(confidence!=='estimated'){
+     const safe=await saveAutomaticScanIfUnedited(candidate.id,candidate.corners,null,candidate.corners,
+      ()=>!scanDirtyDrafts.current.has(candidate.id));
+     if(safe){setPages(prev=>prev.map(p=>p.id===safe.id?safe:p));
+      setNotice('Một số ảnh chưa nhận diện đủ mép. Ảnh gốc đã giữ nguyên, hãy chỉnh góc khi cần.');}
+     return;
+    }
+    const output=await flattenDocument(candidate.original,finalCorners,candidate.filter,undefined,
+     {sharpness:candidate.sharpness||'auto',sharpnessLevel:scanSharpnessPercent(candidate)});
+    const safe=await saveAutomaticScanIfUnedited(candidate.id,candidate.corners,output,finalCorners,
+     ()=>!scanDirtyDrafts.current.has(candidate.id));
+    if(!safe)return;
+    setPages(prev=>prev.map(p=>p.id===safe.id&&!p.processed&&
+     p.corners.every((c,i)=>Math.hypot(c.x-candidate.corners[i].x,c.y-candidate.corners[i].y)<1e-6)?safe:p));
+    if(scannerEditingIdRef.current===safe.id&&!scanDirtyDrafts.current.has(safe.id)){
+     setCornerDraft(old=>old.every((c,i)=>Math.hypot(c.x-candidate.corners[i].x,c.y-candidate.corners[i].y)<1e-6)
+      ?safe.corners.map(c=>({...c})) as ScanCorners:old);
+     setShowResult(true);
+    }
+    setNotice('Đã tự làm phẳng và tăng nét bản scan. Ảnh gốc vẫn giữ nguyên; có thể chỉnh lại khi cần.');
+   };
+   // MULTIPLE is an explicit REQUEST TO REVIEW, never permission to create
+   // persistent child scans from uncertain segmentation in the background.
+   // Original JPEG is still detected and safely processed as one page.
+   if(splitMode==='multiple'&&!scanDirtyDrafts.current.has(page.id))
+    setScanCameraNotice('Ảnh gốc đã lưu. Mở trang và duyệt vùng đề xuất tại “Tách nhiều giấy tờ”.');
+   const detected=await reconcileSavedScanCorners(page.original,
+    page.detectionConfidence==='estimated'?page.corners:null,page.documentType);
+   if(detected&&!scanDirtyDrafts.current.has(page.id)){
+    const applied=await estimateScanCornersIfUnedited(page.id,page.corners,detected.corners,
+     ()=>!scanDirtyDrafts.current.has(page.id));
+    if(applied){
+     const updated={...page,corners:detected.corners,detectionConfidence:'estimated' as const};
+     setPages(prev=>prev.map(p=>p.id===page.id&&!p.processed?p.corners.every((c,i)=>
+      Math.hypot(c.x-page.corners[i].x,c.y-page.corners[i].y)<1e-6)?updated:p:p));
+     if(scannerEditingIdRef.current===page.id&&!scanDirtyDrafts.current.has(page.id))
+      setCornerDraft(old=>old.every((c,i)=>Math.hypot(c.x-page.corners[i].x,c.y-page.corners[i].y)<1e-6)
+       ?detected.corners.map(c=>({...c})) as ScanCorners:old);
+     await complete(updated);return;
+    }
+   }
+   await complete(page);
+  }).catch(async error=>{
+   console.warn('Tự scan không thành công; ảnh gốc vẫn lưu:',error);
+   // A failed decode or exhausted memory must not leave this page marked
+   // 'pending' forever. Clear only the original, still-unmodified record.
+   try{
+    const safe=await saveAutomaticScanIfUnedited(page.id,page.corners,null,page.corners,
+     ()=>!scanDirtyDrafts.current.has(page.id));
+    if(safe)setPages(prev=>prev.map(p=>p.id===safe.id?safe:p));
+   }catch(recoveryError){console.warn('Không thể kết thúc lượt scan thất bại:',recoveryError);}
+   setNotice('Không thể tự nhận diện: ảnh gốc vẫn an toàn. Có thể thử lại hoặc chỉnh góc bằng tay.');
   });
  };
  /** Capture one immutable source JPEG, persist it, and only then detect edges.
   * A failed edge detector must never lose the newly photographed page. */
+ /** Save queued camera snapshots in order. A frame remains in memory on
+  * storage failure so the user can retry; never display "saved" prematurely. */
+ const flushCapturedScanQueue=async()=>{
+  if(scanSavingRef.current)return;
+  scanSavingRef.current=true;
+  setScanQueueError('');
+  try{
+   while(scanPendingFrames.current.length){
+    const frame=scanPendingFrames.current[0];
+    try{
+     const blob=await new Promise<Blob>((resolve,reject)=>frame.canvas.toBlob(
+      b=>b&&b.size?resolve(b):reject(Error('Không thể tạo JPEG từ camera')),'image/jpeg',.94));
+     const page:ScanPage={id:frame.id,folderId:frame.folder,name:frame.name,
+      original:blob,corners:frame.live||emptyCorners(),filter:'enhance',sharpness:'auto',sharpnessLevel:45,autoProcessPending:true,
+      documentType:frame.kind,detectionConfidence:frame.live?'estimated':'manual',
+      createdAt:frame.time,order:frame.time};
+     await putScan(page);
+     scanPendingFrames.current.shift();
+     setScanPendingCount(scanPendingFrames.current.length);
+     scanSessionSavedPages.current.push(page);
+     scanSessionIdsRef.current.push(page.id);
+     setScanSessionIds([...scanSessionIdsRef.current]);
+     setPages(prev=>[...prev,page]);
+     setScanCameraNotice(`Đã lưu ${scanSessionIdsRef.current.length} trang gốc · ${scanPendingFrames.current.length} đang lưu`);
+     queueScanEdgeEstimate(page,frame.split,frame.sessionSerial); // Never wait for detection in shutter.
+     if(frame.mode==='single'){
+      setScanCameraOpen(false);setSelection([page.id]);setEditingId(page.id);
+      scannerEditingIdRef.current=page.id;
+      setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setScanWarpDraft(null);
+      setFilterDraft(page.filter);setScanSharpnessDraft(page.sharpness||'off');setScanSharpnessLevelDraft(scanSharpnessPercent(page));
+      setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
+      setNotice('Ảnh gốc đã lưu. Kiểm tra bốn góc rồi làm phẳng khi cần.');
+     }
+    }catch(error){
+     const message='Chưa lưu được ảnh đang chờ. Ảnh vẫn giữ trong hàng đợi; bấm Thử lưu lại: '+String(error);
+     setScanQueueError(message);setScanCameraError(message);
+     break; // Retain the original uncompressed canvas for a retry.
+    }
+   }
+  }finally{
+   scanSavingRef.current=false;
+   if(!scanPendingFrames.current.length&&scanFinishRequestedRef.current){
+    scanFinishRequestedRef.current=false;
+    finishScanCamera();
+   }
+  }
+ };
  const captureScanFrame=async()=>{
-  if(scanCaptureLock.current||!scanCameraReady)return;
-  if(scanSessionIdsRef.current.length>=30){setScanCameraError('Một lượt tối đa 30 trang. Bấm Xong để chỉnh và lưu, rồi quét tiếp.');return;}
+  if(scanCaptureLock.current||!scanCameraReady||scanQueueError)return;
+  if(scanPendingFrames.current.length>=3){setScanCameraNotice('Bộ nhớ chụp đang đầy (3 ảnh); chờ lưu xong để chụp tiếp.');return;}
+  if(scanCaptureCounter.current>=30){setScanCameraError('Tối đa 30 lượt chụp. Bấm Xong để xử lý, rồi quét tiếp.');return;}
+  if(scanMode==='single'&&scanPendingFrames.current.length)return;
   const video=scanVideoRef.current;
   if(!video||video.readyState<2||!video.videoWidth||!video.videoHeight){
    setScanCameraError('Khung camera chưa có hình. Hãy thử chụp lại.');return;
@@ -288,56 +488,51 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   scanCaptureLock.current=true;setScanCameraBusy(true);setScanCameraError('');
   try{
    const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
-   const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không thể tạo khung ảnh scan');
+   const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không thể lấy khung ảnh camera');
    const zoom=scanZoomNativeRef.current?1:scanZoomRef.current;
    const srcW=video.videoWidth/zoom,srcH=video.videoHeight/zoom;
    if(!scanExposureNativeRef.current)ctx.filter=`brightness(${Math.max(.35,1+scanExposureRef.current*.2)})`;
    ctx.drawImage(video,(video.videoWidth-srcW)/2,(video.videoHeight-srcH)/2,srcW,srcH,0,0,canvas.width,canvas.height);
    ctx.filter='none';
-   const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(
-    b=>b&&b.size?resolve(b):reject(Error('Camera không xuất được ảnh JPEG')),'image/jpeg',.94));
-   const id=newScanId(),date=Date.now();
-   const page:ScanPage={id,folderId:currentFolder==='*'?'':currentFolder,
-    name:`Scan_${new Date(date).toISOString().replace(/[:.]/g,'-')}_${scanSessionIdsRef.current.length+1}`,
-    original:blob,corners:emptyCorners(),filter:'enhance',documentType:scanDocumentType,detectionConfidence:'manual',createdAt:date,order:date+scanSessionIdsRef.current.length};
-   await putScan(page); // Mandatory transaction completion before showing success.
-   scanSessionIdsRef.current.push(id);setScanSessionIds([...scanSessionIdsRef.current]);
-   setPages(prev=>[...prev,page]);setScanCameraNotice(`Đã lưu ${scanSessionIdsRef.current.length} trang gốc`);
-   // Estimate corners after persistence. Edge-detection failure is nonfatal.
-   let saved=page;
-   try{
-    const detected=await suggestDocumentEdges(blob,scanDocumentType);
-    if(validCorners(detected.corners)){
-     saved={...page,corners:detected.corners,detectionConfidence:detected.confidence};await putScan(saved);
-     setPages(prev=>prev.map(p=>p.id===id?saved:p));
-    }
-   }catch(error){console.warn('Không nhận diện được mép; giữ bản gốc:',error);}
-   if(scanMode==='single'){
-    setScanCameraOpen(false);
-    setSelection([id]);setEditingId(id);
-    setCornerDraft(saved.corners.map(p=>({...p})) as ScanCorners);
-    setFilterDraft(saved.filter);setScanOpsDraft([]);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(false);
-    setNotice('Đã chụp 1 trang. Kéo 4 góc rồi bấm Làm phẳng & lưu bản scan.');
-   }
-  }catch(error){setScanCameraError('Không lưu được ảnh quét. Chưa xóa dữ liệu cũ: '+String(error));}
+   const snapshot=scanLiveSnapshotRef.current;
+   const live=snapshot&&performance.now()-snapshot.at<1600&&
+    snapshot.width===video.videoWidth&&snapshot.height===video.videoHeight&&
+    Math.abs(snapshot.zoom-scanZoomRef.current)<.01&&snapshot.facing===cameraFacing&&validCorners(snapshot.corners)
+    ?snapshot.corners.map(p=>({...p})) as ScanCorners:null;
+   const date=Date.now(),sequence=++scanCaptureCounter.current;
+   scanPendingFrames.current.push({canvas,id:newScanId(),time:date,
+    name:`Scan_${new Date(date).toISOString().replace(/[:.]/g,'-')}_${sequence}`,
+    folder:currentFolder==='*'?'':currentFolder,kind:scanDocumentType,
+    live,mode:scanMode,split:scanSplitMode,sessionSerial:scanCaptureSessionSerial.current});
+   setScanPendingCount(scanPendingFrames.current.length);
+   setScanCameraNotice(`${scanPendingFrames.current.length} ảnh đang lưu · vẫn có thể chụp tiếp`);
+  }catch(error){setScanCameraError('Không tạo được ảnh quét; chưa thay đổi thư viện: '+String(error));}
   finally{scanCaptureLock.current=false;setScanCameraBusy(false);}
+  if(scanPendingFrames.current.length&&!scanSavingRef.current)void flushCapturedScanQueue();
  };
  const startScanCamera=()=>{
-  if(working)return;
-  scanSessionIdsRef.current=[];setScanSessionIds([]);
+  if(working||scanPendingFrames.current.length)return;
+  scanCaptureSessionSerial.current++;scanCaptureCounter.current=0;scanSessionSavedPages.current=[];scanFinishRequestedRef.current=false;
+  scanSessionIdsRef.current=[];setScanSessionIds([]);setScanPendingCount(0);setScanQueueError('');
+  scanLiveSnapshotRef.current=null;setScanLiveCorners(null);setScanLiveStatus('searching');
   setScanCameraNotice('');setScanCameraError('');setScanCameraReady(false);
   setScanMode('continuous');setCameraFacing('environment');setScanCameraOpen(true);
  };
  const finishScanCamera=()=>{
-  if(scanCaptureLock.current)return; // Don't interrupt an IndexedDB write.
+  if(scanCaptureLock.current||scanPendingFrames.current.length||scanSavingRef.current){
+   scanFinishRequestedRef.current=true;
+   setScanCameraNotice(`Đang hoàn tất lưu ${scanPendingFrames.current.length} ảnh trước khi đóng…`);
+   return;
+  }
   const ids=[...scanSessionIdsRef.current];
   setScanCameraOpen(false);
   if(ids.length){
    setSelection(ids);
-   const first=pages.find(p=>p.id===ids[0]);
-   if(first){setEditingId(first.id);setCornerDraft(first.corners.map(p=>({...p})) as ScanCorners);
-    setFilterDraft(first.filter);setScanOpsDraft(safeScanOps(first.transformOps));setScanColorDraft(safeScanColor(first.colorAdjust));setShowResult(false);}
-   setNotice(`Đã lưu ${ids.length} trang gốc. Có thể chỉnh 4 góc từng trang rồi xuất PDF hoặc ảnh.`);
+   const first=scanSessionSavedPages.current.find(p=>p.id===ids[0])||pages.find(p=>p.id===ids[0]);
+   if(first){setEditingId(first.id);setCornerDraft(first.corners.map(p=>({...p})) as ScanCorners);setScanWarpDraft(null);
+    setFilterDraft(first.filter);setScanSharpnessDraft(first.sharpness||'off');setScanSharpnessLevelDraft(scanSharpnessPercent(first));
+    setScanOpsDraft(safeScanOps(first.transformOps));setScanColorDraft(safeScanColor(first.colorAdjust));setShowResult(false);}
+   setNotice(`Đã lưu ${ids.length} trang gốc. Kiểm tra bốn góc và xuất PDF khi cần.`);
   }
  };
  // After a capture session, show the chosen page rather than leaving the user
@@ -363,27 +558,45 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    setFolders(prev=>prev.filter(p=>p.id!==f.id));setCurrentFolder('');setNotice('Đã xóa thư mục, giữ nguyên tất cả ảnh');
   });
  };
- const editPage=(page:ScanPage)=>{if(working)return;setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setFilterDraft(page.filter);setScanOpsDraft(safeScanOps(page.transformOps));setScanColorDraft(safeScanColor(page.colorAdjust));setShowResult(false);setProblem('');};
+ const editPage=(page:ScanPage)=>{if(working)return;
+  // Older, uncertain pages must not remain permanently stuck at the default
+  // full-image rectangle after the offline detector has been improved.
+  if(needsScanDetectorUpgrade(page)&&!scanDirtyDrafts.current.has(page.id)){
+   void queueFailedScanDetectorUpgrade(page.id).then(queued=>{
+    if(!queued||scanDirtyDrafts.current.has(page.id))return;
+    setPages(old=>old.map(p=>p.id===queued.id?queued:p));
+    queueScanEdgeEstimate(queued,'one',-1);
+    setNotice('Đang tự nhận diện lại mép giấy bằng thuật toán mới…');
+   }).catch(error=>console.warn('Giữ ảnh gốc khi nhận diện lại thất bại:',error));
+  }
+  setScanDocumentType(page.documentType||'auto');setEditingId(page.id);setCornerDraft(page.corners.map(p=>({...p})) as ScanCorners);setScanWarpDraft(page.warpGrid&&validScanWarp(page.corners,page.warpGrid)?{axis:page.warpGrid.axis,points:page.warpGrid.points.map(p=>({...p}))}:null);setFilterDraft(page.filter);setScanSharpnessDraft(page.sharpness||'off');setScanSharpnessLevelDraft(scanSharpnessPercent(page));setScanOpsDraft(safeScanOps(page.transformOps));setScanColorDraft(safeScanColor(page.colorAdjust));setShowResult(false);setProblem('');};
  const transformScan=(op:ScanImageOp)=>{
   if(working||dragPointerId.current!==null)return;
-  setCornerDraft(old=>scanQuadAfterOp(old,op));
+  if(editingId)scanDirtyDrafts.current.add(editingId);
+  if(scanWarpDraft){
+   const next=transformScanWarpGrid(scanWarpDraft,op);
+   setScanWarpDraft(next);setCornerDraft(scanWarpOuterCorners(next));
+  }else setCornerDraft(old=>scanQuadAfterOp(old,op));
   setScanOpsDraft(old=>normalizeScanOps([...old,op]));setShowResult(false);
  };
  const updateScanColor=(key:keyof ScanColorAdjust,value:number)=>{
-  setScanColorDraft(prev=>({...prev,[key]:value}));setShowResult(false);
+  if(editingId)scanDirtyDrafts.current.add(editingId);
+  setScanColorDraft(prev=>({...prev,[key]:value}));setShowResult(true);
  };
  const endCornerDrag=(pointerId:number)=>{
   if(dragPointerId.current!==pointerId)return;
   dragPoint.current=null;dragPointerId.current=null;setDragFocus(null);setLensViewport(null);
  };
  const handleDragCorner=(e:React.PointerEvent<SVGCircleElement>,i:number)=>{
-  if(dragPointerId.current!==null)return; // A second finger must not move another corner.
+  if(dragPointerId.current!==null)return;
+  if(editingId)scanDirtyDrafts.current.add(editingId); // A second finger must not move another corner.
   if(!stageRef.current)return;
   e.preventDefault();e.stopPropagation();
   const picked=scannerPointAtPointer(e,stageRef.current.getBoundingClientRect());
-  dragOffset.current={x:cornerDraft[i].x-picked.x,y:cornerDraft[i].y-picked.y};
+  const vertex=scanWarpDraft?.points[i]||cornerDraft[i];
+  dragOffset.current={x:vertex.x-picked.x,y:vertex.y-picked.y};
   dragPoint.current=i;dragPointerId.current=e.pointerId;
-  setDragFocus(cornerDraft[i]);
+  setDragFocus(vertex);
   setLensViewport(scannerLoupeViewportPosition(e,window.innerWidth,window.innerHeight));
   e.currentTarget.setPointerCapture(e.pointerId);
  };
@@ -392,7 +605,9 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   e.preventDefault();
   const point=scannerCornerWithOffset(e,stageRef.current.getBoundingClientRect(),dragOffset.current);
   const idx=dragPoint.current;
-  setCornerDraft(old=>old.map((p,i)=>i===idx?point:p) as ScanCorners);
+  if(scanWarpDraft){const next={...scanWarpDraft,points:scanWarpDraft.points.map((p,i)=>i===idx?point:p)};
+   setScanWarpDraft(next);setCornerDraft(scanWarpOuterCorners(next));}
+  else setCornerDraft(old=>old.map((p,i)=>i===idx?point:p) as ScanCorners);
   setDragFocus(point);
   setLensViewport(scannerLoupeViewportPosition(e,window.innerWidth,window.innerHeight));
   setShowResult(false);
@@ -416,21 +631,91 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   context.drawImage(img,at.left,at.top,at.width,at.height);
  },[dragFocus,orientedSourceUrl,editingId,scanColorDraft]);
  useEffect(()=>{dragPoint.current=null;dragPointerId.current=null;setDragFocus(null);setLensViewport(null);},[editingId,showResult]);
- const applyEdit=async()=>{if(!editing)return;if(!validCorners(cornerDraft)){setProblem('Bốn góc đang giao nhau hoặc quá sát nhau. Hãy kéo lại.');return;}
+ const applyEdit=async()=>{if(!editing)return;if(!validCorners(cornerDraft)||(scanWarpDraft&&!validScanWarp(cornerDraft,scanWarpDraft))){setProblem('Các điểm giấy đang giao nhau hoặc quá sát nhau. Hãy kéo lại.');return;}
   await task('Đang làm phẳng và lọc ảnh…',async()=>{const controller=new AbortController();abortProcessing.current=controller;
-   try{const blob=await flattenDocument(editing.original,cornerDraft,filterDraft,controller.signal,{operations:scanOpsDraft,adjustments:scanColorDraft});
-    const next:ScanPage={...editing,processed:blob,corners:cornerDraft,filter:filterDraft,transformOps:[...scanOpsDraft],colorAdjust:{...scanColorDraft},detectionConfidence:'estimated'};await putScan(next);
+   try{const blob=await flattenDocument(editing.original,cornerDraft,filterDraft,controller.signal,{operations:scanOpsDraft,adjustments:scanColorDraft,sharpness:scanSharpnessDraft,sharpnessLevel:scanSharpnessLevelDraft,warpGrid:scanWarpDraft});
+    const next:ScanPage={...editing,processed:blob,corners:cornerDraft,filter:filterDraft,sharpness:scanSharpnessDraft,sharpnessLevel:scanSharpnessLevelDraft,autoProcessPending:false,warpGrid:scanWarpDraft||undefined,transformOps:[...scanOpsDraft],colorAdjust:{...scanColorDraft},detectionConfidence:'estimated'};await putScan(next);
     setPages(prev=>prev.map(p=>p.id===next.id?next:p));setShowResult(true);setNotice('Đã làm phẳng ảnh và lưu bản scan; ảnh gốc giữ nguyên.');
    }finally{abortProcessing.current=null;}
   });
  };
  const getProcessed=async(p:ScanPage):Promise<Blob>=>{
-  if(p.processed)return p.processed;
-  const processed=await flattenDocument(p.original,p.corners,p.filter,abortProcessing.current?.signal,{operations:p.transformOps,adjustments:p.colorAdjust});
-  const next={...p,processed};await putScan(next);
+  if(p.autoProcessPending){
+   // Never export a stale pre-detection full-frame crop or overwrite the
+   // asynchronous result. Wait for the camera/import processing queue.
+   await scanAutoDetectQueue.current.catch(()=>{});
+  }
+  const latest=await getScan(p.id);
+  if(!latest)throw Error('Trang tài liệu đã bị xóa trước khi xuất');
+  if(latest.processed)return latest.processed;
+  if(latest.detectionConfidence!=='estimated')
+   throw Error('Tài liệu chưa nhận diện đủ mép. Hãy chỉnh lại bốn góc và lưu bản scan trước khi xuất.');
+  const processed=await flattenDocument(latest.original,latest.corners,latest.filter,abortProcessing.current?.signal,
+   {operations:latest.transformOps,adjustments:latest.colorAdjust,sharpness:latest.sharpness||'off',
+    sharpnessLevel:scanSharpnessPercent(latest),warpGrid:latest.warpGrid});
+  // A concurrent user edit might have completed while flattening. Re-read
+  // latest row and never put a stale snapshot back over it.
+  const current=await getScan(p.id);
+  if(!current||current.processed||JSON.stringify(current.corners)!==JSON.stringify(latest.corners)){
+   if(current?.processed)return current.processed;
+   throw Error('Trang scan đã thay đổi trong khi xuất. Hãy thử lại để tránh ghi đè dữ liệu.');
+  }
+  const next={...current,processed,autoProcessPending:false};await putScan(next);
   setPages(old=>old.map(item=>item.id===p.id?next:item));return processed;
  };
- const editingHasUnsavedCorners=!!editing&&(cornerDraft.some((p,i)=>Math.abs(p.x-editing.corners[i].x)>1e-6||Math.abs(p.y-editing.corners[i].y)>1e-6)||filterDraft!==editing.filter||JSON.stringify(scanOpsDraft)!==JSON.stringify(safeScanOps(editing.transformOps))||JSON.stringify(scanColorDraft)!==JSON.stringify(safeScanColor(editing.colorAdjust)));
+ const editingHasUnsavedCorners=!!editing&&(cornerDraft.some((p,i)=>Math.abs(p.x-editing.corners[i].x)>1e-6||Math.abs(p.y-editing.corners[i].y)>1e-6)||filterDraft!==editing.filter||scanSharpnessDraft!==(editing.sharpness||'off')||scanSharpnessLevelDraft!==scanSharpnessPercent(editing)||JSON.stringify(scanOpsDraft)!==JSON.stringify(safeScanOps(editing.transformOps))||JSON.stringify(scanColorDraft)!==JSON.stringify(safeScanColor(editing.colorAdjust))||JSON.stringify(scanWarpDraft)!==JSON.stringify(editing.warpGrid||null));
+ const splitCurrentPage=async()=>{
+  if(!editing)return;
+  if(editingHasUnsavedCorners||safeScanOps(editing.transformOps).length||editing.warpGrid){
+   setProblem('Hãy dùng ảnh gốc chưa làm phẳng/xoay và lưu hoặc hoàn tác góc đang chỉnh trước khi đề xuất tách vùng.');return;
+  }
+  await task('Đang tìm các vùng để duyệt…',async()=>{
+   const candidates=await suggestMultipleDocumentEdges(editing.original,scanDocumentType);
+   if(candidates.length<2){
+    setScanSplitPreview(null);
+    setNotice('Chưa tìm chắc chắn từ 2 vùng; ảnh gốc được giữ. Dùng “Thêm vùng bằng tay”.');return;
+   }
+   setScanSplitPreview({pageId:editing.id,sourceCorners:editing.corners.map(p=>({...p})) as ScanCorners,
+    corners:candidates.map(c=>c.corners.map(p=>({...p})) as ScanCorners)});
+   setScanSplitSelected(candidates.map((_,i)=>i));
+   setShowResult(false);
+   setNotice('Đây chỉ là vùng đề xuất. Kiểm tra chữ/QR sát mép, chọn ít nhất 2 vùng rồi bấm xác nhận.');
+  });
+ };
+ const confirmSplitCurrentPage=async()=>{
+  const draft=scanSplitPreview;
+  if(!editing||!draft||draft.pageId!==editing.id||editingHasUnsavedCorners||
+    safeScanOps(editing.transformOps).length||scanDirtyDrafts.current.has(editing.id)){
+   setProblem('Ảnh hoặc bốn góc đã thay đổi. Hãy nhận diện lại vùng trước khi tách.');return;
+  }
+  const approved=draft.corners.filter((_,i)=>scanSplitSelected.includes(i));
+  if(approved.length<2){setProblem('Hãy chọn ít nhất 2 vùng đã kiểm tra để tách.');return;}
+  await task('Đang lưu các vùng đã xác nhận…',async()=>{
+   const saved=await addApprovedScanRegions(editing.id,draft.sourceCorners,approved,
+    ()=>!scanDirtyDrafts.current.has(editing.id));
+   if(saved.length<2){setScanSplitPreview(null);setNotice('Nguồn đã thay đổi hoặc đã tách; không ghi đè. Hãy kiểm tra lại.');return;}
+   setPages(prev=>[...prev,...saved]);
+   setSelection(prev=>[...new Set([...prev,...saved.map(p=>p.id)])]);
+   setEditingId(saved[0].id);
+   setCornerDraft(saved[0].corners.map(p=>({...p})) as ScanCorners);setScanWarpDraft(null);
+   setFilterDraft(saved[0].filter);setScanSharpnessDraft(saved[0].sharpness||'off');
+   setScanSharpnessLevelDraft(scanSharpnessPercent(saved[0]));setScanOpsDraft([]);
+   setScanColorDraft(safeScanColor(saved[0].colorAdjust));setShowResult(false);
+   setScanSplitPreview(null);setScanSplitSelected([]);
+   setNotice(`Đã tạo ${saved.length} vùng được duyệt, giữ nguyên cả trang nguồn và JPEG gốc. Kiểm tra góc trước khi xuất.`);
+  });
+ };
+ const addManualScanRegion=async()=>{
+  if(!editing)return;
+  await task('Đang thêm vùng quét thủ công…',async()=>{
+   const added=await addScanRegionManually(editing,pages.map(p=>p.name));
+   setPages(prev=>[...prev,added]);setSelection(prev=>[...new Set([...prev,added.id])]);
+   setEditingId(added.id);setCornerDraft(added.corners.map(p=>({...p})) as ScanCorners);setScanWarpDraft(null);
+   setFilterDraft(added.filter);setScanSharpnessDraft(added.sharpness||'off');setScanSharpnessLevelDraft(scanSharpnessPercent(added));
+   setScanOpsDraft(safeScanOps(added.transformOps));setScanColorDraft(safeScanColor(added.colorAdjust));
+   setShowResult(false);setNotice('Đã thêm một vùng từ ảnh gốc. Kéo bốn góc để chọn tài liệu tiếp theo.');
+  });
+ };
  const exportSelected=async(kind:'pdf'|'images')=>{if(!chosen.length)return;
   if(editingHasUnsavedCorners&&chosen.some(p=>p.id===editingId)){
    setProblem('Bốn góc hoặc bộ lọc của ảnh đang chỉnh chưa được lưu. Hãy bấm “Làm phẳng & lưu bản scan” trước khi xuất.');
@@ -482,6 +767,11 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   if(parsed.format!=='hnlmark-scan-backup-v1'||!Array.isArray(parsed.pages)||!Array.isArray(parsed.folders)||parsed.pages.length>80)throw Error('Bản sao lưu scan không hợp lệ');
   const folderMap=new Map<string,string>(),newFolders:ScanFolder[]=[];
   for(const folder of parsed.folders){const id=newScanId();folderMap.set(folder.id,id);newFolders.push({id,name:String(folder.name).slice(0,70),createdAt:Date.now()});}
+  const restoredPageIds=new Map<string,string>();
+  for(const page of parsed.pages){
+   if(typeof page.id!=='string'||restoredPageIds.has(page.id))throw Error('ID trang scan trong ZIP thiếu hoặc trùng lặp');
+   restoredPageIds.set(page.id,newScanId());
+  }
   const newPages:ScanPage[]=[];let restoredBytes=0;
   for(const page of parsed.pages){
    if(!/^original\/[\w-]+\.bin$/.test(page.originalPath)||page.processedPath&&!/^processed\/[\w-]+\.jpg$/.test(page.processedPath))throw Error('Đường dẫn ZIP không hợp lệ');
@@ -491,11 +781,26 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    const original=new Blob([raw],{type:page.originalType?.startsWith('image/')?page.originalType:'image/jpeg'});
    let processed:Blob|undefined;const p=page.processedPath&&zip.file(page.processedPath);
    if(page.processedPath&&!p)throw Error('Thiếu ảnh đã quét trong ZIP');
-   if(p){processed=await p.async('blob');restoredBytes+=processed.size;}
+   if(p){
+    // JSZip blobs do not preserve a JPEG MIME type. Keep the exact compressed
+    // bytes and tag them so PDF export can embed without a second JPEG encode.
+    const jpegData=await p.async('blob');processed=new Blob([jpegData],{type:'image/jpeg'});
+    restoredBytes+=processed.size;
+   }
    if(restoredBytes>250*1024*1024)throw Error('Tổng dung lượng giải nén vượt giới hạn 250 MB');
    const corners=(page.corners&&Array.isArray(page.corners)&&page.corners.length===4&&validCorners(page.corners)?page.corners:emptyCorners());
-   const newPage:ScanPage={id:newScanId(),folderId:folderMap.get(page.folderId)||'',name:tidy(page.name),original,processed,
-    filter:FILTERS.some(x=>x.id===page.filter)?page.filter:'color',corners,transformOps:safeScanOps(page.transformOps),colorAdjust:safeScanColor(page.colorAdjust),order:Number(page.order)||Date.now(),createdAt:Date.now()};
+   const newPage:ScanPage={id:restoredPageIds.get(page.id)!,folderId:folderMap.get(page.folderId)||'',name:tidy(page.name),original,processed,
+    filter:FILTERS.some(x=>x.id===page.filter)?page.filter:'color',corners,
+    warpGrid:page.warpGrid&&validScanWarp(corners,page.warpGrid)?page.warpGrid:undefined,
+    sharpness:page.sharpness==='text'||page.sharpness==='auto'?page.sharpness:'off',
+    sharpnessLevel:typeof page.sharpnessLevel==='number'?Math.max(0,Math.min(100,page.sharpnessLevel)):undefined,
+    autoProcessPending:false,
+    documentType:page.documentType==='id-card'||page.documentType==='paper'?page.documentType:'auto',
+    detectionConfidence:page.detectionConfidence==='estimated'?'estimated':'manual',
+    splitParentId:typeof page.splitParentId==='string'?restoredPageIds.get(page.splitParentId):undefined,
+    splitRegionCount:typeof page.splitRegionCount==='number'&&Number.isInteger(page.splitRegionCount)&&page.splitRegionCount>=2&&page.splitRegionCount<=4?page.splitRegionCount:undefined,
+    transformOps:safeScanOps(page.transformOps),colorAdjust:safeScanColor(page.colorAdjust),
+    order:Number(page.order)||Date.now(),createdAt:Date.now()};
    newPages.push(newPage);
   }
   // A single readwrite transaction ensures all-or-nothing restoration and no overwrite.
@@ -514,7 +819,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
       <div className="shrink-0 flex items-center justify-between gap-2 px-3 pb-2">
         <button disabled={scanCameraBusy} type="button" aria-label="Đóng camera quét" onClick={finishScanCamera}
           className="min-w-10 min-h-10 grid place-items-center rounded-xl bg-[#17253D] disabled:opacity-50"><X size={19}/></button>
-        <span className="font-semibold text-sm truncate">Quét tài liệu · {scanSessionIds.length} trang</span>
+        <span className="font-semibold text-sm truncate">Quét tài liệu · {scanSessionIds.length} đã lưu{scanPendingCount?` · ${scanPendingCount} đang lưu`:""}</span>
         <button type="button" disabled={scanCameraBusy} aria-label="Đổi camera trước sau" onClick={()=>setCameraFacing(f=>f==='environment'?'user':'environment')}
           className="min-w-10 min-h-10 grid place-items-center rounded-xl bg-[#17253D] disabled:opacity-50"><RotateCcw size={19}/></button>
       </div>
@@ -525,6 +830,13 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
           <option value="auto">Tự động</option><option value="id-card">CCCD / thẻ</option><option value="paper">Giấy A4 / tài liệu</option>
          </select>
         </label>
+      </div>
+      <div className="shrink-0 px-3 pb-2 flex items-center justify-center gap-2">
+        <span className="text-[11px] text-[#AFC0D6]">Trong một ảnh:</span>
+        <button type="button" disabled={scanCaptureLock.current||scanPendingCount>0} onClick={()=>setScanSplitMode('one')}
+         aria-pressed={scanSplitMode==='one'} className={`min-h-9 px-3 rounded-lg text-xs ${scanSplitMode==='one'?'bg-[#E2B74B] text-[#06101E]':'bg-[#14243B]'}`}>1 tài liệu</button>
+        <button type="button" disabled={scanCaptureLock.current||scanPendingCount>0} onClick={()=>setScanSplitMode('multiple')}
+         aria-pressed={scanSplitMode==='multiple'} className={`min-h-9 px-3 rounded-lg text-xs ${scanSplitMode==='multiple'?'bg-[#E2B74B] text-[#06101E]':'bg-[#14243B]'}`}>Nhiều tài liệu · duyệt sau</button>
       </div>
       <div className="shrink-0 px-3 pb-3 flex items-center justify-center gap-2">
         <button type="button" disabled={scanCameraBusy} onClick={()=>setScanMode('single')} aria-pressed={scanMode==='single'}
@@ -565,11 +877,13 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
         </div>}
       </div>
       <div className="shrink-0 px-4 pt-3 space-y-2">
+        {scanQueueError&&<button type="button" onClick={()=>{setScanQueueError('');setScanCameraError('');void flushCapturedScanQueue();}}
+         className="min-h-10 w-full rounded-lg bg-[#E2B74B] text-[#071121] font-semibold text-xs px-3">Thử lưu lại ảnh đang chờ (không xóa ảnh)</button>}
         <p role="status" className="text-xs text-center text-[#AFC0D6] min-h-5">{scanCameraNotice||(scanMode==='continuous'?'Chụp liên tiếp, mỗi trang được lưu ngay.':'Chụp một trang rồi chỉnh mép giấy.')}</p>
         <div className="flex items-center justify-between gap-4">
           <span className="min-w-[72px] text-xs text-[#E2B74B]">{scanSessionIds.length} trang</span>
           <button type="button" aria-label="Chụp trang tài liệu" onClick={()=>void captureScanFrame()}
-            disabled={scanCameraBusy||!scanCameraReady} className="size-[70px] shrink-0 rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
+            disabled={scanCameraBusy||!scanCameraReady||scanPendingCount>=3||!!scanQueueError} className="size-[70px] shrink-0 rounded-full border-4 border-white flex items-center justify-center disabled:opacity-40">
             <span className="size-12 rounded-full bg-[#E2B74B]"/>
           </button>
           <button type="button" disabled={scanCameraBusy} onClick={finishScanCamera}
@@ -603,33 +917,42 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
          className="rounded-xl overflow-hidden border border-white/10 bg-[#121F34]">
          <button className="w-full relative bg-[#07101F] h-40" onClick={()=>editPage(page)}><img src={displayUrls[page.id]} alt={page.name} className="w-full h-full object-contain"/><span className="absolute top-1 left-1 bg-black/70 rounded px-2 text-xs">{i+1}</span>
            {!page.processed&&<span className="absolute bottom-1 right-1 text-[10px] bg-amber-900/80 px-1.5 rounded">Chưa làm phẳng</span>}</button>
-         <div className="p-2 space-y-1"><div className="flex gap-2 items-center"><input type="checkbox" aria-label={`Chọn ${page.name}`} checked={selection.includes(page.id)} onChange={e=>setSelection(old=>e.target.checked?[...old,page.id]:old.filter(id=>id!==page.id))} className="accent-[#E2B74B]"/><span className="truncate text-xs flex-1" title={page.name}>{page.name}</span></div>
+         <div className="p-2 min-w-0 space-y-1"><div className="flex min-w-0 gap-2 items-center"><input type="checkbox" aria-label={`Chọn ${page.name}`} checked={selection.includes(page.id)} onChange={e=>setSelection(old=>e.target.checked?[...old,page.id]:old.filter(id=>id!==page.id))} className="accent-[#E2B74B]"/><span className="block min-w-0 truncate text-xs flex-1" title={page.name}>{page.name}</span></div>
            <div className="flex gap-1 items-center justify-between"><button disabled={working||i===0} onClick={()=>void movePage(page.id,-1)} title="Lên một vị trí" className="min-w-8 min-h-8 grid place-items-center disabled:opacity-25"><ArrowUp size={15}/></button>
              <button disabled={working||i===visible.length-1} onClick={()=>void movePage(page.id,1)} title="Xuống một vị trí" className="min-w-8 min-h-8 grid place-items-center disabled:opacity-25"><ArrowDown size={15}/></button>
              <select aria-label="Chuyển ảnh sang thư mục" value={page.folderId} onChange={e=>void updatePageFolder(page.id,e.target.value)} className="min-w-0 max-w-[90px] bg-[#09111E] rounded text-[11px]"><option value="">Chưa phân loại</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select>
              <button title="Xóa ảnh quét" onClick={()=>void deletePage(page.id)} className="min-w-8 min-h-8 grid place-items-center text-red-300"><Trash2 size={14}/></button>
            </div></div></div>)}
      </div>
-     <p className="text-[11px] text-[#94A3B8] flex items-center gap-1"><Move size={13}/>Kéo thả ảnh để đổi thứ tự, hoặc dùng mũi tên trên điện thoại.</p>
+     <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Sắp xếp trang</summary><p className="mt-1 flex items-center gap-1"><Move size={13}/>Kéo thả ảnh hoặc dùng mũi tên trên điện thoại.</p></details>
    </div>
-   {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true">
-     <div className="flex items-center justify-between gap-2"><h2 className="font-semibold text-sm">Chỉnh 4 góc · {editing.name}</h2><button onClick={()=>setEditingId(null)} className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng chỉnh góc"><X size={18}/></button></div>
-     <p className="text-xs text-[#94A3B8]">{editing.detectionConfidence==='estimated'?'Đã ước lượng bốn góc: kiểm tra đủ cả góc bo tròn trước khi lưu.':'Chưa nhận diện chắc chắn: khung gần toàn ảnh để không cắt mất góc. Kéo bốn điểm về mép thực tế.'} Khi kéo sẽ có kính phóng đại 4,5×.</p>
+   {editing&&<div className="rounded-2xl border border-[#E2B74B]/30 bg-[#0D1729] p-3 space-y-3" data-hnl-scan-corners="true" ref={scanEditorRegionRef}>
+     <div className="flex items-center justify-between gap-2 min-w-0"><h2 className="min-w-0 flex-1 truncate font-semibold text-sm" title={editing.name}>Chỉnh {scanWarpDraft?.points.length||4} điểm · {editing.name}</h2><button onClick={()=>setEditingId(null)} className="min-w-9 min-h-9 grid place-items-center" aria-label="Đóng chỉnh góc"><X size={18}/></button></div>
+     <div className="flex items-center justify-between gap-2 text-[11px] text-[#94A3B8]" role="status" aria-live="polite">
+      <span>{editing.autoProcessPending&&!scanDirtyDrafts.current.has(editing.id)?'Đang nhận diện từ ảnh gốc…':
+       editing.detectionConfidence==='estimated'?'Đã nhận diện 4 góc · kiểm tra mép':'Chưa nhận diện chắc chắn · giữ toàn ảnh'}</span>
+      <span className="shrink-0">Offline R{SCAN_DETECTOR_REVISION}</span>
+     </div>
+     <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Mẹo chỉnh góc</summary><p>Khi kéo sẽ có kính phóng đại 4,5×.</p></details>
      <label className="flex items-center gap-2 text-xs text-[#CBD5E1]">Loại tài liệu
       <select aria-label="Chọn loại tài liệu để nhận diện lại" value={scanDocumentType} onChange={e=>setScanDocumentType(e.target.value as ScanDocumentType)}
        className="min-h-9 flex-1 rounded-lg border border-white/15 bg-[#14243B] text-white px-2">
        <option value="auto">Tự động</option><option value="id-card">CCCD / thẻ</option><option value="paper">Giấy A4 / tài liệu</option>
       </select></label>
      <div className="flex gap-2"><button onClick={()=>setShowResult(false)} className={`px-3 min-h-9 rounded-lg text-xs ${!showResult?'bg-[#E2B74B] text-[#071121]':'bg-[#17253D]'}`}>Ảnh gốc & góc</button>
-       <button disabled={!editing.processed} onClick={()=>setShowResult(true)} className={`px-3 min-h-9 rounded-lg text-xs disabled:opacity-40 ${showResult?'bg-[#E2B74B] text-[#071121]':'bg-[#17253D]'}`}>Ảnh đã làm phẳng</button></div>
-     <div className="max-w-xl mx-auto rounded-xl overflow-hidden bg-black border border-white/15">
-       {showResult&&editing.processed?<img src={processedUrl} className="block w-full max-h-[55vh] object-contain" alt="Ảnh tài liệu đã làm phẳng"/>:
+       <button onClick={()=>setShowResult(true)} className={`px-3 min-h-9 rounded-lg text-xs disabled:opacity-40 ${showResult?'bg-[#E2B74B] text-[#071121]':'bg-[#17253D]'}`}>Ảnh đã làm phẳng</button></div>
+     <div ref={scanMainPreviewRef} data-hnl-scan-main-preview="true" className="max-w-xl mx-auto rounded-xl overflow-hidden bg-black border border-white/15">
+       {showResult?(scanLiveResultUrl||(!editingHasUnsavedCorners&&editing.processed)?<img src={scanLiveResultUrl||processedUrl} className="block w-full max-h-[55vh] object-contain" alt="Ảnh tài liệu đã làm phẳng"/>:<div className="min-h-64 flex items-center justify-center text-xs text-[#94A3B8]">Đang tạo ảnh xem trước…</div>):
        <div ref={stageRef} className="relative w-fit max-w-full mx-auto">
          <img ref={sourceImageRef} src={orientedSourceUrl} alt="Ảnh gốc cần chỉnh bốn góc" className="block max-w-full max-h-[52vh] w-auto h-auto" draggable={false}
            style={{filter:`brightness(${scanColorDraft.brightness}%) contrast(${scanColorDraft.contrast}%) saturate(${scanColorDraft.saturation}%)`}}/>
          <svg className="absolute inset-0 w-full h-full touch-none" viewBox="0 0 1000 1000" preserveAspectRatio="none" onPointerMove={handlePointerMove} onPointerUp={e=>endCornerDrag(e.pointerId)} onPointerCancel={e=>endCornerDrag(e.pointerId)}>
            <polygon points={cornerDraft.map(p=>`${p.x*1000},${p.y*1000}`).join(' ')} fill="rgba(226,183,75,.12)" stroke="#E2B74B" strokeWidth="5" strokeDasharray="12 6"/>
-           {cornerDraft.map((p,i)=><g key={i}>
+           {scanWarpDraft&&Array.from({length:scanWarpDraft.points.length/2},(_,i)=>{
+             const n=scanWarpDraft.points.length/2,a=scanWarpDraft.points[i],b=scanWarpDraft.points[n+i];
+             return <line key={i} x1={a.x*1000} y1={a.y*1000} x2={b.x*1000} y2={b.y*1000} stroke="#38BDF8" strokeWidth="5" strokeDasharray="10 6"/>;
+           })}
+           {(scanWarpDraft?.points||cornerDraft).map((p,i)=><g key={i}>
              <circle cx={p.x*1000} cy={p.y*1000} r="65" fill="transparent" onPointerDown={e=>handleDragCorner(e,i)} onLostPointerCapture={e=>endCornerDrag(e.pointerId)} />
              <circle cx={p.x*1000} cy={p.y*1000} r="28" fill="#E2B74B" stroke="#071121" strokeWidth="7" pointerEvents="none"/>
            </g>)}
@@ -647,35 +970,125 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
           </div>,document.body)}
        </div>}
      </div>
-     <div className="flex gap-2 items-center justify-between"><button disabled={working} onClick={()=>void task('Đang nhận diện mép giấy…',async()=>{
+     {scanCompactPreview&&<div data-hnl-scan-compact-preview="true" className="md:hidden sticky top-0 z-30 rounded-xl border border-[#E2B74B]/50 bg-[#0B1729] p-2 shadow-2xl space-y-1">
+      <div className="flex justify-between items-center text-[11px] gap-2"><span className="font-semibold text-[#E2B74B]">Xem trước · {showResult?'Bản scan':'Ảnh gốc'}</span>
+       <button type="button" className="text-[#E2B74B] min-h-7 px-2 rounded-lg bg-[#17253D]" onClick={()=>scanMainPreviewRef.current?.scrollIntoView({behavior:'smooth',block:'start'})}>Xem lớn</button></div>
+      {showResult?(scanLiveResultUrl||(!editingHasUnsavedCorners&&editing.processed)?
+       <img src={scanLiveResultUrl||processedUrl} alt="Ảnh scan cập nhật khi chỉnh" className="h-[136px] w-full object-contain"/>:
+       <div className="h-[100px] flex items-center justify-center text-[11px] text-[#94A3B8]" role="status">Đang cập nhật ảnh…</div>):
+       <img src={orientedSourceUrl} alt="Ảnh gốc thu nhỏ khi chỉnh" className="h-[136px] w-full object-contain"
+        style={{filter:`brightness(${scanColorDraft.brightness}%) contrast(${scanColorDraft.contrast}%) saturate(${scanColorDraft.saturation}%)`}}/>}
+     </div>}
+     <div className="flex flex-wrap gap-2 items-center justify-between"><button disabled={working} onClick={()=>void task('Đang nhận diện mép giấy…',async()=>{
        if(!editing)return;
        const found=await suggestDocumentEdges(editing.original,scanDocumentType);
        if(!validCorners(found.corners))throw Error('Không thể dựng tứ giác hợp lệ từ ảnh');
-       setCornerDraft(found.corners);setShowResult(false);
+       scanDirtyDrafts.current.add(editing.id);
+       setCornerDraft(found.corners);setScanWarpDraft(scanWarpDraft?initScanWarpGrid(found.corners,scanWarpDraft.points.length as 6|8|10|12,scanWarpDraft.axis):null);setShowResult(false);
        setNotice(found.confidence==='estimated'?'Đã nhận diện tứ giác; hãy xem kỹ từng góc rồi lưu.':'Độ tin cậy thấp; đã giữ khung gần toàn ảnh để tránh cắt mất góc.');
       })} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center disabled:opacity-50"><ScanLine size={15}/>Nhận diện mép</button>
-       <button onClick={()=>{setCornerDraft(emptyCorners());setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
-     <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
-       <p className="text-xs text-[#CBD5E1] font-semibold">Xoay / lật ảnh quét (giữ ảnh gốc)</p>
+       <button type="button" disabled={working} onClick={()=>void task('Đang dò mép trong vùng đã chọn…',async()=>{
+        if(!editing)return;
+        const found=await suggestDocumentEdgesWithinRegion(editing.original,cornerDraft,scanDocumentType);
+        if(!found){setNotice('Chưa đủ mép trong vùng này. Kéo bốn góc rộng thêm quanh giấy hoặc giữ ảnh gốc; không tự cắt.');return;}
+        scanDirtyDrafts.current.add(editing.id);setCornerDraft(found.corners);
+        setScanWarpDraft(null);setShowResult(false);
+        setNotice('Đã đề xuất bốn góc trong vùng bạn chọn. Kiểm tra chữ/QR trước khi lưu.');
+       })} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex gap-1 items-center disabled:opacity-50"><ScanLine size={15}/>Dò trong vùng chọn</button>
+       <button onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setCornerDraft(emptyCorners());setScanWarpDraft(scanWarpDraft?initScanWarpGrid(emptyCorners(),scanWarpDraft.points.length as 6|8|10|12,scanWarpDraft.axis):null);setShowResult(false);}} className="text-xs px-3 min-h-9 rounded-lg bg-[#17253D] flex items-center gap-1"><RotateCcw size={15}/>Đặt lại góc</button></div>
+     <details data-hnl-scan-fold-section="true" key={`fold-${editing.id}`} className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
+      <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 min-h-10 cursor-pointer select-none text-xs font-semibold">Nắn giấy bị gấp <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1B2A43]"><ChevronDown size={20} strokeWidth={2.25} aria-hidden="true" className="text-[#E2B74B] transition-transform duration-200 group-open:rotate-180"/></span></summary>
+      <div className="space-y-2 mt-1">
+      <div className="grid grid-cols-2 gap-2">
+       <label className="text-xs">Số điểm nắn
+        <select aria-label="Số điểm chỉnh nếp gấp" value={scanWarpDraft?.points.length||4}
+         onChange={e=>{const count=Number(e.target.value) as 4|6|8|10|12;
+          if(editingId)scanDirtyDrafts.current.add(editingId);
+          setScanWarpDraft(count===4?null:initScanWarpGrid(cornerDraft,count,scanWarpDraft?.axis||'vertical'));setShowResult(false);}}
+         className="mt-1 w-full min-h-10 px-2 rounded-lg bg-[#17253D] text-white">
+         <option value={4}>4 điểm · giấy phẳng</option><option value={6}>6 điểm · một nếp</option>
+         <option value={8}>8 điểm · hai nếp</option><option value={10}>10 điểm · ba nếp</option>
+         <option value={12}>12 điểm · bốn nếp</option>
+        </select>
+       </label>
+       <label className="text-xs">Hướng nếp gấp
+        <select aria-label="Hướng nếp gấp" disabled={!scanWarpDraft} value={scanWarpDraft?.axis||'vertical'}
+         onChange={e=>{if(!scanWarpDraft)return;
+          if(editingId)scanDirtyDrafts.current.add(editingId);
+          setScanWarpDraft(initScanWarpGrid(cornerDraft,scanWarpDraft.points.length as 6|8|10|12,e.target.value as 'vertical'|'horizontal'));setShowResult(false);}}
+         className="mt-1 w-full min-h-10 px-2 rounded-lg bg-[#17253D] text-white disabled:opacity-40">
+         <option value="vertical">Nếp dọc</option><option value="horizontal">Nếp ngang</option>
+        </select>
+       </label>
+      </div>
+      <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Hướng dẫn</summary><p className="mt-1">Đặt điểm xanh lên nếp gấp ở hai cạnh đối diện. Giấy gập che chữ không thể khôi phục hoàn toàn.</p></details>
+      </div>
+     </details>
+     <details data-hnl-scan-multi-section="true" className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
+      <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 min-h-10 cursor-pointer select-none text-xs font-semibold">Tách nhiều giấy tờ <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1B2A43]"><ChevronDown size={20} strokeWidth={2.25} aria-hidden="true" className="text-[#E2B74B] transition-transform duration-200 group-open:rotate-180"/></span></summary>
+      <div className="space-y-2 mt-1">
+      <div className="grid grid-cols-2 gap-2">
+       <button type="button" disabled={working} onClick={()=>void splitCurrentPage()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Đề xuất vùng để duyệt</button>
+       <button type="button" disabled={working} onClick={()=>void addManualScanRegion()} className="min-h-10 bg-[#17253D] rounded-lg px-2 text-xs">Thêm vùng bằng tay</button>
+      </div>
+      {scanSplitPreview?.pageId===editing.id&&<div data-hnl-scan-split-review="true" className="rounded-xl border border-[#E2B74B]/40 bg-[#0B1729] p-2 space-y-2">
+       <p className="text-xs font-semibold text-[#E2B74B]">Duyệt các vùng trên ảnh gốc · chưa tách</p>
+       <p className="text-[11px] text-[#CBD5E1]">Kiểm tra tất cả chữ, dấu và mã QR sát mép. Bỏ chọn vùng nhận diện nhầm; ảnh gốc không thay đổi.</p>
+       <div className="relative w-fit max-w-full mx-auto bg-black rounded-lg overflow-hidden">
+        <img src={orientedSourceUrl} alt="Ảnh gốc có các vùng đề xuất để xác nhận" className="block w-auto max-w-full max-h-[44vh] h-auto" draggable={false}/>
+        <svg aria-hidden="true" className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 1000" preserveAspectRatio="none">
+         {scanSplitPreview.corners.map((quad,i)=><polygon key={i} points={quad.map(p=>`${p.x*1000},${p.y*1000}`).join(' ')}
+          fill={scanSplitSelected.includes(i)?'rgba(226,183,75,.13)':'rgba(100,116,139,.12)'}
+          stroke={scanSplitSelected.includes(i)?'#E2B74B':'#94A3B8'} strokeWidth="5"/>)}
+        </svg>
+       </div>
+       <div className="grid grid-cols-2 gap-2">
+        {scanSplitPreview.corners.map((_,i)=><label key={i} className="flex items-center gap-2 min-h-9 rounded-lg bg-[#17253D] px-2 text-xs">
+         <input type="checkbox" aria-label={`Chọn vùng đề xuất ${i+1}`} checked={scanSplitSelected.includes(i)}
+          onChange={e=>setScanSplitSelected(prev=>e.target.checked?[...prev,i]:prev.filter(x=>x!==i))}
+          className="accent-[#E2B74B]"/>Vùng {i+1}
+        </label>)}
+       </div>
+       <div className="flex gap-2">
+        <button type="button" disabled={working||scanSplitSelected.length<2} onClick={()=>void confirmSplitCurrentPage()}
+         className="min-h-10 flex-1 rounded-lg bg-[#E2B74B] text-[#06101E] text-xs font-semibold disabled:opacity-40">Xác nhận tách {scanSplitSelected.length} vùng</button>
+        <button type="button" onClick={()=>{setScanSplitPreview(null);setScanSplitSelected([]);}}
+         className="min-h-10 px-3 rounded-lg bg-[#17253D] text-xs">Hủy</button>
+       </div>
+      </div>}
+      <p className="text-[11px] text-[#94A3B8]">Thiếu vùng? Chọn “Thêm vùng bằng tay”.</p>
+      </div>
+     </details>
+     <details data-hnl-scan-rotate-section="true" className="group rounded-xl border border-white/10 bg-[#101E32] p-2">
+       <summary className="list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 min-h-10 cursor-pointer select-none text-xs font-semibold">Xoay / lật ảnh <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#1B2A43]"><ChevronDown size={20} strokeWidth={2.25} aria-hidden="true" className="text-[#E2B74B] transition-transform duration-200 group-open:rotate-180"/></span></summary>
+       <div className="space-y-2 mt-1">
        <div className="grid grid-cols-4 gap-2">
         <button type="button" disabled={working} onClick={()=>transformScan('ccw')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><RotateCcw size={15}/>Trái 90°</button>
         <button type="button" disabled={working} onClick={()=>transformScan('cw')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><RotateCw size={15}/>Phải 90°</button>
         <button type="button" disabled={working} onClick={()=>transformScan('flip-h')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><FlipHorizontal size={15}/>Lật ngang</button>
         <button type="button" disabled={working} onClick={()=>transformScan('flip-v')} className="min-h-10 rounded-lg bg-[#17253D] text-[11px] flex gap-1 items-center justify-center disabled:opacity-40"><FlipVertical size={15}/>Lật dọc</button>
        </div>
-       <p className="text-[10px] text-[#94A3B8]">Bốn điểm mép giấy chuyển theo ảnh. Bấm Lưu bản scan để ghi ảnh đã chỉnh; bản gốc không thay đổi.</p>
-     </div>
+       <p className="text-[11px] text-[#94A3B8]">Bản gốc được giữ nguyên.</p>
+       </div>
+     </details>
      <div className="rounded-xl border border-white/10 bg-[#101E32] p-2 space-y-2">
-       <div className="flex justify-between items-center"><p className="text-xs font-semibold">Chỉnh màu ảnh scan</p><button disabled={working} onClick={()=>setScanColorDraft({...DEFAULT_SCAN_COLOR})} className="text-[11px] text-[#E2B74B]">Đặt lại màu</button></div>
+       <div className="flex justify-between items-center"><p className="text-xs font-semibold">Chỉnh màu ảnh scan</p><button disabled={working} onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setScanColorDraft({...DEFAULT_SCAN_COLOR});setShowResult(true);}} className="text-[11px] text-[#E2B74B]">Đặt lại màu</button></div>
        {([['brightness','Độ sáng'],['contrast','Tương phản'],['saturation','Độ bão hòa']] as const).map(([key,label])=><label key={key} className="flex gap-3 items-center text-xs">
         <span className="w-[105px] shrink-0">{label} {scanColorDraft[key]}%</span>
         <input aria-label={label+' ảnh scan'} type="range" min="0" max="200" step="5" value={scanColorDraft[key]}
           onChange={e=>updateScanColor(key,Number(e.target.value))} className="flex-1 accent-[#E2B74B] min-w-0"/>
        </label>)}
-       <p className="text-[10px] text-[#94A3B8]">Xem trước màu gần đúng. Bản xuất sau khi bấm Làm phẳng & lưu sử dụng cùng các giá trị đã chọn.</p>
+       <label className="flex gap-3 items-center text-xs"><span className="w-[105px] shrink-0">Tăng độ nét {scanSharpnessLevelDraft}%</span>
+        <input aria-label="Tăng độ nét ảnh scan" type="range" min="0" max="100" step="5"
+         value={scanSharpnessLevelDraft} onChange={e=>{const level=Number(e.target.value);
+          if(editingId)scanDirtyDrafts.current.add(editingId);
+          setScanSharpnessLevelDraft(level);setScanSharpnessDraft(level===0?'off':'auto');setShowResult(true);}}
+         className="min-w-0 flex-1 accent-[#E2B74B]"/></label>
+       <div className="flex justify-between text-[10px] text-[#94A3B8]"><span>0 · Nét gốc</span><span>45 · Tự động</span><span>100 · Rõ chữ</span></div>
+       <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Hướng dẫn chỉnh màu</summary><p className="mt-1">Ảnh xem trước dùng cùng thiết lập với bản xuất. JPEG gốc không đổi; chữ đã mất nét không thể khôi phục hoàn toàn.</p></details>
      </div>
-     <div className="flex flex-wrap gap-2">{FILTERS.map(f=><button key={f.id} onClick={()=>{setFilterDraft(f.id);setShowResult(false);}} className={`px-3 min-h-9 rounded-lg text-xs border ${filterDraft===f.id?'border-[#E2B74B] text-[#E2B74B] bg-[#E2B74B]/10':'border-white/10 bg-[#14223A]'}`}>{f.name}</button>)}</div>
-     <button disabled={working||!validCorners(cornerDraft)} onClick={()=>void applyEdit()} className="min-h-11 w-full rounded-xl bg-[#E2B74B] text-[#071121] font-semibold flex items-center justify-center gap-2 disabled:opacity-40"><Save size={18}/>Làm phẳng & lưu bản scan</button>
+     <div className="flex flex-wrap gap-2">{FILTERS.map(f=><button key={f.id} onClick={()=>{if(editingId)scanDirtyDrafts.current.add(editingId);setFilterDraft(f.id);setShowResult(true);}} className={`px-3 min-h-9 rounded-lg text-xs border ${filterDraft===f.id?'border-[#E2B74B] text-[#E2B74B] bg-[#E2B74B]/10':'border-white/10 bg-[#14223A]'}`}>{f.name}</button>)}</div>
+     <button disabled={working||!validCorners(cornerDraft)||!!(scanWarpDraft&&!validScanWarp(cornerDraft,scanWarpDraft))} onClick={()=>void applyEdit()} className="min-h-11 w-full rounded-xl bg-[#E2B74B] text-[#071121] font-semibold flex items-center justify-center gap-2 disabled:opacity-40"><Save size={18}/>Làm phẳng & lưu bản scan</button>
    </div>}
    <div className="rounded-2xl bg-[#0D1729] border border-white/10 p-3 space-y-3">
      <h2 className="text-sm font-semibold flex items-center gap-2"><FileText size={18} className="text-[#E2B74B]"/>Xuất PDF / ảnh · {chosen.length} trang chọn</h2>
@@ -693,7 +1106,7 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
    </div>
    <div className="rounded-2xl bg-[#0D1729] border border-white/10 p-3 space-y-3">
      <h2 className="text-sm font-semibold flex gap-2 items-center"><Folder size={18} className="text-[#E2B74B]"/>An toàn và sao lưu</h2>
-     <p className="text-[11px] text-[#94A3B8]">Ảnh CCCD/tài liệu được xử lý và lưu cục bộ trong dữ liệu ứng dụng. Xóa dữ liệu ứng dụng hoặc gỡ APK TEST sẽ có nguy cơ mất bộ scan nếu chưa sao lưu. Không có OCR hay gửi tài liệu lên đám mây.</p>
+     <details className="group/help text-[11px] text-[#94A3B8]"><summary className="list-none [&::-webkit-details-marker]:hidden flex min-h-8 items-center gap-1.5 cursor-pointer text-[#E2B74B]"><ChevronRight size={16} strokeWidth={2.25} aria-hidden="true" className="shrink-0 transition-transform duration-200 group-open/help:rotate-90"/>Lưu ý an toàn dữ liệu</summary><p className="mt-1">Dữ liệu scan lưu trong máy; hãy sao lưu ZIP trước khi xóa dữ liệu hoặc gỡ APK. Không tự gửi tài liệu lên đám mây.</p></details>
      <div className="grid grid-cols-2 gap-2"><button disabled={working||!pages.length} onClick={()=>void backupScans()} className="min-h-10 rounded-lg bg-[#17253D] flex items-center justify-center gap-2 text-xs disabled:opacity-40"><Download size={16}/>Sao lưu ZIP</button>
        <button disabled={working} onClick={()=>restoreInput.current?.click()} className="min-h-10 rounded-lg bg-[#17253D] flex items-center justify-center gap-2 text-xs"><Upload size={16}/>Khôi phục ZIP</button></div>
      <input ref={restoreInput} hidden type="file" accept=".zip,application/zip" onChange={e=>{const f=e.target.files?.[0];if(f)void restoreScans(f);e.currentTarget.value='';}}/>

@@ -100,3 +100,20 @@ jobs:
           npm run build --prefix studio-ui
           node tests/test_document_edges.cjs
           node tests/test_document_edges_realistic.cjs
+          node tests/test_studio51_scanner_wood_fast.cjs
+          node tests/test_studio52_scanner_capture_alignment.cjs
+          node tests/test_studio53_scanner_fast_multi_sharp.cjs
+          node tests/test_studio54_scanner_restore_pdf.cjs
+          node tests/test_studio55_scanner_fold_ui.cjs
+          node tests/test_studio56_scanner_auto_live_slider.cjs
+          node tests/test_studio57_neutral_paper_wood.cjs
+          node tests/test_studio58_cool_paper_on_wood.cjs
+          node tests/test_studio59_retry_uncertain_scan.cjs
+          node tests/test_studio60_wood_color_retry.cjs
+          node tests/test_studio61_outer_silhouette.cjs
+          node tests/test_studio62_compact_qr.cjs
+          node tests/test_studio63_paper_continuity.cjs
+          node tests/test_studio64_scanner_compact_ui.cjs
+          node tests/test_studio65_scanner_chevrons.cjs
+          node tests/test_studio66_split_review.cjs
+          node tests/test_studio66_roi_multi.cjs

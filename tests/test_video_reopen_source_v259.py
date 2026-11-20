@@ -19,10 +19,11 @@ assert '--apk-photo-preview-height' in css
 assert 'preview-zoom-v259.css' in bundle and 'preview-zoom-v259.js' in bundle
 assert 'grid-template-columns:repeat(2,minmax(0,1fr))' in polish
 assert 'video-canvas-wrap::after{content:none' in polish
-# Version-agnostic safety contract: new test APKs must be isolated by their
-# exact versionCode, never pin a historical trial suffix in regression tests.
+# Keep debug packages isolated without tying the test suffix to the signed
+# release versionCode. TEST52 must be installable beside TEST51 and Production.
 gradle=read('android/app/build.gradle')
 version=re.search(r'\bversionCode\s+(\d+)\b',gradle)
 assert version and int(version.group(1))>0
-assert f"applicationIdSuffix '.trial{version.group(1)}'" in gradle
+suffix=re.search(r"applicationIdSuffix\s+'\.trial(\d+)'",gradle)
+assert suffix and int(suffix.group(1))>int(version.group(1)), 'TEST APK package must not reuse Production or an older TEST identity'
 print('PASS: video close/reopen flow, pinch camera, zoomable preview, crop/library alignment')
