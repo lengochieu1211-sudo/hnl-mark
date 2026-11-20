@@ -49,5 +49,5 @@ assert.ok(source.includes('[360,560,760]'),'Three bounded detail levels, not unl
 assert.ok(ui.includes('editing.autoProcessPending')&&ui.includes('role="status"'),'Show ongoing work instead of prematurely warning');
 assert.ok(ui.includes('SCAN_DETECTOR_REVISION'),'Display detector build for accurate bug triage');
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
-assert.match(gradle,/applicationIdSuffix '\.trial2565'/);assert.match(gradle,/HNLMark STUDIO 65/);
+assert.match(gradle,/applicationIdSuffix '\.trial2566'/);assert.match(gradle,/HNLMark STUDIO 66/);
 console.log('PASS TEST60: wood background, cool/warm sheets, shadows, safe no-page, revision upgrade, progress & APK isolation');

@@ -9,7 +9,7 @@ import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,s
 import {
  DEFAULT_CORNERS,SCAN_DETECTOR_REVISION,needsScanDetectorUpgrade,queueFailedScanDetectorUpgrade,createScannerPdf,flattenDocument,listScanFolders,listScans,getScan,newScanId,putScan,putScanFolder,saveAutomaticScanIfUnedited,scanSharpnessPercent,
  initScanWarpGrid,scanWarpOuterCorners,validScanWarp,transformScanWarpGrid,
- splitStoredScanPage,addApprovedScanRegions,addScanRegionManually,suggestMultipleDocumentEdges,suggestDocumentEdgesWithinRegion,
+ addApprovedScanRegions,addScanRegionManually,suggestMultipleDocumentEdges,suggestDocumentEdgesWithinRegion,
  removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,reconcileSavedScanCorners,detectDocumentEdges,validCorners,scannerOrientedPreview,
  type ScanCorners,type ScanFilter,type ScanSharpness,type ScanWarpGrid,type ScanFolder,type ScanPage,type ScanPaper,type PdfExportOptions,type ScanDocumentType,type ScanPoint
 } from '../../services/documentScanner';

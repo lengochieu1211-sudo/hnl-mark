@@ -26,7 +26,7 @@ for marker in ['convexHull','hullToQuadrilateral','morphClose','orderQuad','Scan
 for marker in ['Khi kéo sẽ có kính phóng đại 4,5×','data-hnl-scan-loupe','Chưa nhận diện chắc chắn',
                'CCCD / thẻ','Loại tài liệu nhận diện','setDragFocus','Đã nhận diện tứ giác']:
  assert marker in ui, marker
-assert ui.index('await putScan(p);') < ui.index("created.forEach(p=>queueScanEdgeEstimate(p,'multiple',-1))",ui.index('const importFiles='))
+assert ui.index('await putScan(p);') < ui.index("created.forEach(p=>queueScanEdgeEstimate(p,'one',-1))",ui.index('const importFiles='))
 assert "const generatedPhotoCode = timemarkCode ||" in mark and "photoCode: timemarkCode" in mark
 assert "const photoCode = `${config.photoCodePrefix}" not in mark
 assert not any(s in app for s in ['cloudinary','document-scan.googleapis.com'])
