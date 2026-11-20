@@ -182,6 +182,33 @@ export async function splitStoredScanPage(id:string,expected:ScanCorners,regions
  });
 }
 
+/** Approved regions are NEW child scans. The source row (including an
+ * existing processed JPEG and manual edits) is never rewritten or deleted.
+ * IndexedDB commits all children together or none. */
+export async function addApprovedScanRegions(id:string,expected:ScanCorners,regions:ScanCorners[],
+ shouldApply:()=>boolean=()=>true):Promise<ScanPage[]>{
+ if(regions.length<2||regions.length>4||regions.some(q=>!validCorners(q)))return [];
+ const db=await database();return new Promise<ScanPage[]>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let created:ScanPage[]=[];
+  tx.oncomplete=()=>{db.close();resolve(created);};
+  tx.onabort=()=>{db.close();reject(tx.error||new Error('Không tạo được các vùng tài liệu'));};
+  const req=store.get(id);
+  req.onsuccess=()=>{
+   const current=req.result as ScanPage|undefined;
+   if(!current||!shouldApply()||current.corners.some((p,i)=>
+    Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
+   for(let n=0;n<regions.length;n++){
+    const child:ScanPage={...current,id:newScanId(),name:compactScanRegionName(current.name,n+2),
+     original:current.original,processed:undefined,autoProcessPending:false,
+     corners:regions[n],detectionConfidence:'estimated',splitParentId:current.splitParentId||id,
+     splitRegionCount:undefined,warpGrid:undefined,transformOps:undefined,
+     order:current.order+(n+1)*.001,createdAt:Date.now()};
+    store.add(child);created.push(child);
+   }
+  };
+ });
+}
+
 /** Create one manual additional crop from a still-preserved source image. */
 export async function addScanRegionManually(source:ScanPage,existingNames:string[]=[]):Promise<ScanPage>{
  const used=new Set([source.name,...existingNames]);let index=2;
@@ -966,6 +993,38 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  * This is intentionally conservative: only isolated well-shaped cyan IDs or
  * bright neutral paper regions are proposed. Users can add missing regions
  * by hand; weak guesses must never silently crop or discard the source. */
+/** Resolve an explicitly selected rough document region against the ORIGINAL
+ * raster. Cropping here is only temporary for detection, never for storage. */
+export function detectDocumentEdgesInRegion(image:ImageData,region:ScanCorners,
+ kind:ScanDocumentType='auto'):ScanDetection|null{
+ const {width:w,height:h,data}=image;
+ if(w<120||h<120||data.length<w*h*4||!validCorners(region))return null;
+ const xs=region.map(p=>p.x),ys=region.map(p=>p.y);
+ const left=Math.max(0,Math.floor((Math.min(...xs)-.045)*w));
+ const right=Math.min(w,Math.ceil((Math.max(...xs)+.045)*w));
+ const top=Math.max(0,Math.floor((Math.min(...ys)-.045)*h));
+ const bottom=Math.min(h,Math.ceil((Math.max(...ys)+.045)*h));
+ const cw=right-left,ch=bottom-top;
+ if(cw<90||ch<90||cw*ch<w*h*.025)return null;
+ const clipped=new Uint8ClampedArray(cw*ch*4);
+ for(let y=0;y<ch;y++){
+  const start=((top+y)*w+left)*4;
+  clipped.set(data.subarray(start,start+cw*4),y*cw*4);
+ }
+ const found=detectDocumentEdges({width:cw,height:ch,data:clipped} as ImageData,kind);
+ if(found.confidence!=='estimated'||!validCorners(found.corners))return null;
+ // If the alleged page runs into the artificial crop, there may be more
+ // text/QR beyond this ROI. Never promote this into an automatic crop.
+ if(found.corners.some(p=>p.x<.018||p.x>.982||p.y<.018||p.y>.982))return null;
+ const mapped=found.corners.map(p=>({x:(left+p.x*(cw-1))/(w-1),
+  y:(top+p.y*(ch-1))/(h-1)})) as ScanCorners;
+ return validCorners(mapped)?{corners:mapped,confidence:'estimated'}:null;
+}
+export async function suggestDocumentEdgesWithinRegion(blob:Blob,region:ScanCorners,
+ kind:ScanDocumentType='auto'):Promise<ScanDetection|null>{
+ return detectDocumentEdgesInRegion(await sourcePixels(blob,760),region,kind);
+}
+
 export function detectMultipleDocumentEdges(image:ImageData,kind:ScanDocumentType='auto',limit=4):ScanDetection[]{
  const {width:w,height:h,data}=image;
  if(w<100||h<100||data.length<w*h*4)return [];
