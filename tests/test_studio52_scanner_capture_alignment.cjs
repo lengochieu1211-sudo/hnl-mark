@@ -47,8 +47,8 @@ assert.ok(ui.includes('scanDirtyDrafts.current.has(page.id)')&&ui.includes('scan
 assert.ok(fs.readFileSync(path.join(root,'documentScanner.ts'),'utf8').includes('if(!shouldApply()||!current'), 'Check active edits inside IDB transaction');
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
 const emulator=fs.readFileSync(path.join(__dirname,'../.github/workflows/android-emulator-smoke.yml'),'utf8');
-assert.match(gradle,/applicationIdSuffix '\.trial2566'/);
-assert.match(gradle,/HNLMark STUDIO 66/);
+assert.match(gradle,/applicationIdSuffix '\.trial2567'/);
+assert.match(gradle,/HNLMark STUDIO 67/);
 assert.ok(!gradle.includes(".trial2547"),'TEST51 debug identity must be preserved separately');
 assert.ok(emulator.includes('HNL_TEST_PACKAGE=vn.hnl.xaydung.hnlmark${TEST_SUFFIX}'),'Emulator targets dynamic TEST52 package ID');
 console.log('PASS TEST52: screenshot-shaped stale quad corrected by stored JPEG, no false crop/overwrite, non-blocking shutter');

@@ -30,7 +30,7 @@ export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
 // 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
-export const SCAN_DETECTOR_REVISION=63;
+export const SCAN_DETECTOR_REVISION=64;
 
 /** Only untouched, failed automatic scans qualify for one new detector attempt.
  * Never change a manual 4-corner edit, an exported scan, or an existing split. */
@@ -862,6 +862,91 @@ function brightPaperContinuesOutside(image:ImageData,quad:ScanCorners):boolean{
  return continuingSides>=2||(continuingSides>=1&&area<.36);
 }
 
+/** R64: conservative broad-sheet detector for pale folded receipts and large
+ * horizontal plans on dark clutter. Unlike an inner printed table, the paper
+ * silhouette has high luminance across most rows AND columns. A short crease
+ * may divide the interior, but a clear long gap between two sheets is rejected.
+ * Never uses a screenshot overlay; only original camera raster pixels. */
+function findBroadPaperOnDarkClutter(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='id-card')return null;
+ const {width:w,height:h,data}=image;
+ if(w<180||h<180||data.length<w*h*4)return null;
+ const edgeL:number[]=[];
+ const lightAt=(x:number,y:number)=>{
+  const k=(y*w+x)*4;
+  return (data[k]+2*data[k+1]+data[k+2])/4;
+ };
+ for(let i=0;i<48;i++){
+  const x=Math.round(2+(w-5)*i/47),y=Math.round(2+(h-5)*i/47);
+  edgeL.push(lightAt(x,2),lightAt(x,h-3),lightAt(2,y),lightAt(w-3,y));
+ }
+ edgeL.sort((a,b)=>a-b);
+ const background=edgeL[Math.floor(edgeL.length*.55)];
+ if(background>131)return null; // no strong outside-background evidence
+ const threshold=Math.max(147,background+49);
+ const white=(x:number,y:number)=>{
+  if(x<2||y<2||x>=w-2||y>=h-2)return false;
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  return (r+2*g+b)/4>=threshold&&Math.max(r,g,b)-Math.min(r,g,b)<79;
+ };
+ const row=new Float32Array(h),col=new Float32Array(w);
+ const ys=2,xs=2;
+ for(let y=ys;y<h-ys;y+=2)for(let x=xs;x<w-xs;x+=2){
+  if(white(x,y)){row[y]+=2;col[x]+=2;}
+ }
+ // A paper occupying under 44% of image width is a card, not a broad plan.
+ const strongRows:number[]=[],strongCols:number[]=[];
+ for(let y=ys;y<h-ys;y+=2)if(row[y]/w>.43)strongRows.push(y);
+ for(let x=xs;x<w-xs;x+=2)if(col[x]/h>.42)strongCols.push(x);
+ if(strongRows.length<h*.30||strongCols.length<w*.30)return null;
+ const top=strongRows[0],bottom=strongRows[strongRows.length-1];
+ const left=strongCols[0],right=strongCols[strongCols.length-1];
+ const bw=right-left,bh=bottom-top,frac=bw*bh/(w*h);
+ if(bw<w*.43||bh<h*.43||frac<.22||frac>.82||left<w*.025||right>w*.975||top<h*.025||bottom>h*.975)return null;
+ // Rows/columns of separate pages must not be bridged into one crop.
+ let rowGap=0,colGap=0;
+ for(let i=1;i<strongRows.length;i++)rowGap=Math.max(rowGap,strongRows[i]-strongRows[i-1]-2);
+ for(let i=1;i<strongCols.length;i++)colGap=Math.max(colGap,strongCols[i]-strongCols[i-1]-2);
+ if(rowGap>h*.045||colGap>w*.045)return null;
+ // A strongly slanted top/bottom edge develops a long intermediate-brightness
+ // ramp before the central row becomes wide. An axis-aligned bbox could clip
+ // a title, stamp or QR at its raised corner: reject rather than auto-crop.
+ let upperRamp=0,lowerRamp=0;
+ for(let y=4;y<top;y+=2)if(row[y]/w>.09)upperRamp+=2;
+ for(let y=bottom+2;y<h-4;y+=2)if(row[y]/w>.09)lowerRamp+=2;
+ if(upperRamp>h*.025||lowerRamp>h*.025)return null;
+ let inside=0,total=0;
+ for(let y=top+4;y<bottom-3;y+=4)for(let x=left+4;x<right-3;x+=4){
+  inside+=white(x,y)?1:0;total++;
+ }
+ if(inside/Math.max(1,total)<.65)return null;
+ const margin=Math.max(5,Math.min(w,h)*.034);
+ const sides:[number,number,number,number][]= [
+  [(left+right)/2,top,(left+right)/2,top-margin],
+  [right,(top+bottom)/2,right+margin,(top+bottom)/2],
+  [(left+right)/2,bottom,(left+right)/2,bottom+margin],
+  [left,(top+bottom)/2,left-margin,(top+bottom)/2]
+ ];
+ let supported=0;
+ for(let i=0;i<4;i++){
+  const [ix,iy,ox,oy]=sides[i];
+  const inner:[number,number]=i===0?[ix,iy+margin]:i===1?[ix-margin,iy]:i===2?[ix,iy-margin]:[ix+margin,iy];
+  if(ox<2||oy<2||ox>=w-2||oy>=h-2)continue;
+  const inLight=lightAt(Math.round(inner[0]),Math.round(inner[1]));
+  const outLight=lightAt(Math.round(ox),Math.round(oy));
+  if(inLight-outLight>38)supported++;
+ }
+ if(supported<3)return null; // internal table lines cannot be accepted
+ // Slightly overscan: keep title, page number, signatures and border QR.
+ const dx=Math.max(3,bw*.021),dy=Math.max(3,bh*.021);
+ const quad=[{x:(left-dx)/(w-1),y:(top-dy)/(h-1)},
+  {x:(right+dx)/(w-1),y:(top-dy)/(h-1)},
+  {x:(right+dx)/(w-1),y:(bottom+dy)/(h-1)},
+  {x:(left-dx)/(w-1),y:(bottom+dy)/(h-1)}] as ScanCorners;
+ if(!validCorners(quad)||brightPaperContinuesOutside(image,quad))return null;
+ return {corners:quad,confidence:'estimated'};
+}
+
 /** A white document on dark/uneven plastic or wood must be found from its
  * outer light silhouette, not from rectangular blue lines inside the form.
  * Samples the photo perimeter for illumination, checks the full component and
@@ -927,6 +1012,39 @@ function findBrightPaperOnDarkBackground(image:ImageData,kind:ScanDocumentType):
  return best;
 }
 
+/** Reject a partial sheet when a second broad neutral-paper band lives
+ * outside its candidate rectangle. In particular, never auto-apply only the
+ * lower half of a creased receipt or the lower of two adjacent documents. */
+function broadPaperBandOutside(image:ImageData,corners:ScanCorners):boolean{
+ const {width:w,height:h,data}=image;
+ const xs=corners.map(p=>p.x),ys=corners.map(p=>p.y);
+ const left=Math.max(0,Math.floor(Math.min(...xs)*w)),right=Math.min(w-1,Math.ceil(Math.max(...xs)*w));
+ const top=Math.max(0,Math.floor(Math.min(...ys)*h)),bottom=Math.min(h-1,Math.ceil(Math.max(...ys)*h));
+ if(right-left<w*.2||bottom-top<h*.16)return false;
+ const sample=(x:number,y:number)=>{
+  const k=4*(y*w+x),r=data[k],g=data[k+1],b=data[k+2];
+  return (r+2*g+b)/4>151&&Math.max(r,g,b)-Math.min(r,g,b)<79;
+ };
+ let above=0,below=0,leftOf=0,rightOf=0;
+ const rowBright=(y:number)=>{
+  let n=0,tot=0;
+  for(let x=left+4;x<right-4;x+=4){tot++;if(sample(x,y))n++;}
+  return n/Math.max(1,tot)>.34;
+ };
+ const colBright=(x:number)=>{
+  let n=0,tot=0;
+  for(let y=top+4;y<bottom-4;y+=4){tot++;if(sample(x,y))n++;}
+  return n/Math.max(1,tot)>.34;
+ };
+ const marginY=Math.max(4,Math.floor(h*.025));
+ for(let y=4;y<top-marginY;y+=4)if(rowBright(y))above+=4;
+ for(let y=bottom+marginY;y<h-4;y+=4)if(rowBright(y))below+=4;
+ const marginX=Math.max(4,Math.floor(w*.025));
+ for(let x=4;x<left-marginX;x+=4)if(colBright(x))leftOf+=4;
+ for(let x=right+marginX;x<w-4;x+=4)if(colBright(x))rightOf+=4;
+ return Math.max(above,below)>h*.065||Math.max(leftOf,rightOf)>w*.065;
+}
+
 /** Reject an inner table or text rectangle when surrounding paper continues
  * brightly beyond its proposed outline. Strong lines alone do not prove that
  * an edge belongs to the outside of the sheet. */
@@ -971,8 +1089,10 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  if(compactCard)return compactCard;
  const neutralPaper=findNeutralPaperOnWarmWood(image,kind);
  if(neutralPaper)return neutralPaper;
+ const broadPaper=findBroadPaperOnDarkClutter(image,kind);
+ if(broadPaper)return broadPaper;
  const brightPaper=findBrightPaperOnDarkBackground(image,kind);
- if(brightPaper)return brightPaper;
+ if(brightPaper&&!broadPaperBandOutside(image,brightPaper.corners))return brightPaper;
  const color=detectDocumentByColor(image,kind);
  const edge=findEdgeQuadrilateral(image,kind);
  if(!edge)return color;

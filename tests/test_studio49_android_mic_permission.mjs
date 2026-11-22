@@ -11,7 +11,7 @@ assert.doesNotMatch(manifest,/android:name="android\.permission\.MODIFY_AUDIO_SE
 assert.match(java,/PermissionRequest\.RESOURCE_AUDIO_CAPTURE/);
 assert.match(java,/Manifest\.permission\.RECORD_AUDIO/);
 assert.match(gradle,/versionCode 2547/);
-assert.match(gradle,/applicationIdSuffix '\.trial2566'/);
+assert.match(gradle,/applicationIdSuffix '\.trial2567'/);
 assert.match(gradle,/versionName '2\.5\.47'/);
 assert.match(gradle,/versionNameSuffix '-studio-test'/);
 const issue=describeMicFailure({name:'NotReadableError',message:'Could not start audio source'});
