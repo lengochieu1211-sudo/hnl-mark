@@ -17,5 +17,5 @@ assert.ok(source.includes('group-open/help:rotate-90'),'Help-chevron rotates ind
 assert.equal((source.match(/<ChevronRight size=\{16\}/g)||[]).length,5,'Five help sections');
 assert.ok(source.includes('[&::-webkit-details-marker]:hidden'),'Hide browser default disclosure triangle');
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
-assert.ok(gradle.includes("applicationIdSuffix '.trial2567'")&&gradle.includes('HNLMark STUDIO 67'),'TEST65 APK installs alongside TEST64');
+assert.ok(gradle.includes("applicationIdSuffix '.trial2568'")&&gradle.includes('HNLMark STUDIO 68'),'TEST65 APK installs alongside TEST64');
 console.log('PASS TEST65: consistent Lucide collapse icons and isolated debug APK');
