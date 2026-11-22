@@ -32,5 +32,5 @@ assert.ok(scan.validCorners(result.corners));
 const q=result.corners;
 const full=q[0].y<.11&&q[1].y<.11&&q[2].y>.90&&q[3].y>.90;
 assert.ok(result.confidence==='manual'||full,'A partial internal quad must never be auto-applied to a real invoice');
-assert.equal(scan.SCAN_DETECTOR_REVISION,64);
+assert.ok(scan.SCAN_DETECTOR_REVISION>=64);
 console.log('PASS TEST63: folded invoice preserves outer text; suspicious inner quadrilateral stays editable; originals untouched');

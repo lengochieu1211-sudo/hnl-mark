@@ -67,5 +67,5 @@ for(const mode of ['plan-skew','plan-cutoff']){const {image,quad}=scene(mode),go
 }
 testOuter('two-sheets',false);
 testOuter('glare',false);
-assert.ok(scan.SCAN_DETECTOR_REVISION===64);
+assert.ok(scan.SCAN_DETECTOR_REVISION>=64);
 console.log('PASS TEST67: outer corners folded invoice + wide plan; clutter does not replace paper; source unchanged');

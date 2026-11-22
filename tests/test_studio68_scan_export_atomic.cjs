@@ -42,6 +42,6 @@ assert.ok(service.includes("const tx=db.transaction('pages','readwrite'),store=t
 assert.ok(service.includes('!unchangedScanProcessingInputs(current,snapshot)'),'atomic guard checks all output settings');
 assert.ok(ui.includes('await saveProcessedScanIfCurrent(p.id,latest,processed)'));
 assert.ok(!ui.includes('const next={...current,processed,autoProcessPending:false};await putScan(next)'));
-assert.ok(gradle.includes("applicationIdSuffix '.trial2568'"),'TEST68 cannot overwrite TEST67');
-assert.ok(gradle.includes("'HNLMark STUDIO 68'"));
+assert.ok(gradle.includes("applicationIdSuffix '.trial2569'"),'TEST69 cannot overwrite TEST68');
+assert.ok(gradle.includes("'HNLMark STUDIO 69'"));
 console.log('PASS TEST68: stale export rejected on corners/filter/sharpness/colors/warp/origin; TEST APK isolated');

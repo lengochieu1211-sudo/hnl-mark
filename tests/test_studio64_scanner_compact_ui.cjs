@@ -13,5 +13,5 @@ assert.ok(s.includes("setScanSharpnessLevelDraft(level);setScanSharpnessDraft(le
 assert.ok(s.includes('setScanColorDraft(prev=>({...prev,[key]:value}));setShowResult(true);'),'Color updates preview');
 assert.ok(s.includes('Hướng dẫn chỉnh màu')&&!s.includes('Kéo cặp điểm xanh đến chỗ nếp gấp trên hai cạnh đối diện'));
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
-assert.ok(gradle.includes("applicationIdSuffix '.trial2568'")&&gradle.includes('HNLMark STUDIO 68'));
+assert.ok(gradle.includes("applicationIdSuffix '.trial2569'")&&gradle.includes('HNLMark STUDIO 69'));
 console.log('PASS TEST64: mobile sticky live preview, concise guidance, parallel APK');

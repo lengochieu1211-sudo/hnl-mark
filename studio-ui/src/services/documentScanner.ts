@@ -30,7 +30,7 @@ export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
 // 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
-export const SCAN_DETECTOR_REVISION=64;
+export const SCAN_DETECTOR_REVISION=65;
 
 /** Only untouched, failed automatic scans qualify for one new detector attempt.
  * Never change a manual 4-corner edit, an exported scan, or an existing split. */
@@ -1117,9 +1117,76 @@ function likelyInnerPrintedPanel(image:ImageData,corners:ScanCorners):boolean{
  return sides>=2;
 }
 
+/** R65: prevent silent loss of an overlapping second paper or a raised
+ * folded edge. Several older detectors can return only the brighter LOWER
+ * sheet, yet mark the crop confident. Use the ORIGINAL raster (not a UI
+ * screenshot): when a substantial pale-paper band continues just outside a
+ * proposed side on a dark background, do not persist a partial scan. This
+ * rule only rejects risky candidates; it never guesses missing text or edges. */
+export function exposedPaperBeyondQuad(image:ImageData,corners:ScanCorners):boolean{
+ if(!validCorners(corners))return false;
+ const {width:w,height:h,data}=image;
+ if(w<120||h<120||data.length<w*h*4)return false;
+ const border:number[]=[];
+ const luminanceAt=(x:number,y:number)=>{
+  const k=4*(y*w+x);return (data[k]+2*data[k+1]+data[k+2])/4;
+ };
+ for(let i=0;i<32;i++){
+  const x=Math.round((w-1)*i/31),y=Math.round((h-1)*i/31);
+  border.push(luminanceAt(x,2),luminanceAt(x,h-3),luminanceAt(2,y),luminanceAt(w-3,y));
+ }
+ border.sort((a,b)=>a-b);
+ const background=border[Math.floor(border.length*.50)];
+ if(background>133)return false; // Bright room/wood requires other evidence.
+ const whiteThreshold=Math.max(183,background+47);
+ const white=(x:number,y:number)=>{
+  if(x<3||y<3||x>=w-3||y>=h-3)return false;
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  return (r+2*g+b)/4>whiteThreshold&&Math.max(r,g,b)-Math.min(r,g,b)<67;
+ };
+ const xs=corners.map(p=>p.x),ys=corners.map(p=>p.y);
+ const left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
+ if(right-left<.16||bottom-top<.16)return false;
+ const hasLongPaperRun=(axis:'x'|'y',position:number)=>{
+  const samples:boolean[]=[];
+  if(axis==='x'){
+   const x=Math.round(position*(w-1));
+   for(let y=Math.round((top+.10*(bottom-top))*(h-1));y<Math.round((bottom-.10*(bottom-top))*(h-1));y+=3)
+    samples.push(white(x,y));
+  }else{
+   const y=Math.round(position*(h-1));
+   for(let x=Math.round((left+.10*(right-left))*(w-1));x<Math.round((right-.10*(right-left))*(w-1));x+=3)
+    samples.push(white(x,y));
+  }
+  const count=Math.max(9,Math.round(samples.length*.13));
+  if(samples.length<count)return false;
+  let bright=0;
+  for(let k=0;k<samples.length;k++){
+   bright+=samples[k]?1:0;
+   if(k>=count)bright-=samples[k-count]?1:0;
+   if(k>=count-1&&bright/count>.78)return true;
+  }
+  return false;
+ };
+ // Need TWO adjacent outside probes with long, pale continuation, not a
+ // single isolated white QR cell / stamp / glint near a corner.
+ for(const [axis,edge,sign] of [
+  ['x',left,-1],['x',right,1],['y',top,-1],['y',bottom,1]
+ ] as const){
+  let continuous=0;
+  for(const step of [.007,.014,.021,.028]){
+   const outside=edge+sign*step;
+   if(outside<.012||outside>.988)break;
+   if(hasLongPaperRun(axis,outside))continuous++;else continuous=0;
+   if(continuous>=2)return true;
+  }
+ }
+ return false;
+}
+
 /** Higher-confidence 4-edge result replaces uncertain color-only segmentation.
  * Never force detection when edges do not close: manual frame retains source. */
-export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+function detectDocumentEdgesCandidate(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
  // Strong cyan-ID candidate: avoids both expensive contour passes on busy wood.
  const coolCard=findCoolCardQuadrilateral(image,kind);
  if(coolCard)return coolCard;
@@ -1145,6 +1212,14 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  // support, otherwise preserve the previous conservative color candidate.
  if(edge.support>.93)return {corners:edge.corners,confidence:'estimated'};
  return color;
+}
+
+/** Reject any too-tight four-corner estimate BEFORE auto-flattening or saving.
+ * The detector remains free to return a manual full-image frame. */
+export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+ const found=detectDocumentEdgesCandidate(image,kind);
+ if(found.confidence==='estimated'&&exposedPaperBeyondQuad(image,found.corners))return defaultDetection();
+ return found;
 }
 
 /** Find distinct, spatially separate documents from one photo.

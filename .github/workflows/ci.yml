@@ -119,3 +119,4 @@ jobs:
           node tests/test_studio66_roi_multi.cjs
           node tests/test_studio67_outer_fold_blueprint.cjs
           node tests/test_studio68_scan_export_atomic.cjs
+          node tests/test_studio69_multi_outer_safety.cjs
