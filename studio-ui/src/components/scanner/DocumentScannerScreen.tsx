@@ -7,7 +7,7 @@ import {scannerTapOnVideo} from '../../services/scannerFocusGeometry';
 import {scannerLiveContainRect,scannerLiveSourceCrop,scannerLiveQuadDelta,scannerLiveBlendQuad,type LiveFrameRect} from '../../services/scannerLiveEdges';
 import {SCANNER_LOUPE_IMAGE_SIZE,scannerPointAtPointer,scannerCornerWithOffset,scannerLoupeImageRect,scannerLoupeViewportPosition} from '../../services/scannerMagnifier';
 import {
- DEFAULT_CORNERS,SCAN_DETECTOR_REVISION,needsScanDetectorUpgrade,queueFailedScanDetectorUpgrade,createScannerPdf,flattenDocument,listScanFolders,listScans,getScan,newScanId,putScan,putScanFolder,saveAutomaticScanIfUnedited,scanSharpnessPercent,
+ DEFAULT_CORNERS,SCAN_DETECTOR_REVISION,needsScanDetectorUpgrade,queueFailedScanDetectorUpgrade,createScannerPdf,flattenDocument,listScanFolders,listScans,getScan,newScanId,putScan,putScanFolder,saveAutomaticScanIfUnedited,saveProcessedScanIfCurrent,unchangedScanProcessingInputs,scanSharpnessPercent,
  initScanWarpGrid,scanWarpOuterCorners,validScanWarp,transformScanWarpGrid,
  addApprovedScanRegions,addScanRegionManually,suggestMultipleDocumentEdges,suggestDocumentEdgesWithinRegion,
  removeScan,restoreScanBatch,updateScanBatch,estimateScanCornersIfUnedited,suggestDocumentEdges,reconcileSavedScanCorners,detectDocumentEdges,validCorners,scannerOrientedPreview,
@@ -653,15 +653,17 @@ export const DocumentScannerScreen:React.FC<Props>=({onBack})=>{
   const processed=await flattenDocument(latest.original,latest.corners,latest.filter,abortProcessing.current?.signal,
    {operations:latest.transformOps,adjustments:latest.colorAdjust,sharpness:latest.sharpness||'off',
     sharpnessLevel:scanSharpnessPercent(latest),warpGrid:latest.warpGrid});
-  // A concurrent user edit might have completed while flattening. Re-read
-  // latest row and never put a stale snapshot back over it.
-  const current=await getScan(p.id);
-  if(!current||current.processed||JSON.stringify(current.corners)!==JSON.stringify(latest.corners)){
+  // Atomic compare-and-save: filter, sharpening, color, operations, warp and
+  // source identity are checked alongside corners before persisting JPEG bytes.
+  const next=await saveProcessedScanIfCurrent(p.id,latest,processed);
+  if(!next){
+   const current=await getScan(p.id);
    if(current?.processed)return current.processed;
    throw Error('Trang scan đã thay đổi trong khi xuất. Hãy thử lại để tránh ghi đè dữ liệu.');
   }
-  const next={...current,processed,autoProcessPending:false};await putScan(next);
-  setPages(old=>old.map(item=>item.id===p.id?next:item));return processed;
+  setPages(old=>old.map(item=>item.id===p.id&&!item.processed&&
+   unchangedScanProcessingInputs(item,latest)?next:item));
+  return next.processed!;
  };
  const editingHasUnsavedCorners=!!editing&&(cornerDraft.some((p,i)=>Math.abs(p.x-editing.corners[i].x)>1e-6||Math.abs(p.y-editing.corners[i].y)>1e-6)||filterDraft!==editing.filter||scanSharpnessDraft!==(editing.sharpness||'off')||scanSharpnessLevelDraft!==scanSharpnessPercent(editing)||JSON.stringify(scanOpsDraft)!==JSON.stringify(safeScanOps(editing.transformOps))||JSON.stringify(scanColorDraft)!==JSON.stringify(safeScanColor(editing.colorAdjust))||JSON.stringify(scanWarpDraft)!==JSON.stringify(editing.warpGrid||null));
  const splitCurrentPage=async()=>{

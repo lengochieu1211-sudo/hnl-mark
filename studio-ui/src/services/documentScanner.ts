@@ -150,6 +150,44 @@ export async function saveAutomaticScanIfUnedited(
  });
 }
 
+
+/** Compare ALL inputs affecting derived JPEG bytes, never just the four corners.
+ * A concurrent export must not persist old pixels over new scan settings. */
+export function unchangedScanProcessingInputs(current:ScanPage,snapshot:ScanPage):boolean{
+ return !!current.original?.size&&current.original.size===snapshot.original?.size&&
+  current.original.type===snapshot.original?.type&&
+  current.filter===snapshot.filter&&
+  (current.sharpness||'off')===(snapshot.sharpness||'off')&&
+  scanSharpnessPercent(current)===scanSharpnessPercent(snapshot)&&
+  current.documentType===snapshot.documentType&&
+  current.detectionConfidence===snapshot.detectionConfidence&&
+  JSON.stringify(current.corners)===JSON.stringify(snapshot.corners)&&
+  JSON.stringify(safeScanOps(current.transformOps))===JSON.stringify(safeScanOps(snapshot.transformOps))&&
+  JSON.stringify(safeScanColor(current.colorAdjust))===JSON.stringify(safeScanColor(snapshot.colorAdjust))&&
+  JSON.stringify(current.warpGrid||null)===JSON.stringify(snapshot.warpGrid||null);
+}
+
+/** Compare and save in ONE readwrite IndexedDB transaction. If an editor or
+ * background worker has changed the page, reject stale export without touching
+ * the original blob, edited settings or existing processed output. */
+export async function saveProcessedScanIfCurrent(id:string,snapshot:ScanPage,processed:Blob):Promise<ScanPage|null>{
+ if(!processed?.size||processed.type!=='image/jpeg')return null;
+ const db=await database();
+ return new Promise<ScanPage|null>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let saved:ScanPage|null=null;
+  tx.oncomplete=()=>{db.close();resolve(saved)};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('Không thể lưu bản scan xuất ra'))};
+  tx.onerror=()=>{};
+  const request=store.get(id);
+  request.onsuccess=()=>{
+   const current=request.result as ScanPage|undefined;
+   if(!current||current.processed||current.autoProcessPending||!unchangedScanProcessingInputs(current,snapshot))return;
+   saved={...current,processed,autoProcessPending:false};
+   store.put(saved);
+  };
+ });
+}
+
 /** Restore every scanned page and folder in ONE IndexedDB transaction. If any
  * image fails to be stored (quota, ID collision, corruption), the transaction
  * rolls back completely and existing user scans remain untouched. */
