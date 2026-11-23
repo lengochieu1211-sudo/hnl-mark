@@ -35,9 +35,9 @@ jobs:
           npm install --prefix studio-ui --no-audit --no-fund
       - name: Derive isolated TEST package from Gradle
         run: |
-          TEST_CODE="$(awk '$1=="versionCode" {print $2; exit}' android/app/build.gradle)"
-          test -n "$TEST_CODE"
-          echo "HNL_TEST_PACKAGE=vn.hnl.xaydung.hnlmark.trial${TEST_CODE}" >> "$GITHUB_ENV"
+          TEST_SUFFIX="$(sed -nE "s/^[[:space:]]*applicationIdSuffix '([^']+)'.*/\1/p" android/app/build.gradle | head -n 1)"
+          test -n "$TEST_SUFFIX"
+          echo "HNL_TEST_PACKAGE=vn.hnl.xaydung.hnlmark${TEST_SUFFIX}" >> "$GITHUB_ENV"
       - name: Enable hardware virtualization for Android Emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

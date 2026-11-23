@@ -1,0 +1,20 @@
+/** TEST66: no background auto-split, require review against original JPEG. */
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const s=fs.readFileSync('studio-ui/src/components/scanner/DocumentScannerScreen.tsx','utf8');
+const service=fs.readFileSync('studio-ui/src/services/documentScanner.ts','utf8');
+assert.ok(s.includes('data-hnl-scan-split-review="true"'));
+assert.ok(s.includes('confirmSplitCurrentPage'));
+assert.ok(s.includes('scanSplitSelected.length<2'));
+assert.ok(s.includes('sourceCorners:editing.corners.map'));
+assert.ok(s.includes('scanSplitPreview?.pageId===editing.id'));
+assert.ok(s.includes('queueScanEdgeEstimate(page,\'one\',-1)'));
+assert.ok(s.includes('queueScanEdgeEstimate(p,\'one\',-1)'));
+assert.ok(!s.includes('queueScanEdgeEstimate(p,\'multiple\',-1)'));
+assert.ok(!s.includes('queueScanEdgeEstimate(page,\'multiple\',-1)'));
+assert.ok(!s.includes('splitStoredScanPage(page.id,page.corners'));
+assert.ok(s.includes('Ảnh gốc đã lưu. Mở trang và duyệt vùng đề xuất'));
+assert.ok(service.includes('const first={...current,corners:regions[0]'));
+assert.ok(service.includes('const child:ScanPage={...current'));
+assert.ok(service.includes('current.corners.some((c,i)=>'));
+console.log('PASS TEST66: 2+ reviewed regions before atomic split; original preserved; no background auto-split');

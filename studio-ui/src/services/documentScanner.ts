@@ -5,20 +5,48 @@ import {scanOrientedSize,drawScannerOriented,adjustScanRgb,safeScanOps,safeScanC
 export type ScanPoint = {x:number;y:number};
 export type ScanCorners = [ScanPoint,ScanPoint,ScanPoint,ScanPoint]; // TL, TR, BR, BL
 export type ScanFilter = 'color'|'enhance'|'gray'|'bw'|'paper';
+/** Local enhancement only. Cannot restore details absent from the camera original. */
+export type ScanSharpness = 'off'|'auto'|'text';
+/** Legacy three-level settings map to 0/45/90%; new scans use continuous 0–100. */
+export function scanSharpnessPercent(p:Pick<ScanPage,'sharpness'|'sharpnessLevel'>):number{
+ if(typeof p.sharpnessLevel==='number'&&Number.isFinite(p.sharpnessLevel))return Math.round(clamp(p.sharpnessLevel,0,100));
+ return p.sharpness==='text'?90:p.sharpness==='off'?0:45;
+}
 export type ScanPaper = 'A4'|'A5'|'Letter'|'custom';
 export type ScanDocumentType='auto'|'id-card'|'paper';
+export type ScanWarpGrid={axis:'vertical'|'horizontal';points:ScanPoint[]};
 export type ScanPage = {
   id:string; folderId:string; name:string; original:Blob; processed?:Blob;
   corners:ScanCorners; filter:ScanFilter; order:number; createdAt:number;
   transformOps?:ScanImageOp[]; colorAdjust?:ScanColorAdjust;
   detectionConfidence?:ScanDetection['confidence']; documentType?:ScanDocumentType;
+  sharpness?:ScanSharpness; sharpnessLevel?:number; warpGrid?:ScanWarpGrid; splitParentId?:string; splitRegionCount?:number;
+  /** New captures only: source is committed first; resuming interrupted auto-processing is safe. */
+  autoProcessPending?:boolean;
+  /** Revision of the last attempted detector; prevents repeat work for known failures. */
+  scanDetectorRevision?:number;
 };
 export type ScanFolder = {id:string;name:string;createdAt:number};
 const DB='hnlmark-document-scanner-v1', VERSION=1;
 // 1.5% inset on uncertain detections: never silently crop 6% from CCCD corners.
 export const DEFAULT_CORNERS:ScanCorners=[{x:.015,y:.015},{x:.985,y:.015},{x:.985,y:.985},{x:.015,y:.985}];
+export const SCAN_DETECTOR_REVISION=65;
+
+/** Only untouched, failed automatic scans qualify for one new detector attempt.
+ * Never change a manual 4-corner edit, an exported scan, or an existing split. */
+export function needsScanDetectorUpgrade(p:ScanPage):boolean{
+ return !!p.original?.size&&!p.processed&&!p.autoProcessPending&&!p.warpGrid&&!p.splitParentId&&
+   p.detectionConfidence!=='estimated'&&!(p.scanDetectorRevision&&p.scanDetectorRevision>=SCAN_DETECTOR_REVISION)&&
+   safeScanOps(p.transformOps).length===0&&Array.isArray(p.corners)&&p.corners.length===4&&
+   p.corners.every((q,i)=>Math.hypot(q.x-DEFAULT_CORNERS[i].x,q.y-DEFAULT_CORNERS[i].y)<1e-6);
+}
+
 export const newScanId=()=>`${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;
 const clamp=(v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));
+export function compactScanRegionName(name:string,index:number):string{
+ const base=String(name||'Scan').replace(/(?:_vung_(?:them|\d+)|_V\d{2,})+$/gi,'').slice(0,42)||'Scan';
+ return `${base}_V${String(index).padStart(2,'0')}`;
+}
 function database():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{
  const req=indexedDB.open(DB,VERSION);
  req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains('pages'))db.createObjectStore('pages',{keyPath:'id'});if(!db.objectStoreNames.contains('folders'))db.createObjectStore('folders',{keyPath:'id'});};
@@ -34,6 +62,7 @@ async function transact<T>(table:'pages'|'folders',mode:IDBTransactionMode,opera
  });
 }
 export const listScans=()=>transact<ScanPage[]>('pages','readonly',(s,done)=>{const r=s.getAll();r.onsuccess=()=>done(r.result||[]);});
+export const getScan=(id:string)=>transact<ScanPage|undefined>('pages','readonly',(s,done)=>{const r=s.get(id);r.onsuccess=()=>done(r.result as ScanPage|undefined);});
 export const listScanFolders=()=>transact<ScanFolder[]>('folders','readonly',(s,done)=>{const r=s.getAll();r.onsuccess=()=>done(r.result||[]);});
 export const putScan=(p:ScanPage)=>transact<void>('pages','readwrite',(s,done)=>{s.put(p);done();});
 export const removeScan=(id:string)=>transact<void>('pages','readwrite',(s,done)=>{s.delete(id);done();});
@@ -57,9 +86,179 @@ export async function updateScanBatch(pages:ScanPage[],removeFolderId?:string):P
  });
 }
 
+/** Apply deferred automatic corners only if the source page has not been edited.
+ * The transaction reads the latest stored row and never replaces processed
+ * output, manual corner changes, or a deleted page with an old snapshot. */
+export async function estimateScanCornersIfUnedited(id:string,expected:ScanCorners,next:ScanCorners,
+ shouldApply:()=>boolean=()=>true):Promise<boolean>{
+ if(!validCorners(next))return false;
+ const db=await database();
+ return new Promise<boolean>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let applied=false;
+  tx.oncomplete=()=>{db.close();resolve(applied)};
+  tx.onabort=()=>{db.close();reject(tx.error||new Error('Không lưu được bốn góc nhận diện'))};
+  tx.onerror=()=>{};
+  const req=store.get(id);
+  req.onsuccess=()=>{
+   const current=req.result as ScanPage|undefined;
+   if(!shouldApply()||!current||current.processed||safeScanOps(current.transformOps).length||
+     current.corners.some((p,i)=>Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
+   store.put({...current,corners:next,detectionConfidence:'estimated'});
+   applied=true;
+  };
+ });
+}
+
+/** Transactional recheck of old failed scans. Re-enable auto-processing just once
+ * after a newer detector is installed, with no change to any original bytes. */
+export async function queueFailedScanDetectorUpgrade(id:string):Promise<ScanPage|null>{
+ const db=await database();return new Promise<ScanPage|null>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let queued:ScanPage|null=null;
+  tx.oncomplete=()=>{db.close();resolve(queued)};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('Không thể thử nhận diện lại mép giấy'))};
+  tx.onerror=()=>{};
+  const request=store.get(id);request.onsuccess=()=>{
+   const current=request.result as ScanPage|undefined;
+   if(!current||!needsScanDetectorUpgrade(current))return;
+   queued={...current,autoProcessPending:true};store.put(queued);
+  };
+ });
+}
+
+/** Save the derived scan ONLY if the original page is still unchanged and the
+ * user has not edited, deleted or already processed it. Guarantees an old
+ * asynchronous result cannot silently replace manual edits or remove source. */
+export async function saveAutomaticScanIfUnedited(
+ id:string,expected:ScanCorners,processed:Blob|null,nextCorners:ScanCorners,
+ shouldApply:()=>boolean=()=>true
+):Promise<ScanPage|null>{
+ if(!validCorners(nextCorners)||processed&&processed.type!=='image/jpeg')return null;
+ const db=await database();return new Promise<ScanPage|null>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let saved:ScanPage|null=null;
+  tx.oncomplete=()=>{db.close();resolve(saved);};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('Không thể hoàn tất bản scan tự động'));};
+  tx.onerror=()=>{};
+  const req=store.get(id);req.onsuccess=()=>{
+   const current=req.result as ScanPage|undefined;
+   if(!current||!current.autoProcessPending||current.processed||current.warpGrid||
+    safeScanOps(current.transformOps).length||!shouldApply()||
+    current.corners.some((p,i)=>Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
+   const next:ScanPage={...current,corners:nextCorners,processed:processed||undefined,
+    autoProcessPending:false,scanDetectorRevision:SCAN_DETECTOR_REVISION,detectionConfidence:processed?'estimated':'manual'};
+   store.put(next);saved=next;
+  };
+ });
+}
+
+
+/** Compare ALL inputs affecting derived JPEG bytes, never just the four corners.
+ * A concurrent export must not persist old pixels over new scan settings. */
+export function unchangedScanProcessingInputs(current:ScanPage,snapshot:ScanPage):boolean{
+ return !!current.original?.size&&current.original.size===snapshot.original?.size&&
+  current.original.type===snapshot.original?.type&&
+  current.filter===snapshot.filter&&
+  (current.sharpness||'off')===(snapshot.sharpness||'off')&&
+  scanSharpnessPercent(current)===scanSharpnessPercent(snapshot)&&
+  current.documentType===snapshot.documentType&&
+  current.detectionConfidence===snapshot.detectionConfidence&&
+  JSON.stringify(current.corners)===JSON.stringify(snapshot.corners)&&
+  JSON.stringify(safeScanOps(current.transformOps))===JSON.stringify(safeScanOps(snapshot.transformOps))&&
+  JSON.stringify(safeScanColor(current.colorAdjust))===JSON.stringify(safeScanColor(snapshot.colorAdjust))&&
+  JSON.stringify(current.warpGrid||null)===JSON.stringify(snapshot.warpGrid||null);
+}
+
+/** Compare and save in ONE readwrite IndexedDB transaction. If an editor or
+ * background worker has changed the page, reject stale export without touching
+ * the original blob, edited settings or existing processed output. */
+export async function saveProcessedScanIfCurrent(id:string,snapshot:ScanPage,processed:Blob):Promise<ScanPage|null>{
+ if(!processed?.size||processed.type!=='image/jpeg')return null;
+ const db=await database();
+ return new Promise<ScanPage|null>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let saved:ScanPage|null=null;
+  tx.oncomplete=()=>{db.close();resolve(saved)};
+  tx.onabort=()=>{db.close();reject(tx.error||Error('Không thể lưu bản scan xuất ra'))};
+  tx.onerror=()=>{};
+  const request=store.get(id);
+  request.onsuccess=()=>{
+   const current=request.result as ScanPage|undefined;
+   if(!current||current.processed||current.autoProcessPending||!unchangedScanProcessingInputs(current,snapshot))return;
+   saved={...current,processed,autoProcessPending:false};
+   store.put(saved);
+  };
+ });
+}
+
 /** Restore every scanned page and folder in ONE IndexedDB transaction. If any
  * image fails to be stored (quota, ID collision, corruption), the transaction
  * rolls back completely and existing user scans remain untouched. */
+/** Turn one saved camera frame into separate editable regions, atomically.
+ * Every region still contains its original (not a destructively cropped JPEG).
+ * A duplicate or stale request never overwrites previously edited pages.
+ * IndexedDB may account for a cloned source blob in each child; cap at four. */
+export async function splitStoredScanPage(id:string,expected:ScanCorners,regions:ScanCorners[],
+ shouldApply:()=>boolean=()=>true):Promise<ScanPage[]>{
+ if(regions.length<2||regions.length>4||regions.some(q=>!validCorners(q)))return [];
+ const db=await database();return new Promise<ScanPage[]>((resolve,reject)=>{
+  const tr=db.transaction('pages','readwrite'),store=tr.objectStore('pages');let created:ScanPage[]=[];
+  tr.oncomplete=()=>{db.close();resolve(created)};
+  tr.onabort=()=>{db.close();reject(tr.error||new Error('Không tách được trọn bộ vùng tài liệu'))};
+  const req=store.get(id);
+  req.onsuccess=()=>{
+   const current=req.result as ScanPage|undefined;
+   if(!shouldApply()||!current||current.processed||current.splitRegionCount||
+    current.corners.some((c,i)=>Math.hypot(c.x-expected[i].x,c.y-expected[i].y)>1e-6))return;
+   const first={...current,corners:regions[0],detectionConfidence:'estimated' as const,splitRegionCount:regions.length};
+   store.put(first);
+   created=[first];
+   for(let n=1;n<regions.length;n++){
+    const child:ScanPage={...current,id:newScanId(),name:compactScanRegionName(current.name,n+1),
+     processed:undefined,corners:regions[n],detectionConfidence:'estimated',splitParentId:id,
+     splitRegionCount:undefined,warpGrid:undefined,order:current.order+n*.001};
+    store.add(child);created.push(child);
+   }
+  };
+ });
+}
+
+/** Approved regions are NEW child scans. The source row (including an
+ * existing processed JPEG and manual edits) is never rewritten or deleted.
+ * IndexedDB commits all children together or none. */
+export async function addApprovedScanRegions(id:string,expected:ScanCorners,regions:ScanCorners[],
+ shouldApply:()=>boolean=()=>true):Promise<ScanPage[]>{
+ if(regions.length<2||regions.length>4||regions.some(q=>!validCorners(q)))return [];
+ const db=await database();return new Promise<ScanPage[]>((resolve,reject)=>{
+  const tx=db.transaction('pages','readwrite'),store=tx.objectStore('pages');let created:ScanPage[]=[];
+  tx.oncomplete=()=>{db.close();resolve(created);};
+  tx.onabort=()=>{db.close();reject(tx.error||new Error('Không tạo được các vùng tài liệu'));};
+  const req=store.get(id);
+  req.onsuccess=()=>{
+   const current=req.result as ScanPage|undefined;
+   if(!current||!shouldApply()||current.corners.some((p,i)=>
+    Math.hypot(p.x-expected[i].x,p.y-expected[i].y)>1e-6))return;
+   for(let n=0;n<regions.length;n++){
+    const child:ScanPage={...current,id:newScanId(),name:compactScanRegionName(current.name,n+2),
+     original:current.original,processed:undefined,autoProcessPending:false,
+     corners:regions[n],detectionConfidence:'estimated',splitParentId:current.splitParentId||id,
+     splitRegionCount:undefined,warpGrid:undefined,transformOps:undefined,
+     order:current.order+(n+1)*.001,createdAt:Date.now()};
+    store.add(child);created.push(child);
+   }
+  };
+ });
+}
+
+/** Create one manual additional crop from a still-preserved source image. */
+export async function addScanRegionManually(source:ScanPage,existingNames:string[]=[]):Promise<ScanPage>{
+ const used=new Set([source.name,...existingNames]);let index=2;
+ while(used.has(compactScanRegionName(source.name,index)))index++;
+ const child:ScanPage={...source,id:newScanId(),name:compactScanRegionName(source.name,index),
+  processed:undefined,corners:DEFAULT_CORNERS.map(p=>({...p})) as ScanCorners,
+  detectionConfidence:'manual',splitParentId:source.splitParentId||source.id,
+  splitRegionCount:undefined,warpGrid:undefined,order:source.order+.0005,createdAt:Date.now()};
+ await transact<void>('pages','readwrite',(store,done)=>{store.add(child);done()});
+ return child;
+}
+
 export async function restoreScanBatch(folders:ScanFolder[],pages:ScanPage[]):Promise<void>{
  const db=await database();
  return new Promise<void>((resolve,reject)=>{
@@ -382,12 +581,629 @@ function findEdgeQuadrilateral(image:ImageData,kind:ScanDocumentType):{corners:S
  }
  return best;
 }
+/** A fast, conservative blue-green ID-card pass for warm/textured desks.
+ * Wood grain often defeats border-color segmentation and the card's photo can
+ * break gradient outlines. Pixel colors on a cyan ID card remain distinct from
+ * warm wood even when the middle of the card is white or heavily printed.
+ * Reject boundary-touching, tiny and low-density objects; preserve a 3% rim
+ * around the oriented rectangle so rounded physical corners are not cut. */
+function findCoolCardQuadrilateral(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='paper')return null;
+ const {width:w,height:h,data}=image;
+ if(w<90||h<90)return null;
+ const sampled:PixelPoint[]=[];
+ const cols=Math.ceil((w-4)/2),rows=Math.ceil((h-4)/2);
+ const coolMask=new Uint8Array(cols*rows);
+ let cool=0,border=0,minX=w,minY=h,maxX=0,maxY=0;
+ const inset=Math.max(4,Math.round(Math.min(w,h)*.025));
+ for(let y=2;y<h-2;y+=2)for(let x=2;x<w-2;x+=2){
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  // Test cool chroma, not luminance. White glare and text may be holes.
+  if(!((g-r>14&&b-r>0)||(g-r>27&&b-r>-10)))continue;
+  cool++;coolMask[((y-2)/2)*cols+(x-2)/2]=1;
+  if(x<=inset||x>=w-1-inset||y<=inset||y>=h-1-inset)border++;
+  minX=Math.min(minX,x);maxX=Math.max(maxX,x);
+  minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+  sampled.push({x,y});
+ }
+ const total=Math.ceil((w-4)/2)*Math.ceil((h-4)/2),share=cool/Math.max(1,total);
+ if(cool<130||share<.025||share>.34||border>cool*.014||
+  minX<=inset||minY<=inset||maxX>=w-1-inset||maxY>=h-1-inset||
+  maxX-minX<w*.18||maxY-minY<h*.18)return null;
+ // Teal specks in shiny wood/glare can pull an all-pixel hull far away
+ // from the card. Prefer the dominant CLOSED cyan component, while retaining
+ // the original sample geometry for accurate, uncropped rounded corners.
+ const closed=morphClose(coolMask,cols,rows);
+ const visited=new Uint8Array(closed.length),queue=new Int32Array(closed.length);
+ let primary:PixelPoint[]=[];
+ for(let k=0;k<closed.length;k++){
+  if(!closed[k]||visited[k])continue;
+  let head=0,tail=0;queue[tail++]=k;visited[k]=1;
+  const component:PixelPoint[]=[];
+  while(head<tail){
+   const curr=queue[head++],xx=curr%cols,yy=Math.floor(curr/cols);
+   if(coolMask[curr])component.push({x:2+xx*2,y:2+yy*2});
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    if(!dx&&!dy)continue;
+    const nx=xx+dx,ny=yy+dy;
+    if(nx<0||nx>=cols||ny<0||ny>=rows)continue;
+    const nk=ny*cols+nx;
+    if(closed[nk]&&!visited[nk]){visited[nk]=1;queue[tail++]=nk;}
+   }
+  }
+  if(component.length>primary.length)primary=component;
+ }
+ // Retain the previous candidate on fragmented/two-tone cards rather than
+ // risk selecting just one half (portrait and QR zones often split the mask).
+ const hull=convexHull(primary.length>=cool*.70?primary:sampled);
+ if(hull.length<4)return null;
+ // A minimum-area rotated rectangle spans separated teal sections of an ID
+ // (the portrait, QR code and glare need not form a closed contour).
+ let best:{area:number;ux:number;uy:number;loU:number;hiU:number;loV:number;hiV:number}|null=null;
+ for(let i=0;i<hull.length;i++){
+  const a=hull[i],b=hull[(i+1)%hull.length];
+  const len=Math.hypot(b.x-a.x,b.y-a.y);if(len<1)return null;
+  const ux=(b.x-a.x)/len,uy=(b.y-a.y)/len;
+  let loU=Infinity,hiU=-Infinity,loV=Infinity,hiV=-Infinity;
+  for(const p of hull){const u=p.x*ux+p.y*uy,v=-p.x*uy+p.y*ux;
+   loU=Math.min(loU,u);hiU=Math.max(hiU,u);
+   loV=Math.min(loV,v);hiV=Math.max(hiV,v);
+  }
+  const area=(hiU-loU)*(hiV-loV);
+  if(!best||area<best.area)best={area,ux,uy,loU,hiU,loV,hiV};
+ }
+ if(!best)return null;
+ const size=best.area/(w*h),fill=cool*4/Math.max(1,best.area);
+ const dimU=best.hiU-best.loU,dimV=best.hiV-best.loV;
+ const ratio=Math.max(dimU,dimV)/Math.max(1,Math.min(dimU,dimV));
+ if(size<.09||size>.74||fill<.19||ratio<1.24||ratio>2.35)return null;
+ // 3% extends the inferred color boundary to the true rounded outer edge.
+ const padU=Math.max(2,dimU*.03),padV=Math.max(2,dimV*.03);
+ const {ux,uy}=best;
+ const coords:[[number,number],[number,number],[number,number],[number,number]]=[
+  [best.loU-padU,best.loV-padV],[best.hiU+padU,best.loV-padV],
+  [best.hiU+padU,best.hiV+padV],[best.loU-padU,best.hiV+padV],
+ ];
+ const points=coords.map(([u,v])=>({x:(ux*u-uy*v)/(w-1),y:(uy*u+ux*v)/(h-1)}));
+ const ordered=orderQuad(points);
+ if(!ordered)return null;
+ const normalized=ordered.map(p=>({x:p.x,y:p.y})) as ScanCorners;
+ // Never clamp vertices outside the photo: that would distort perspective.
+ if(!validCorners(normalized))return null;
+ return {corners:normalized,confidence:'estimated'};
+}
+
+/** Detect neutral gray paper on warm wood when busy drawings break edge contours.
+ * Refuse uncertain backgrounds rather than cropping the source incorrectly. */
+function findNeutralPaperOnWarmWood(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='id-card')return null;
+ const {width:w,height:h,data}=image;
+ if(w<90||h<90||data.length<w*h*4)return null;
+ let warm=0,valid=0;
+ const warmDifferences:number[]=[],borderLights:number[]=[];
+ const observe=(x:number,y:number)=>{
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  if(Math.max(r,g,b)<65)return;
+  valid++;borderLights.push((r+2*g+b)/4);
+  if(r-b>25&&r-g>6&&g-b>12){warm++;warmDifferences.push(r-b);}
+ };
+ for(let n=0;n<24;n++){
+  const x=Math.round((w-1)*(.04+.92*n/23)),y=Math.round((h-1)*(.04+.92*n/23));
+  observe(x,Math.round(h*.035));observe(x,Math.round(h*.965));
+  observe(Math.round(w*.035),y);observe(Math.round(w*.965),y);
+ }
+ if(valid<32||warm/valid<.47||warmDifferences.length<16)return null;
+ // Camera auto-white-balance can tint small receipts blue or yellow. Model
+ // the actual wood perimeter instead of rejecting paper at a fixed b-r cutoff.
+ warmDifferences.sort((a,b)=>a-b);borderLights.sort((a,b)=>a-b);
+ const woodRB=warmDifferences[(warmDifferences.length/2)|0];
+ const woodLight=borderLights[(borderLights.length/2)|0];
+ const paperRBMax=Math.min(44,Math.max(18,woodRB-19));
+ const paperLightMin=Math.max(74,woodLight+9);
+ const mask=new Uint8Array(w*h);
+ let neutralCount=0;
+ for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  // Work across camera exposure and white-balance changes, while rejecting
+  // orange timber, the dark printed lines and saturated pens on the table.
+  const brightness=(r+2*g+b)/4;
+  if(brightness<paperLightMin||r-b>paperRBMax||b-r>67||
+    g-r< -31||g-r>44||g-b>43)continue;
+  mask[y*w+x]=1;neutralCount++;
+ }
+ if(neutralCount<w*h*.055||neutralCount>w*h*.76)return null;
+ const filled=morphClose(mask,w,h),visited=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ let best:ScanDetection|null=null,bestArea=0;
+ for(let sy=5;sy<h-5;sy+=2)for(let sx=5;sx<w-5;sx+=2){
+  const first=sy*w+sx;
+  if(!filled[first]||visited[first])continue;
+  let front=0,tail=0;queue[tail++]=first;visited[first]=1;
+  let left=w,top=h,right=0,bottom=0,actual=0;
+  const edge:PixelPoint[]=[];
+  while(front<tail){
+   const k=queue[front++],x=k%w,y=(k/w)|0;
+   if(mask[k])actual++;
+   if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;
+   let boundary=false;
+   for(const next of [k-1,k+1,k-w,k+w]){
+    if(next<0||next>=w*h||Math.abs(next%w-x)>1){boundary=true;continue;}
+    if(!filled[next]){boundary=true;continue;}
+    if(!visited[next]){visited[next]=1;queue[tail++]=next;}
+   }
+   if(boundary&&front%3===0)edge.push({x,y});
+  }
+  const extent=(right-left)*(bottom-top),frac=tail/(w*h),fill=actual/Math.max(1,extent);
+  if(frac<.08||frac>.75||fill<.59||left<5||top<5||right>w-6||bottom>h-6||
+    right-left<w*.27||bottom-top<h*.28||edge.length<16)continue;
+  const ordered=orderQuad(hullToQuadrilateral(convexHull(edge))||[]);
+  if(!ordered)continue;
+  const area=quadPolygonArea(ordered);
+  if(area/(w*h)<.08||area/Math.max(1,extent)<.64)continue;
+  const lens=ordered.map((v,i)=>Math.hypot(v.x-ordered[(i+1)%4].x,v.y-ordered[(i+1)%4].y));
+  const aspect=((lens[0]+lens[2])/2)/Math.max(1,(lens[1]+lens[3])/2);
+  if(aspect<.35||aspect>2.85)continue;
+  const cx=ordered.reduce((n,p)=>n+p.x,0)/4,cy=ordered.reduce((n,p)=>n+p.y,0)/4;
+  const corners=ordered.map(p=>({x:(p.x+(p.x-cx)*.009)/(w-1),
+    y:(p.y+(p.y-cy)*.009)/(h-1)})) as ScanCorners;
+  if(!validCorners(corners))continue;
+  if(area>bestArea){bestArea=area;best={corners,confidence:'estimated'};}
+ }
+ return best;
+}
+
+/** A rotated label can have 5–8 irregular bright silhouette vertices.
+ * Keep a best-fit outer rectangle when reducing its hull produces duplicate
+ * extrema; never use this fallback for a large/uncertain multi-object region. */
+function minimumAreaQuad(points:PixelPoint[]):[PixelPoint,PixelPoint,PixelPoint,PixelPoint]|null{
+ const hull=convexHull(points);if(hull.length<3)return null;
+ let best:{area:number;ux:number;uy:number;loU:number;hiU:number;loV:number;hiV:number}|null=null;
+ for(let i=0;i<hull.length;i++){
+  const a=hull[i],b=hull[(i+1)%hull.length],len=Math.hypot(b.x-a.x,b.y-a.y);
+  if(len<1)continue;
+  const ux=(b.x-a.x)/len,uy=(b.y-a.y)/len;
+  let loU=Infinity,hiU=-Infinity,loV=Infinity,hiV=-Infinity;
+  for(const p of hull){const u=p.x*ux+p.y*uy,v=-p.x*uy+p.y*ux;
+   loU=Math.min(loU,u);hiU=Math.max(hiU,u);
+   loV=Math.min(loV,v);hiV=Math.max(hiV,v);
+  }
+  const area=(hiU-loU)*(hiV-loV);
+  if(!best||area<best.area)best={area,ux,uy,loU,hiU,loV,hiV};
+ }
+ if(!best)return null;
+ const {ux,uy,loU,hiU,loV,hiV}=best;
+ return orderQuad([[loU,loV],[hiU,loV],[hiU,hiV],[loU,hiV]].map(([u,v])=>({x:ux*u-uy*v,y:uy*u+ux*v})));
+}
+
+/** Compact light QR cards on wood must not inherit the hull of bright mugs
+ * or desk reflections. Confirm actual warm wood just outside >=3 card edges.
+ * Uncertain scenes keep the previous detector and their untouched source. */
+function findCompactLightCardOnWarmBackground(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='paper')return null;
+ const {width:w,height:h,data}=image;
+ if(w<100||h<100||data.length<w*h*4)return null;
+ let warm=0,observed=0;
+ for(let y=5;y<h-5;y+=11)for(let x=5;x<w-5;x+=11){
+  const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+  observed++;
+  if(r-b>21&&r-g>5&&g-b>9&&(r+2*g+b)/4>48)warm++;
+ }
+ if(warm/Math.max(1,observed)<.08)return null;
+ const mask=new Uint8Array(w*h);let count=0;
+ for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+  const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+  const light=(r+2*g+b)/4;
+  if(light<146||Math.max(r,g,b)-Math.min(r,g,b)>78||r-b>65||b-r>72||
+   g-r>55||g-r< -42||g-b>55)continue;
+  mask[y*w+x]=1;count++;
+ }
+ if(count<w*h*.02||count>w*h*.45)return null;
+ const filled=morphClose(mask,w,h),seen=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ let best:ScanDetection|null=null,bestArea=0;
+ const sample=(x:number,y:number)=>{
+  const xx=Math.round(x),yy=Math.round(y);
+  if(xx<3||yy<3||xx>=w-3||yy>=h-3)return null;
+  const i=(yy*w+xx)*4,r=data[i],g=data[i+1],b=data[i+2];
+  return {light:(r+2*g+b)/4,range:Math.max(r,g,b)-Math.min(r,g,b),
+   warm:r-b>18&&r-g>4&&g-b>8};
+ };
+ for(let sy=4;sy<h-4;sy+=2)for(let sx=4;sx<w-4;sx+=2){
+  const start=sy*w+sx;if(!filled[start]||seen[start])continue;
+  let front=0,tail=0;queue[tail++]=start;seen[start]=1;
+  let left=w,right=0,top=h,bottom=0,actual=0;
+  const boundary:PixelPoint[]=[];
+  while(front<tail){
+   const k=queue[front++],x=k%w,y=(k/w)|0;
+   left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+   if(mask[k])actual++;
+   let edge=false;
+   for(const next of [k-1,k+1,k-w,k+w]){
+    if(next<0||next>=w*h||Math.abs(next%w-x)>1){edge=true;continue;}
+    if(!filled[next]){edge=true;continue;}
+    if(!seen[next]){seen[next]=1;queue[tail++]=next;}
+   }
+   if(edge&&front%3===0)boundary.push({x,y});
+  }
+  const box=(right-left)*(bottom-top),share=tail/(w*h),fill=actual/Math.max(1,box);
+  if(share<.025||share>.46||fill<.38||left<6||top<6||right>w-7||bottom>h-7||
+   right-left<w*.15||bottom-top<h*.15||boundary.length<18)continue;
+  // A tilted perspective card is not necessarily rectangular: retain its four
+  // outer hull vertices rather than projecting a minimum-area box into bare wood.
+  const simplified=hullToQuadrilateral(convexHull(boundary));
+  const quad=orderQuad(simplified||[])||
+   (simplified&&simplified.length===4?simplified:minimumAreaQuad(boundary));if(!quad)continue;
+  const area=quadPolygonArea(quad),frac=area/(w*h);
+  if(frac<.03||frac>.48||area/Math.max(1,box)<.44)continue;
+  const lens=quad.map((p,i)=>Math.hypot(p.x-quad[(i+1)%4].x,p.y-quad[(i+1)%4].y));
+  const dimA=(lens[0]+lens[2])/2,dimB=(lens[1]+lens[3])/2;
+  const ratio=Math.max(dimA,dimB)/Math.max(1,Math.min(dimA,dimB));
+  if(ratio<1.08||ratio>2.6)continue;
+  const dist=Math.max(4,Math.min(w,h)*.028);let sides=0;
+  for(let i=0;i<4;i++){
+   const a=quad[i],b=quad[(i+1)%4],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+   if(len<10)continue;
+   const ox=dy/len,oy=-dx/len;let good=0;
+   for(const t of [.23,.5,.77]){
+    const x=a.x+dx*t,y=a.y+dy*t;
+    const inside=sample(x-ox*dist,y-oy*dist),outside=sample(x+ox*dist,y+oy*dist);
+    if(inside&&outside&&inside.light>140&&inside.range<82&&
+     outside.warm&&outside.light<inside.light-12)good++;
+   }
+   if(good>=2)sides++;
+  }
+  if(sides<2)continue;
+  // Keep a 1.5% outside quiet-zone rim; never trim rounded printed corners.
+  const cx=quad.reduce((s,p)=>s+p.x,0)/4,cy=quad.reduce((s,p)=>s+p.y,0)/4;
+  const corners=quad.map(p=>({x:(p.x+(p.x-cx)*.015)/(w-1),
+   y:(p.y+(p.y-cy)*.015)/(h-1)})) as ScanCorners;
+  if(!validCorners(corners))continue;
+  if(area>bestArea){bestArea=area;best={corners,confidence:'estimated'};}
+ }
+ return best;
+}
+
+/** A bright connected component is not necessarily the entire invoice.
+ * Folds, shadows and printed ruled tables can disconnect the upper sheet from
+ * its lower half. Never accept a bright-paper quad when unprinted paper still
+ * extends conspicuously OUTSIDE multiple proposed edges. In uncertain scenes
+ * leave the original image and manual four-corner frame intact. */
+function brightPaperContinuesOutside(image:ImageData,quad:ScanCorners):boolean{
+ const {width:w,height:h,data}=image;
+ const points=quad.map(p=>({x:p.x*(w-1),y:p.y*(h-1)}));
+ const distance=Math.max(8,Math.min(w,h)*.06);
+ const sample=(x:number,y:number)=>{
+  const px=Math.round(x),py=Math.round(y);
+  if(px<3||py<3||px>=w-3||py>=h-3)return null;
+  const k=(py*w+px)*4,r=data[k],g=data[k+1],b=data[k+2];
+  return {light:(r+2*g+b)/4,range:Math.max(r,g,b)-Math.min(r,g,b)};
+ };
+ let continuingSides=0;
+ for(let i=0;i<4;i++){
+  const a=points[i],b=points[(i+1)%4],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+  if(len<Math.min(w,h)*.16)continue;
+  // A clockwise (TL,TR,BR,BL) contour has its outside to the right.
+  const nx=dy/len,ny=-dx/len;
+  let following=0;
+  for(const t of [.20,.40,.60,.80]){
+   const x=a.x+dx*t,y=a.y+dy*t;
+   const inner=sample(x-nx*distance*1.10,y-ny*distance*1.10);
+   const outer=sample(x+nx*distance,y+ny*distance);
+   const beyond=sample(x+nx*distance*1.65,y+ny*distance*1.65);
+   if(!inner||!outer||!beyond)continue;
+   if(inner.light>104&&outer.light>104&&beyond.light>104&&
+      outer.range<95&&beyond.range<95&&
+      outer.light>=inner.light*.64&&beyond.light>=inner.light*.60&&
+      Math.abs(outer.light-inner.light)<82&&Math.abs(beyond.light-outer.light)<77)following++;
+  }
+  if(following>=2)continuingSides++;
+ }
+ const area=quadPolygonArea(points)/(w*h);
+ return continuingSides>=2||(continuingSides>=1&&area<.36);
+}
+
+/** R64: conservative broad-sheet detector for pale folded receipts and large
+ * horizontal plans on dark clutter. Unlike an inner printed table, the paper
+ * silhouette has high luminance across most rows AND columns. A short crease
+ * may divide the interior, but a clear long gap between two sheets is rejected.
+ * Never uses a screenshot overlay; only original camera raster pixels. */
+function findBroadPaperOnDarkClutter(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='id-card')return null;
+ const {width:w,height:h,data}=image;
+ if(w<180||h<180||data.length<w*h*4)return null;
+ const edgeL:number[]=[];
+ const lightAt=(x:number,y:number)=>{
+  const k=(y*w+x)*4;
+  return (data[k]+2*data[k+1]+data[k+2])/4;
+ };
+ for(let i=0;i<48;i++){
+  const x=Math.round(2+(w-5)*i/47),y=Math.round(2+(h-5)*i/47);
+  edgeL.push(lightAt(x,2),lightAt(x,h-3),lightAt(2,y),lightAt(w-3,y));
+ }
+ edgeL.sort((a,b)=>a-b);
+ const background=edgeL[Math.floor(edgeL.length*.55)];
+ if(background>131)return null; // no strong outside-background evidence
+ const threshold=Math.max(147,background+49);
+ const white=(x:number,y:number)=>{
+  if(x<2||y<2||x>=w-2||y>=h-2)return false;
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  return (r+2*g+b)/4>=threshold&&Math.max(r,g,b)-Math.min(r,g,b)<79;
+ };
+ const row=new Float32Array(h),col=new Float32Array(w);
+ const ys=2,xs=2;
+ for(let y=ys;y<h-ys;y+=2)for(let x=xs;x<w-xs;x+=2){
+  if(white(x,y)){row[y]+=2;col[x]+=2;}
+ }
+ // A paper occupying under 44% of image width is a card, not a broad plan.
+ const strongRows:number[]=[],strongCols:number[]=[];
+ for(let y=ys;y<h-ys;y+=2)if(row[y]/w>.43)strongRows.push(y);
+ for(let x=xs;x<w-xs;x+=2)if(col[x]/h>.42)strongCols.push(x);
+ if(strongRows.length<h*.30||strongCols.length<w*.30)return null;
+ const top=strongRows[0],bottom=strongRows[strongRows.length-1];
+ const left=strongCols[0],right=strongCols[strongCols.length-1];
+ const bw=right-left,bh=bottom-top,frac=bw*bh/(w*h);
+ if(bw<w*.43||bh<h*.43||frac<.22||frac>.82||left<w*.025||right>w*.975||top<h*.025||bottom>h*.975)return null;
+ // Rows/columns of separate pages must not be bridged into one crop.
+ let rowGap=0,colGap=0;
+ for(let i=1;i<strongRows.length;i++)rowGap=Math.max(rowGap,strongRows[i]-strongRows[i-1]-2);
+ for(let i=1;i<strongCols.length;i++)colGap=Math.max(colGap,strongCols[i]-strongCols[i-1]-2);
+ if(rowGap>h*.045||colGap>w*.045)return null;
+ // A strongly slanted top/bottom edge develops a long intermediate-brightness
+ // ramp before the central row becomes wide. An axis-aligned bbox could clip
+ // a title, stamp or QR at its raised corner: reject rather than auto-crop.
+ let upperRamp=0,lowerRamp=0;
+ for(let y=4;y<top;y+=2)if(row[y]/w>.09)upperRamp+=2;
+ for(let y=bottom+2;y<h-4;y+=2)if(row[y]/w>.09)lowerRamp+=2;
+ if(upperRamp>h*.025||lowerRamp>h*.025)return null;
+ let inside=0,total=0;
+ for(let y=top+4;y<bottom-3;y+=4)for(let x=left+4;x<right-3;x+=4){
+  inside+=white(x,y)?1:0;total++;
+ }
+ if(inside/Math.max(1,total)<.65)return null;
+ const margin=Math.max(5,Math.min(w,h)*.034);
+ const sides:[number,number,number,number][]= [
+  [(left+right)/2,top,(left+right)/2,top-margin],
+  [right,(top+bottom)/2,right+margin,(top+bottom)/2],
+  [(left+right)/2,bottom,(left+right)/2,bottom+margin],
+  [left,(top+bottom)/2,left-margin,(top+bottom)/2]
+ ];
+ let supported=0;
+ for(let i=0;i<4;i++){
+  const [ix,iy,ox,oy]=sides[i];
+  const inner:[number,number]=i===0?[ix,iy+margin]:i===1?[ix-margin,iy]:i===2?[ix,iy-margin]:[ix+margin,iy];
+  if(ox<2||oy<2||ox>=w-2||oy>=h-2)continue;
+  const inLight=lightAt(Math.round(inner[0]),Math.round(inner[1]));
+  const outLight=lightAt(Math.round(ox),Math.round(oy));
+  if(inLight-outLight>38)supported++;
+ }
+ if(supported<3)return null; // internal table lines cannot be accepted
+ // Slightly overscan: keep title, page number, signatures and border QR.
+ const dx=Math.max(3,bw*.021),dy=Math.max(3,bh*.021);
+ const quad=[{x:(left-dx)/(w-1),y:(top-dy)/(h-1)},
+  {x:(right+dx)/(w-1),y:(top-dy)/(h-1)},
+  {x:(right+dx)/(w-1),y:(bottom+dy)/(h-1)},
+  {x:(left-dx)/(w-1),y:(bottom+dy)/(h-1)}] as ScanCorners;
+ if(!validCorners(quad)||brightPaperContinuesOutside(image,quad))return null;
+ return {corners:quad,confidence:'estimated'};
+}
+
+/** A white document on dark/uneven plastic or wood must be found from its
+ * outer light silhouette, not from rectangular blue lines inside the form.
+ * Samples the photo perimeter for illumination, checks the full component and
+ * rejects clipped or low-support shapes rather than auto-cropping text. */
+function findBrightPaperOnDarkBackground(image:ImageData,kind:ScanDocumentType):ScanDetection|null{
+ if(kind==='id-card')return null;
+ const {width:w,height:h,data}=image;
+ if(w<90||h<90||data.length<w*h*4)return null;
+ const border:number[]=[];
+ for(let n=0;n<24;n++){
+  const x=Math.round((w-1)*(.04+.92*n/23)),y=Math.round((h-1)*(.04+.92*n/23));
+  for(const [xx,yy] of [[x,Math.round(h*.035)],[x,Math.round(h*.965)],
+   [Math.round(w*.035),y],[Math.round(w*.965),y]]){
+   const i=(yy*w+xx)*4;border.push((data[i]+2*data[i+1]+data[i+2])/4);
+  }
+ }
+ border.sort((a,b)=>a-b);
+ const background=border[Math.floor(border.length*.40)];
+ // A clipped sheet fills the perimeter and does not support reliable cropping.
+ if(background>155)return null;
+ const threshold=Math.max(104,Math.min(177,background+47));
+ const mask=new Uint8Array(w*h);let count=0;
+ for(let y=2;y<h-2;y++)for(let x=2;x<w-2;x++){
+  const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+  const light=(r+2*g+b)/4,range=Math.max(r,g,b)-Math.min(r,g,b);
+  if(light>=threshold&&range<90){mask[y*w+x]=1;count++;}
+ }
+ if(count<w*h*.035||count>w*h*.82)return null;
+ const filled=morphClose(mask,w,h),visited=new Uint8Array(w*h),queue=new Int32Array(w*h);
+ let best:ScanDetection|null=null,bestArea=0;
+ for(let sy=5;sy<h-5;sy+=2)for(let sx=5;sx<w-5;sx+=2){
+  const first=sy*w+sx;if(!filled[first]||visited[first])continue;
+  let front=0,tail=0;visited[first]=1;queue[tail++]=first;
+  let left=w,top=h,right=0,bottom=0,actual=0;
+  const edge:PixelPoint[]=[];
+  while(front<tail){
+   const k=queue[front++],x=k%w,y=(k/w)|0;
+   if(mask[k])actual++;
+   if(x<left)left=x;if(x>right)right=x;if(y<top)top=y;if(y>bottom)bottom=y;
+   let boundary=false;
+   for(const next of [k-1,k+1,k-w,k+w]){
+    if(next<0||next>=w*h||Math.abs(next%w-x)>1){boundary=true;continue;}
+    if(!filled[next]){boundary=true;continue;}
+    if(!visited[next]){visited[next]=1;queue[tail++]=next;}
+   }
+   if(boundary&&front%3===0)edge.push({x,y});
+  }
+  const areaBox=(right-left)*(bottom-top),share=tail/(w*h),fill=actual/Math.max(1,areaBox);
+  if(share<.046||share>.86||fill<.43||left<6||top<6||right>w-3||bottom>h-3||
+    right-left<w*.19||bottom-top<h*.19||edge.length<16)continue;
+  const ordered=orderQuad(hullToQuadrilateral(convexHull(edge))||[])||minimumAreaQuad(edge);if(!ordered)continue;
+  const area=quadPolygonArea(ordered);
+  if(area/(w*h)<.063||area/Math.max(1,areaBox)<.46)continue;
+  const lens=ordered.map((p,i)=>Math.hypot(p.x-ordered[(i+1)%4].x,p.y-ordered[(i+1)%4].y));
+  const aspect=((lens[0]+lens[2])/2)/Math.max(1,(lens[1]+lens[3])/2);
+  if(aspect<.30||aspect>3.5)continue;
+  const cx=ordered.reduce((sum,p)=>sum+p.x,0)/4,cy=ordered.reduce((sum,p)=>sum+p.y,0)/4;
+  const corners=ordered.map(p=>({x:(p.x+(p.x-cx)*.008)/(w-1),
+   y:(p.y+(p.y-cy)*.008)/(h-1)})) as ScanCorners;
+  if(!validCorners(corners)||brightPaperContinuesOutside(image,corners))continue;
+  if(area>bestArea){bestArea=area;best={corners,confidence:'estimated'};}
+ }
+ return best;
+}
+
+/** Reject a partial sheet when a second broad neutral-paper band lives
+ * outside its candidate rectangle. In particular, never auto-apply only the
+ * lower half of a creased receipt or the lower of two adjacent documents. */
+function broadPaperBandOutside(image:ImageData,corners:ScanCorners):boolean{
+ const {width:w,height:h,data}=image;
+ const xs=corners.map(p=>p.x),ys=corners.map(p=>p.y);
+ const left=Math.max(0,Math.floor(Math.min(...xs)*w)),right=Math.min(w-1,Math.ceil(Math.max(...xs)*w));
+ const top=Math.max(0,Math.floor(Math.min(...ys)*h)),bottom=Math.min(h-1,Math.ceil(Math.max(...ys)*h));
+ if(right-left<w*.2||bottom-top<h*.16)return false;
+ const sample=(x:number,y:number)=>{
+  const k=4*(y*w+x),r=data[k],g=data[k+1],b=data[k+2];
+  return (r+2*g+b)/4>151&&Math.max(r,g,b)-Math.min(r,g,b)<79;
+ };
+ let above=0,below=0,leftOf=0,rightOf=0;
+ const rowBright=(y:number)=>{
+  let n=0,tot=0;
+  for(let x=left+4;x<right-4;x+=4){tot++;if(sample(x,y))n++;}
+  return n/Math.max(1,tot)>.34;
+ };
+ const colBright=(x:number)=>{
+  let n=0,tot=0;
+  for(let y=top+4;y<bottom-4;y+=4){tot++;if(sample(x,y))n++;}
+  return n/Math.max(1,tot)>.34;
+ };
+ const marginY=Math.max(4,Math.floor(h*.025));
+ for(let y=4;y<top-marginY;y+=4)if(rowBright(y))above+=4;
+ for(let y=bottom+marginY;y<h-4;y+=4)if(rowBright(y))below+=4;
+ const marginX=Math.max(4,Math.floor(w*.025));
+ for(let x=4;x<left-marginX;x+=4)if(colBright(x))leftOf+=4;
+ for(let x=right+marginX;x<w-4;x+=4)if(colBright(x))rightOf+=4;
+ return Math.max(above,below)>h*.065||Math.max(leftOf,rightOf)>w*.065;
+}
+
+/** Reject an inner table or text rectangle when surrounding paper continues
+ * brightly beyond its proposed outline. Strong lines alone do not prove that
+ * an edge belongs to the outside of the sheet. */
+function likelyInnerPrintedPanel(image:ImageData,corners:ScanCorners):boolean{
+ const {width:w,height:h,data}=image;
+ if(quadPolygonArea(corners.map(p=>({x:p.x*w,y:p.y*h})))>w*h*.62)return false;
+ const sample=(x:number,y:number):{light:number;range:number}|null=>{
+  const xx=Math.round(x),yy=Math.round(y);
+  if(xx<3||xx>=w-3||yy<3||yy>=h-3)return null;
+  const k=(yy*w+xx)*4,r=data[k],g=data[k+1],b=data[k+2];
+  return {light:(r+2*g+b)/4,range:Math.max(r,g,b)-Math.min(r,g,b)};
+ };
+ let sides=0;
+ const points=corners.map(p=>({x:p.x*(w-1),y:p.y*(h-1)}));
+ const dist=Math.max(5,Math.min(w,h)*.035);
+ for(let i=0;i<4;i++){
+  const a=points[i],b=points[(i+1)%4],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+  if(len<12)continue;
+  // Clockwise image coordinates: rotate tangent clockwise-to-outside.
+  const ox=dy/len,oy=-dx/len;
+  let comparable=0,valid=0;
+  for(const t of [.22,.5,.78]){
+   const x=a.x+dx*t,y=a.y+dy*t;
+   const inner=sample(x-ox*dist,y-oy*dist);
+   const outer=sample(x+ox*dist,y+oy*dist);
+   if(inner===null||outer===null)continue;
+   valid++;
+   if(inner.light>122&&outer.light>122&&outer.light<220&&inner.range<25&&outer.range<25&&Math.abs(inner.light-outer.light)<23)comparable++;
+  }
+  if(valid>=2&&comparable>=2)sides++;
+ }
+ return sides>=2;
+}
+
+/** R65: prevent silent loss of an overlapping second paper or a raised
+ * folded edge. Several older detectors can return only the brighter LOWER
+ * sheet, yet mark the crop confident. Use the ORIGINAL raster (not a UI
+ * screenshot): when a substantial pale-paper band continues just outside a
+ * proposed side on a dark background, do not persist a partial scan. This
+ * rule only rejects risky candidates; it never guesses missing text or edges. */
+export function exposedPaperBeyondQuad(image:ImageData,corners:ScanCorners):boolean{
+ if(!validCorners(corners))return false;
+ const {width:w,height:h,data}=image;
+ if(w<120||h<120||data.length<w*h*4)return false;
+ const border:number[]=[];
+ const luminanceAt=(x:number,y:number)=>{
+  const k=4*(y*w+x);return (data[k]+2*data[k+1]+data[k+2])/4;
+ };
+ for(let i=0;i<32;i++){
+  const x=Math.round((w-1)*i/31),y=Math.round((h-1)*i/31);
+  border.push(luminanceAt(x,2),luminanceAt(x,h-3),luminanceAt(2,y),luminanceAt(w-3,y));
+ }
+ border.sort((a,b)=>a-b);
+ const background=border[Math.floor(border.length*.50)];
+ if(background>133)return false; // Bright room/wood requires other evidence.
+ const whiteThreshold=Math.max(183,background+47);
+ const white=(x:number,y:number)=>{
+  if(x<3||y<3||x>=w-3||y>=h-3)return false;
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  return (r+2*g+b)/4>whiteThreshold&&Math.max(r,g,b)-Math.min(r,g,b)<67;
+ };
+ const xs=corners.map(p=>p.x),ys=corners.map(p=>p.y);
+ const left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
+ if(right-left<.16||bottom-top<.16)return false;
+ const hasLongPaperRun=(axis:'x'|'y',position:number)=>{
+  const samples:boolean[]=[];
+  if(axis==='x'){
+   const x=Math.round(position*(w-1));
+   for(let y=Math.round((top+.10*(bottom-top))*(h-1));y<Math.round((bottom-.10*(bottom-top))*(h-1));y+=3)
+    samples.push(white(x,y));
+  }else{
+   const y=Math.round(position*(h-1));
+   for(let x=Math.round((left+.10*(right-left))*(w-1));x<Math.round((right-.10*(right-left))*(w-1));x+=3)
+    samples.push(white(x,y));
+  }
+  const count=Math.max(9,Math.round(samples.length*.13));
+  if(samples.length<count)return false;
+  let bright=0;
+  for(let k=0;k<samples.length;k++){
+   bright+=samples[k]?1:0;
+   if(k>=count)bright-=samples[k-count]?1:0;
+   if(k>=count-1&&bright/count>.78)return true;
+  }
+  return false;
+ };
+ // Need TWO adjacent outside probes with long, pale continuation, not a
+ // single isolated white QR cell / stamp / glint near a corner.
+ for(const [axis,edge,sign] of [
+  ['x',left,-1],['x',right,1],['y',top,-1],['y',bottom,1]
+ ] as const){
+  let continuous=0;
+  for(const step of [.007,.014,.021,.028]){
+   const outside=edge+sign*step;
+   if(outside<.012||outside>.988)break;
+   if(hasLongPaperRun(axis,outside))continuous++;else continuous=0;
+   if(continuous>=2)return true;
+  }
+ }
+ return false;
+}
+
 /** Higher-confidence 4-edge result replaces uncertain color-only segmentation.
  * Never force detection when edges do not close: manual frame retains source. */
-export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+function detectDocumentEdgesCandidate(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+ // Strong cyan-ID candidate: avoids both expensive contour passes on busy wood.
+ const coolCard=findCoolCardQuadrilateral(image,kind);
+ if(coolCard)return coolCard;
+ const compactCard=findCompactLightCardOnWarmBackground(image,kind);
+ if(compactCard)return compactCard;
+ const neutralPaper=findNeutralPaperOnWarmWood(image,kind);
+ if(neutralPaper)return neutralPaper;
+ const broadPaper=findBroadPaperOnDarkClutter(image,kind);
+ if(broadPaper)return broadPaper;
+ const brightPaper=findBrightPaperOnDarkBackground(image,kind);
+ if(brightPaper&&!broadPaperBandOutside(image,brightPaper.corners))return brightPaper;
  const color=detectDocumentByColor(image,kind);
  const edge=findEdgeQuadrilateral(image,kind);
  if(!edge)return color;
+ // Prevent four apparent corners of a printed table from taking the place of
+ // the actual paper edges when the silhouette detector has low confidence.
+ if(likelyInnerPrintedPanel(image,edge.corners))return color;
  if(color.confidence==='manual')return {corners:edge.corners,confidence:'estimated'};
  // When two independent methods agree, color pass already has generous outer rim.
  const difference=color.corners.reduce((d,p,i)=>d+Math.hypot(p.x-edge.corners[i].x,p.y-edge.corners[i].y),0)/4;
@@ -398,7 +1214,229 @@ export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'
  return color;
 }
 
-export async function suggestDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):Promise<ScanDetection>{return detectDocumentEdges(await sourcePixels(blob,360),kind);}
+/** Reject any too-tight four-corner estimate BEFORE auto-flattening or saving.
+ * The detector remains free to return a manual full-image frame. */
+export function detectDocumentEdges(image:ImageData,kind:ScanDocumentType='auto'):ScanDetection{
+ const found=detectDocumentEdgesCandidate(image,kind);
+ if(found.confidence==='estimated'&&exposedPaperBeyondQuad(image,found.corners))return defaultDetection();
+ return found;
+}
+
+/** Find distinct, spatially separate documents from one photo.
+ * This is intentionally conservative: only isolated well-shaped cyan IDs or
+ * bright neutral paper regions are proposed. Users can add missing regions
+ * by hand; weak guesses must never silently crop or discard the source. */
+/** Resolve an explicitly selected rough document region against the ORIGINAL
+ * raster. Cropping here is only temporary for detection, never for storage. */
+export function detectDocumentEdgesInRegion(image:ImageData,region:ScanCorners,
+ kind:ScanDocumentType='auto'):ScanDetection|null{
+ const {width:w,height:h,data}=image;
+ if(w<120||h<120||data.length<w*h*4||!validCorners(region))return null;
+ const xs=region.map(p=>p.x),ys=region.map(p=>p.y);
+ const left=Math.max(0,Math.floor((Math.min(...xs)-.045)*w));
+ const right=Math.min(w,Math.ceil((Math.max(...xs)+.045)*w));
+ const top=Math.max(0,Math.floor((Math.min(...ys)-.045)*h));
+ const bottom=Math.min(h,Math.ceil((Math.max(...ys)+.045)*h));
+ const cw=right-left,ch=bottom-top;
+ if(cw<90||ch<90||cw*ch<w*h*.025)return null;
+ const clipped=new Uint8ClampedArray(cw*ch*4);
+ for(let y=0;y<ch;y++){
+  const start=((top+y)*w+left)*4;
+  clipped.set(data.subarray(start,start+cw*4),y*cw*4);
+ }
+ const found=detectDocumentEdges({width:cw,height:ch,data:clipped} as ImageData,kind);
+ if(found.confidence!=='estimated'||!validCorners(found.corners))return null;
+ // If the alleged page runs into the artificial crop, there may be more
+ // text/QR beyond this ROI. Never promote this into an automatic crop.
+ if(found.corners.some(p=>p.x<.018||p.x>.982||p.y<.018||p.y>.982))return null;
+ const mapped=found.corners.map(p=>({x:(left+p.x*(cw-1))/(w-1),
+  y:(top+p.y*(ch-1))/(h-1)})) as ScanCorners;
+ return validCorners(mapped)?{corners:mapped,confidence:'estimated'}:null;
+}
+export async function suggestDocumentEdgesWithinRegion(blob:Blob,region:ScanCorners,
+ kind:ScanDocumentType='auto'):Promise<ScanDetection|null>{
+ return detectDocumentEdgesInRegion(await sourcePixels(blob,760),region,kind);
+}
+
+export function detectMultipleDocumentEdges(image:ImageData,kind:ScanDocumentType='auto',limit=4):ScanDetection[]{
+ const {width:w,height:h,data}=image;
+ if(w<100||h<100||data.length<w*h*4)return [];
+ const stride=2,cols=Math.floor((w-4)/stride)+1,rows=Math.floor((h-4)/stride)+1;
+ const borderSamples:number[]=[];
+ for(let j=0;j<24;j++){
+  const x=Math.round(j*(w-1)/23),y=Math.round(j*(h-1)/23);
+  for(const [xx,yy] of [[x,2],[x,h-3],[2,y],[w-3,y]]){
+   const k=(yy*w+xx)*4;
+   borderSamples.push(.2126*data[k]+.7152*data[k+1]+.0722*data[k+2]);
+  }
+ }
+ borderSamples.sort((a,b)=>a-b);
+ const borderLum=borderSamples[Math.floor(borderSamples.length*.50)];
+ const masks:{mask:Uint8Array;type:'cool'|'paper'}[]=[];
+ for(const type of (kind==='id-card'?['cool']:kind==='paper'?['paper']:['cool','paper']) as ('cool'|'paper')[]){
+  const mask=new Uint8Array(cols*rows);
+  let count=0;
+  for(let y=2,yy=0;yy<rows;yy++,y+=stride)for(let x=2,xx=0;xx<cols;xx++,x+=stride){
+   const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2],hi=Math.max(r,g,b),lo=Math.min(r,g,b);
+   const cool=(g-r>14&&b-r>0)||(g-r>27&&b-r>-10);
+   const white=(.2126*r+.7152*g+.0722*b>Math.max(168,borderLum+27))&&hi-lo<44;
+   if(type==='cool'?cool:white){mask[yy*cols+xx]=1;count++;}
+  }
+  if(count>75&&count<mask.length*.78)masks.push({mask,type});
+ }
+ const candidates:{quad:ScanCorners;area:number;centroid:ScanPoint;type:string}[]=[];
+ for(const {mask,type} of masks){
+  const close=morphClose(mask,cols,rows),seen=new Uint8Array(close.length);
+  const queue=new Int32Array(close.length);
+  for(let seed=0;seed<close.length;seed++){
+   if(!close[seed]||seen[seed])continue;
+   let front=0,back=0;
+   queue[back++]=seed;seen[seed]=1;
+   const points:PixelPoint[]=[];
+   let left=w,top=h,right=0,bottom=0;
+   while(front<back){
+    const k=queue[front++],cx=k%cols,cy=Math.floor(k/cols);
+    if(mask[k]){const x=2+cx*stride,y=2+cy*stride;
+     points.push({x,y});left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);
+    }
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+     if(!dx&&!dy)continue;
+     const nx=cx+dx,ny=cy+dy;if(nx<0||nx>=cols||ny<0||ny>=rows)continue;
+     const nk=ny*cols+nx;if(close[nk]&&!seen[nk]){seen[nk]=1;queue[back++]=nk;}
+    }
+   }
+   if(points.length<Math.max(45,w*h*.0017)||left<4||top<4||right>w-5||bottom>h-5)continue;
+   const hull=convexHull(points);if(hull.length<4)continue;
+   let best:{area:number;ux:number;uy:number;loU:number;hiU:number;loV:number;hiV:number}|null=null;
+   for(let i=0;i<hull.length;i++){
+    const a=hull[i],b=hull[(i+1)%hull.length],len=Math.hypot(b.x-a.x,b.y-a.y);
+    if(len<.1)continue;
+    const ux=(b.x-a.x)/len,uy=(b.y-a.y)/len;
+    let loU=Infinity,hiU=-Infinity,loV=Infinity,hiV=-Infinity;
+    for(const pt of hull){const u=pt.x*ux+pt.y*uy,v=-pt.x*uy+pt.y*ux;
+     loU=Math.min(loU,u);hiU=Math.max(hiU,u);loV=Math.min(loV,v);hiV=Math.max(hiV,v);}
+    const area=(hiU-loU)*(hiV-loV);
+    if(!best||area<best.area)best={area,ux,uy,loU,hiU,loV,hiV};
+   }
+   if(!best)continue;
+   const frac=best.area/(w*h),fill=points.length*stride*stride/Math.max(1,best.area);
+   const sideA=best.hiU-best.loU,sideB=best.hiV-best.loV;
+   const ratio=Math.max(sideA,sideB)/Math.max(1,Math.min(sideA,sideB));
+   if(frac<.023||frac>.58||ratio<1.17||ratio>2.37||fill<(type==='cool'?.14:.43))continue;
+   const pu=Math.max(2,sideA*(type==='cool'?.035:.012));
+   const pv=Math.max(2,sideB*(type==='cool'?.035:.012));
+   const coords:[[number,number],[number,number],[number,number],[number,number]]=[
+    [best.loU-pu,best.loV-pv],[best.hiU+pu,best.loV-pv],
+    [best.hiU+pu,best.hiV+pv],[best.loU-pu,best.hiV+pv]
+   ];
+   const {ux,uy}=best;
+   const normalized=orderQuad(coords.map(([u,v])=>({x:(ux*u-uy*v)/(w-1),y:(uy*u+ux*v)/(h-1)})));
+   if(!normalized||!validCorners(normalized))continue;
+   const q=normalized as ScanCorners;
+   const center={x:q.reduce((sum,p)=>sum+p.x,0)/4,y:q.reduce((sum,p)=>sum+p.y,0)/4};
+   const area=frac;
+   if(candidates.some(c=>Math.hypot(c.centroid.x-center.x,c.centroid.y-center.y)<.13))continue;
+   candidates.push({quad:q,area,centroid:center,type});
+  }
+ }
+ // Require two clearly separated regions before automatically splitting.
+ // Suppress a nested bright portrait or glare patch mistaken for another
+ // document. A second region must be spatially separate, not inside the first.
+ const bounds=(c:typeof candidates[number])=>{
+  const xs=c.quad.map(p=>p.x),ys=c.quad.map(p=>p.y);
+  return {left:Math.min(...xs),right:Math.max(...xs),top:Math.min(...ys),bottom:Math.max(...ys)};
+ };
+ const result:typeof candidates=[];
+ for(const c of candidates.sort((a,b)=>b.area-a.area)){
+  const a=bounds(c);
+  const overlaps=result.some(other=>{
+   const b=bounds(other);
+   const iw=Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left));
+   const ih=Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+   const smaller=Math.min((a.right-a.left)*(a.bottom-a.top),(b.right-b.left)*(b.bottom-b.top));
+   return iw*ih/Math.max(1e-6,smaller)>.25;
+  });
+  if(!overlaps)result.push(c);
+  if(result.length>=Math.min(4,limit))break;
+ }
+ if(result.length<2)return [];
+ result.sort((a,b)=>a.centroid.y-b.centroid.y||a.centroid.x-b.centroid.x);
+ return result.map(r=>({corners:r.quad,confidence:'estimated'}));
+}
+export async function suggestMultipleDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):
+ Promise<ScanDetection[]>{
+ return detectMultipleDocumentEdges(await sourcePixels(blob,520),kind);
+}
+
+/** A stored JPEG is the only authoritative raster for its persisted corners.
+ * Cyan card evidence is needed before replacing a live camera quadrilateral:
+ * when the shutter frame differs from the last video-analysis frame, an old
+ * green overlay may otherwise leave the four saved points on bare wood.
+ * No screenshot or document content leaves the device. */
+function scanCoolEvidence(image:ImageData,quad:ScanCorners):{covered:number;density:number;total:number}{
+ if(!validCorners(quad))return {covered:0,density:0,total:0};
+ const {width:w,height:h,data}=image;
+ let coolTotal=0,coolInside=0,insideCount=0;
+ const inQuad=(x:number,y:number)=>{
+  let sign=0;
+  for(let i=0;i<4;i++){
+   const a=quad[i],b=quad[(i+1)%4];
+   const cross=(b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x);
+   if(Math.abs(cross)<1e-7)continue;
+   if(sign&&cross*sign<0)return false;
+   sign=Math.sign(cross);
+  }
+  return true;
+ };
+ for(let y=2;y<h-2;y+=3)for(let x=2;x<w-2;x+=3){
+  const k=(y*w+x)*4,r=data[k],g=data[k+1],b=data[k+2];
+  const cool=(g-r>14&&b-r>0)||(g-r>27&&b-r>-10);
+  const inside=inQuad(x/(w-1),y/(h-1));
+  if(inside)insideCount++;
+  if(cool){coolTotal++;if(inside)coolInside++;}
+ }
+ return {covered:coolInside/Math.max(1,coolTotal),density:coolInside/Math.max(1,insideCount),total:coolTotal};
+}
+
+/** Return a correction only with evidence in the exact saved image; return null
+ * if the preview is already aligned or evidence is too weak to cut safely. */
+export function selectSavedScanCorners(image:ImageData,live:ScanCorners|null,found:ScanDetection,
+ kind:ScanDocumentType='auto'):ScanDetection|null{
+ if(found.confidence!=='estimated'||!validCorners(found.corners))return null;
+ const current=live&&validCorners(live)?live:null;
+ const difference=current?current.reduce((sum,p,i)=>sum+Math.hypot(p.x-found.corners[i].x,p.y-found.corners[i].y),0)/4:Infinity;
+ if(difference<.075)return null; // Hold already-correct live corners.
+ if(kind==='paper')return current?null:found; // Neutral paper has no cyan proof.
+ const proposed=scanCoolEvidence(image,found.corners);
+ const prior=current?scanCoolEvidence(image,current):null;
+ // If a cyan card is visible, never promote a false positive on wood.
+ if(proposed.total>90){
+  if(proposed.covered<.72||proposed.density<.085)return null;
+  if(prior&&(proposed.covered-prior.covered<.28||proposed.density<prior.density*1.25))return null;
+ }
+ // On paper without a cool card, don't replace an existing stable live quad.
+ else if(current)return null;
+ return found;
+}
+
+/** Execute only after the original JPEG is committed. This decoder reads the
+ * captured image, not any moving camera video frame or DOM preview overlay. */
+export async function reconcileSavedScanCorners(blob:Blob,live:ScanCorners|null,
+ kind:ScanDocumentType='auto'):Promise<ScanDetection|null>{
+ const pixels=await sourcePixels(blob,360);
+ return selectSavedScanCorners(pixels,live,detectDocumentEdges(pixels,kind),kind);
+}
+
+/** Bounded progressive offline detection. High-resolution retry occurs only
+ * on a failure and only after the source has already been saved, never during
+ * the continuous shutter loop. Do not invent corners for unrecognizable pages. */
+export async function suggestDocumentEdges(blob:Blob,kind:ScanDocumentType='auto'):Promise<ScanDetection>{
+ for(const edge of [360,560,760]){
+  const result=detectDocumentEdges(await sourcePixels(blob,edge),kind);
+  if(result.confidence==='estimated'&&validCorners(result.corners))return result;
+ }
+ return defaultDetection();
+}
 export function validCorners(points:ScanCorners):boolean{
  if(points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return false;
  let sign=0,area=0;
@@ -409,9 +1447,84 @@ export function validCorners(points:ScanCorners):boolean{
  }
  return Math.abs(area)>.025;
 }
+
+/** Vertically or horizontally segmented paper flattening. Two opposing edge
+ * polylines, each with 3-6 nodes, form 2-5 planar strips at fold creases. */
+export function initScanWarpGrid(c:ScanCorners,count:6|8|10|12,axis:'vertical'|'horizontal'='vertical'):ScanWarpGrid{
+ if(!validCorners(c))throw Error('Hãy chỉnh 4 góc hợp lệ trước khi thêm điểm nếp gấp');
+ const lerp=(a:ScanPoint,b:ScanPoint,t:number)=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
+ const a:ScanPoint[]=[],b:ScanPoint[]=[];
+ for(let i=0;i<count/2;i++){const t=i/(count/2-1);
+  a.push(axis==='vertical'?lerp(c[0],c[1],t):lerp(c[0],c[3],t));
+  b.push(axis==='vertical'?lerp(c[3],c[2],t):lerp(c[1],c[2],t));
+ }
+ return {axis,points:[...a,...b]};
+}
+export function scanWarpOuterCorners(g:ScanWarpGrid):ScanCorners{
+ const n=g.points.length/2,p=g.points;
+ return g.axis==='vertical'?[p[0],p[n-1],p[2*n-1],p[n]]:[p[0],p[n],p[2*n-1],p[n-1]];
+}
+export function scanWarpQuads(g:ScanWarpGrid):ScanCorners[]{
+ const n=g.points.length/2,p=g.points;const out:ScanCorners[]=[];
+ for(let i=0;i<n-1;i++)out.push(g.axis==='vertical'?[p[i],p[i+1],p[n+i+1],p[n+i]]:[p[i],p[n+i],p[n+i+1],p[i+1]]);
+ return out;
+}
+function validStrip(q:ScanCorners):boolean{
+ if(q.some(p=>!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.x<0||p.x>1||p.y<0||p.y>1))return false;
+ let sign=0,area=0;
+ for(let i=0;i<4;i++){const a=q[i],b=q[(i+1)%4],c=q[(i+2)%4];
+  const cross=(b.x-a.x)*(c.y-b.y)-(b.y-a.y)*(c.x-b.x);
+  if(Math.abs(cross)<.00002||sign&&Math.sign(cross)!==sign)return false;
+  sign=Math.sign(cross);area+=a.x*b.y-b.x*a.y;
+ }return Math.abs(area)>.0005;
+}
+export function validScanWarp(c:ScanCorners,g:ScanWarpGrid|null|undefined):boolean{
+ if(!g||!['vertical','horizontal'].includes(g.axis)||!Array.isArray(g.points)||
+  ![6,8,10,12].includes(g.points.length)||!validCorners(c))return false;
+ if(scanWarpOuterCorners(g).some((p,i)=>!p||Math.hypot(p.x-c[i].x,p.y-c[i].y)>.00001))return false;
+ return scanWarpQuads(g).every(validStrip);
+}
+export function transformScanWarpGrid(g:ScanWarpGrid,op:ScanImageOp):ScanWarpGrid{
+ const n=g.points.length/2;
+ const axis=op==='cw'||op==='ccw'?(g.axis==='vertical'?'horizontal':'vertical'):g.axis;
+ const tr=(p:ScanPoint):ScanPoint=>op==='cw'?{x:1-p.y,y:p.x}:op==='ccw'?{x:p.y,y:1-p.x}:
+  op==='flip-h'?{x:1-p.x,y:p.y}:{x:p.x,y:1-p.y};
+ const groups=[g.points.slice(0,n).map(tr),g.points.slice(n).map(tr)];
+ const secondary=(p:ScanPoint)=>axis==='vertical'?p.y:p.x;
+ const primary=(p:ScanPoint)=>axis==='vertical'?p.x:p.y;
+ groups.sort((a,b)=>a.reduce((sum,p)=>sum+secondary(p),0)-b.reduce((sum,p)=>sum+secondary(p),0));
+ groups.forEach(a=>a.sort((p,q)=>primary(p)-primary(q)));
+ return {axis,points:groups.flat()};
+}
+export type ScanWarpBand={start:number;end:number;coeff:number[];quad?:ScanCorners};
+export function scanWarpBands(c:ScanCorners,g?:ScanWarpGrid|null):ScanWarpBand[]{
+ if(!g)return [{start:0,end:1,coeff:squareToQuadrilateral(c)}];
+ if(!validScanWarp(c,g))throw Error('Các điểm nếp gấp giao nhau hoặc quá sát nhau');
+ const quads=scanWarpQuads(g),dist=(a:ScanPoint,b:ScanPoint)=>Math.hypot(a.x-b.x,a.y-b.y);
+ const widths=quads.map(q=>g.axis==='vertical'?(dist(q[0],q[1])+dist(q[3],q[2]))/2:
+  (dist(q[0],q[3])+dist(q[1],q[2]))/2);
+ const total=widths.reduce((s,v)=>s+v,0);let start=0;
+ return quads.map((q,i)=>{const end=i===quads.length-1?1:start+widths[i]/total;
+  const out={start,end,coeff:squareToQuadrilateral(q,true),quad:q};start=end;return out;});
+}
+export function mapScanWarpOutput(u:number,v:number,bands:ScanWarpBand[],axis:'vertical'|'horizontal'='vertical'):ScanPoint{
+ const t=axis==='vertical'?u:v,b=bands.find(b=>t<=b.end)||bands[bands.length-1];
+ const fraction=clamp((t-b.start)/(b.end-b.start),0,1);
+ const x=axis==='vertical'?fraction:u,y=axis==='vertical'?v:fraction;
+ // A bilinear sheet strip parameterizes the shared crease in the same way
+ // from both adjacent strips. Independent homographies may assign different
+ // coordinates along a shared edge and introduce tears through printed text.
+ if(b.quad){const q=b.quad;
+  const lerp=(key:'x'|'y')=>(1-x)*(1-y)*q[0][key]+x*(1-y)*q[1][key]+x*y*q[2][key]+(1-x)*y*q[3][key];
+  return {x:lerp('x'),y:lerp('y')};
+ }
+ const c=b.coeff,den=c[6]*x+c[7]*y+1;
+ return {x:(c[0]*x+c[1]*y+c[2])/den,y:(c[3]*x+c[4]*y+c[5])/den};
+}
+
 /** Solve inverse homography: output unit square -> quadrilateral in input image. */
-export function squareToQuadrilateral(points:ScanCorners):number[]{
- if(!validCorners(points))throw Error('Bốn góc tạo thành vùng không hợp lệ. Hãy kéo lại các góc.');
+export function squareToQuadrilateral(points:ScanCorners,allowNarrowStrip=false):number[]{
+ if(!(allowNarrowStrip?validStrip(points):validCorners(points)))throw Error('Bốn góc tạo thành vùng không hợp lệ. Hãy kéo lại các góc.');
  const pairs:[number,number,ScanPoint][]=[[0,0,points[0]],[1,0,points[1]],[1,1,points[2]],[0,1,points[3]]];
  const m:number[][]=[];
  for(const [u,v,p] of pairs){m.push([u,v,1,0,0,0,-u*p.x,-v*p.x,p.x]);m.push([0,0,0,u,v,1,-u*p.y,-v*p.y,p.y]);}
@@ -433,24 +1546,62 @@ function modifyFilter(r:number,g:number,b:number,filter:ScanFilter):[number,numb
  if(filter==='paper'){const v=clamp((lum-105)*2.1+180,0,255);return [v,v,v];}
  return [clamp((r-110)*1.18+132,0,255),clamp((g-110)*1.18+132,0,255),clamp((b-110)*1.18+132,0,255)];
 }
+/** Bounded edge-aware unsharp mask. Uses actual sampled pixels only; it does
+ * not invent missing text. A local luminance difference avoids color halos,
+ * smooth photographic regions are left alone, and output stays within 8-bit.
+ * Processing is chunked so mobile WebView controls remain responsive. */
+export async function sharpenScanPixels(pixels:Uint8ClampedArray,w:number,h:number,
+ mode:ScanSharpness,signal?:AbortSignal,percent?:number):Promise<Uint8ClampedArray>{
+ const level=typeof percent==='number'&&Number.isFinite(percent)?clamp(percent,0,100):undefined;
+ if(mode==='off'||level===0||w<3||h<3)return pixels;
+ if(pixels.length!==w*h*4)throw Error('Sai kích thước dữ liệu ảnh cần làm nét');
+ const luminances=new Uint8Array(w*h);
+ for(let k=0;k<w*h;k++){
+  const i=k*4;luminances[k]=Math.round(.2126*pixels[i]+.7152*pixels[i+1]+.0722*pixels[i+2]);
+ }
+ const gain=level===undefined?(mode==='text'?1.05:.67):level*1.1/100;
+ const threshold=level===undefined?(mode==='text'?3:5):Math.max(3,7-Math.round(level/25));
+ for(let y=1;y<h-1;y++){
+  if(signal?.aborted)throw Error('Đã hủy xử lý ảnh');
+  const row=y*w;
+  for(let x=1;x<w-1;x++){
+   const k=row+x,i=k*4;
+   const smooth=(luminances[k-w-1]+2*luminances[k-w]+luminances[k-w+1]+
+       2*luminances[k-1]+4*luminances[k]+2*luminances[k+1]+
+       luminances[k+w-1]+2*luminances[k+w]+luminances[k+w+1])/16;
+   const detail=luminances[k]-smooth;
+   if(Math.abs(detail)<threshold)continue; // Ignore paper grain and JPEG noise.
+   // Prevent prominent halos on faces, highlights and black QR finder blocks.
+   const strength=mode==='auto'?Math.min(1,Math.abs(detail)/17):1;
+   const delta=clamp(detail*gain*strength,-19,19);
+   for(let c=0;c<3;c++)pixels[i+c]=clamp(pixels[i+c]+delta,0,255);
+  }
+  if(y%40===0)await new Promise<void>(resolve=>setTimeout(resolve,0));
+ }
+ return pixels;
+}
+
 export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanFilter,signal?:AbortSignal,
- options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust}):Promise<Blob>{
+ options?:{operations?:ScanImageOp[];adjustments?:ScanColorAdjust;sharpness?:ScanSharpness;sharpnessLevel?:number;warpGrid?:ScanWarpGrid|null;previewMaxEdge?:number}):Promise<Blob>{
  if(!validCorners(corners))throw Error('Vùng quét không hợp lệ. Hãy chỉnh lại 4 góc.');
- const input=await sourcePixels(blob,2400,safeScanOps(options?.operations));const {width:iw,height:ih,data}=input;
+ const maxEdge=options?.previewMaxEdge?clamp(options.previewMaxEdge,160,1100):2400;
+ const input=await sourcePixels(blob,maxEdge,safeScanOps(options?.operations));const {width:iw,height:ih,data}=input;
  const pix=(a:ScanPoint,b:ScanPoint)=>Math.hypot((a.x-b.x)*iw,(a.y-b.y)*ih);
  const rawW=Math.max(pix(corners[0],corners[1]),pix(corners[3],corners[2]));
  const rawH=Math.max(pix(corners[0],corners[3]),pix(corners[1],corners[2]));
- const factor=Math.min(1,2200/Math.max(rawW,rawH));
- const w=clamp(Math.round(rawW*factor),80,2200),h=clamp(Math.round(rawH*factor),80,2200);
+ const outputCap=options?.previewMaxEdge?clamp(options.previewMaxEdge,160,1100):2200;
+ const factor=Math.min(1,outputCap/Math.max(rawW,rawH));
+ const w=clamp(Math.round(rawW*factor),80,outputCap),h=clamp(Math.round(rawH*factor),80,outputCap);
  if(w*h>5_000_000)throw Error('Ảnh quá lớn; hãy giảm độ phân giải trước khi quét');
- const coeff=squareToQuadrilateral(corners),out=new Uint8ClampedArray(w*h*4);
+ const bands=scanWarpBands(corners,options?.warpGrid),axis=options?.warpGrid?.axis||'vertical';
+ const out=new Uint8ClampedArray(w*h*4);
  for(let y=0;y<h;y++){
   if(signal?.aborted)throw Error('Đã hủy xử lý ảnh');
   const v=(y+.5)/h;
   for(let x=0;x<w;x++){
-   const u=(x+.5)/w,den=coeff[6]*u+coeff[7]*v+1;
-   const xx=clamp(((coeff[0]*u+coeff[1]*v+coeff[2])/den)*(iw-1),0,iw-1);
-   const yy=clamp(((coeff[3]*u+coeff[4]*v+coeff[5])/den)*(ih-1),0,ih-1);
+   const u=(x+.5)/w,source=mapScanWarpOutput(u,v,bands,axis);
+   const xx=clamp(source.x*(iw-1),0,iw-1);
+   const yy=clamp(source.y*(ih-1),0,ih-1);
    const sx=Math.floor(xx),sy=Math.floor(yy),rx=Math.min(iw-1,sx+1),ry=Math.min(ih-1,sy+1),fx=xx-sx,fy=yy-sy;
    const k00=(sy*iw+sx)*4,k10=(sy*iw+rx)*4,k01=(ry*iw+sx)*4,k11=(ry*iw+rx)*4;
    const rgb=[0,1,2].map(c=>(1-fy)*((1-fx)*data[k00+c]+fx*data[k10+c])+fy*((1-fx)*data[k01+c]+fx*data[k11+c]));
@@ -460,10 +1611,11 @@ export async function flattenDocument(blob:Blob,corners:ScanCorners,filter:ScanF
   }
   if(y%24===0)await new Promise<void>(resolve=>setTimeout(resolve,0)); // keep Android UI responsive
  }
+ await sharpenScanPixels(out,w,h,options?.sharpness||'off',signal,options?.sharpnessLevel);
  const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
  const ctx=canvas.getContext('2d');if(!ctx)throw Error('Không tạo được ảnh tài liệu');
  ctx.putImageData(new ImageData(out,w,h),0,0);
- return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không thể xuất ảnh quét')),'image/jpeg',.91));
+ return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Không thể xuất ảnh quét')),'image/jpeg',.94));
 }
 
 export interface PdfExportOptions {paper:ScanPaper;landscape:boolean;marginMm:number;customWidthMm:number;customHeightMm:number;twoPerPage:boolean;idCardPrintSize?:boolean;}
@@ -480,9 +1632,14 @@ export async function createScannerPdf(images:Blob[],opts:PdfExportOptions):Prom
  if(images.length>80)throw Error('Giới hạn 80 ảnh mỗi lần xuất PDF để tránh hết bộ nhớ');
  const imgs:{data:Uint8Array;w:number;h:number}[]=[];
  for(const image of images){const bmp=await openBitmap(image);try{
-  const canvas=document.createElement('canvas');canvas.width=bmp.width;canvas.height=bmp.height;
-  const g=canvas.getContext('2d');if(!g)throw Error('Không thể mở ảnh');g.drawImage(bmp,0,0);
-  const jpeg=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Lỗi nén PDF')),'image/jpeg',.89));
+  // Processed scans are JPEG already: preserve these bytes in the PDF.
+  // A second lossy JPEG encode erases fine print and QR edges.
+  let jpeg=image;
+  if(image.type!=='image/jpeg'){
+   const canvas=document.createElement('canvas');canvas.width=bmp.width;canvas.height=bmp.height;
+   const g=canvas.getContext('2d');if(!g)throw Error('Không thể mở ảnh');g.drawImage(bmp,0,0);
+   jpeg=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Lỗi nén PDF')),'image/jpeg',.94));
+  }
   imgs.push({data:new Uint8Array(await jpeg.arrayBuffer()),w:bmp.width,h:bmp.height});
  }finally{bmp.close();}}
  const [pw,ph]=paperSize(opts),margin=pt(clamp(opts.marginMm,0,30));
