@@ -9,4 +9,5 @@ assert.ok(c.includes('aspectRatio,cameraColorFilter)'));
 assert.ok(v.indexOf('ctx.filter=')<v.indexOf('ctx.drawImage(video'));
 assert.ok(v.indexOf('ctx.restore();')<v.indexOf('drawConfiguredStamp(ctx'));
 assert.ok(app.includes('await storeMedia(newPhoto)')&&app.includes('newPhoto.edits'));
+assert.ok(c.includes('filterThumbnail')&&c.includes('canvas.toDataURL')&&c.includes('PHOTO_FILTERS.find')&&c.includes('overflow-x-auto'));
 console.log('PASS TEST71 live photo/video color: original photo preserved, preset metadata and video frame filter before stamp');

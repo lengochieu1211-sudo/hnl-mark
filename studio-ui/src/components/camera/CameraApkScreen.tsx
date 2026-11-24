@@ -108,6 +108,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [showVideoQualityPopup, setShowVideoQualityPopup] = useState<boolean>(false);
   const [showPhotoQualityPopup, setShowPhotoQualityPopup] = useState(false);
   const [showCameraFilters,setShowCameraFilters]=useState(false);
+  const [filterThumbnail,setFilterThumbnail]=useState('');
   const cameraFilterId=watermarkConfig.cameraPhotoFilter||'original';
   const cameraFilterStrength=watermarkConfig.cameraFilterStrength??100;
   const cameraFilterEdits={photoFilter:cameraFilterId,filterStrength:cameraFilterStrength};
@@ -146,6 +147,25 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const chunksRef = useRef<Blob[]>([]);
   const [cameraError,setCameraError] = useState<string>('');
   const [cameraReady,setCameraReady] = useState(false);
+  // Capture one tiny, unfiltered camera frame for all filter swatches. No extra stream.
+  useEffect(()=>{
+    if(!showCameraFilters||!cameraReady){setFilterThumbnail('');return;}
+    const refresh=()=>{
+      const live=liveRef.current;if(!live||live.readyState<2||!live.videoWidth||!live.videoHeight)return;
+      try{
+        const canvas=document.createElement('canvas');canvas.width=120;canvas.height=90;
+        const ctx=canvas.getContext('2d');if(!ctx)return;
+        const scale=Math.min(live.videoWidth/120,live.videoHeight/90);
+        const w=120*scale,h=90*scale;
+        if(lens==='front'){ctx.translate(120,0);ctx.scale(-1,1);}
+        ctx.filter=`brightness(${exposureFactor})`;
+        ctx.drawImage(live,(live.videoWidth-w)/2,(live.videoHeight-h)/2,w,h,0,0,120,90);
+        setFilterThumbnail(canvas.toDataURL('image/jpeg',.76));
+      }catch{setFilterThumbnail('');}
+    };
+    refresh();const timer=window.setInterval(refresh,1200);
+    return ()=>{window.clearInterval(timer);};
+  },[showCameraFilters,cameraReady,lens,exposureFactor]);
   const [cameraRetryKey,setCameraRetryKey] = useState(0);
   const [audioUnavailable,setAudioUnavailable] = useState(false);
   const [allowSilentRecording,setAllowSilentRecording]=useState(false);
@@ -727,22 +747,26 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       </div>
 
       {showCameraFilters && (
-        <section aria-label="Bộ lọc ảnh và video" className={`absolute z-40 w-[286px] max-w-[calc(100%-24px)] max-h-[calc(100%-24px)] overflow-y-auto rounded-2xl bg-[#0D1729]/95 backdrop-blur-xl border border-white/15 p-3 shadow-2xl space-y-3 ${isLandscapeViewport?'top-3 left-16':'top-14 right-3 max-h-[calc(100%-68px)]'}`}>
+        <section aria-label="Bộ lọc ảnh và video" className={`absolute z-40 rounded-xl bg-[#0D1729]/95 backdrop-blur-xl border border-white/15 p-2 shadow-xl space-y-1.5 ${isLandscapeViewport?'left-16 bottom-3 w-[min(280px,38%)] max-h-[85%] overflow-y-auto':'left-2 right-2 bottom-[calc(128px+var(--hnl-safe-bottom,0px))]'}`}>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold text-white">Bộ lọc · {mode==='photo'?'Ảnh':'Video'}</span>
-            <button type="button" className="text-xs text-[#E2B74B] min-h-9 px-2" onClick={()=>setShowCameraFilters(false)}>Xong</button>
+            <span className="text-xs font-semibold text-white">Bộ lọc · <span className="text-[#E2B74B]" role="status">{PHOTO_FILTERS.find(p=>p.id===cameraFilterId)?.label||'Gốc'}</span></span>
+            <button type="button" className="text-xs text-[#E2B74B] min-h-8 px-2" onClick={()=>setShowCameraFilters(false)}>Xong</button>
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 overscroll-x-contain">
             {PHOTO_FILTERS.map(p=><button key={p.id} type="button" aria-pressed={cameraFilterId===p.id}
               onClick={()=>onChangeWatermarkConfig?.({cameraPhotoFilter:p.id,cameraFilterStrength:p.id==='original'?0:100})}
-              className={`min-h-9 px-1 rounded-lg text-[11px] font-medium ${cameraFilterId===p.id?'bg-[#E2B74B] text-[#060B14]':'bg-white/[0.06] text-white'}`}>{p.label}</button>)}
+              className={`relative shrink-0 w-[65px] rounded-lg p-1 border text-[10px] font-medium ${cameraFilterId===p.id?'border-[#E2B74B] text-[#E2B74B]':'border-white/10 text-white'}`}>
+              {filterThumbnail?<img src={filterThumbnail} alt="" draggable={false} className="w-full h-11 rounded object-cover" style={{filter:photoFilterCss({...DEFAULT_IMAGE_EDITS,photoFilter:p.id,filterStrength:100})}}/>:<span className="flex h-11 items-center justify-center rounded bg-[#192844]"><Palette className="w-4 h-4"/></span>}
+              {cameraFilterId===p.id&&<Check className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#E2B74B] text-[#060B14]"/>}
+              <span className="block mt-1 whitespace-nowrap">{p.label}</span></button>)}
           </div>
-          {cameraFilterId!=='original'&&<label className="block text-xs text-[#CBD5E1]">Cường độ · {cameraFilterStrength}%
+          {cameraFilterId!=='original'&&<label className="flex items-center gap-2 text-[11px] text-[#CBD5E1]"><span className="shrink-0">Cường độ</span>
             <input type="range" min={0} max={100} step={1} value={cameraFilterStrength}
               aria-label="Cường độ bộ lọc camera" onChange={e=>onChangeWatermarkConfig?.({cameraFilterStrength:Number(e.target.value)})}
-              className="block w-full mt-2 accent-[#E2B74B] h-2"/>
+              className="min-w-0 flex-1 accent-[#E2B74B] h-2"/>
+            <span className="w-9 text-right text-[#E2B74B]">{cameraFilterStrength}%</span>
           </label>}
-          <p className="text-[11px] text-[#94A3B8]">Xem màu trực tiếp. Ảnh gốc không đổi; video ghi màu đã chọn. Dấu giữ nguyên màu.</p>
+          {!filterThumbnail&&<p className="text-[10px] text-[#94A3B8]">Ảnh mẫu hiện khi camera sẵn sàng.</p>}
         </section>
       )}
 
