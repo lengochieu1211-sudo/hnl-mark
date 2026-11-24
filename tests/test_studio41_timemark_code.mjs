@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {captureStampCode,visibleTimemarkCode} from '../studio-ui/src/services/timemarkSerial.ts';
+import {captureStampCode,visibleTimemarkCode,mediaTimemarkCode,mediaStampCode} from '../studio-ui/src/services/timemarkSerial.ts';
 
 const historical='OMWHCO8UUCZ6TK';
 assert.equal(historical.length,14);
@@ -18,3 +18,14 @@ assert.equal(visibleTimemarkCode(undefined,1794700000000,1),fallback);
 assert.notEqual(visibleTimemarkCode(undefined,1794700000000,2),fallback);
 assert.ok(!fallback.endsWith('00000'));
 console.log('PASS TEST41: original Timemark code restored, no fake zero padding, independent serial retained');
+
+const imported={id:'import-123-0-abcd',photoCode:'HNLMARK-0001'};
+const code=mediaStampCode('timemark',imported);
+assert.match(code,/^[A-Z0-9]{14}$/);
+assert.equal(mediaStampCode('site-log',imported),'HNLMARK-0001');
+assert.equal(mediaStampCode('timemark',{...imported,photoCode:'HNL-9999'}),code);
+assert.equal(mediaTimemarkCode({...imported,id:'restored-123',timemarkCode:code}),code);
+assert.notEqual(mediaTimemarkCode({...imported,id:'import-124'}),code);
+assert.equal(mediaTimemarkCode({...imported,photoCode:historical}),historical);
+assert.equal(mediaTimemarkCode({...imported,timemarkCode:historical}),historical);
+console.log('PASS: independent imported Timemark ID survives stamp switches and backup restore');

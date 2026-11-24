@@ -1,3 +1,4 @@
+import {mediaStampCode} from '../../services/timemarkSerial';
 /**
  * Shared, non-destructive image preview.
  * Show the ORIGINAL immediately; expensive rendering is only necessary after
@@ -116,7 +117,7 @@ export const PhotoPreview:React.FC<{
      onError={()=>setFailure('Không đọc được tệp ảnh. Vui lòng kiểm tra ảnh gốc trong thư viện.')}
      className="absolute inset-0 h-full w-full select-none"
      style={{objectFit:ready?'fill':'contain',filter:photoFilterCss(edits)}}/>
-    {canOverlay&&<WatermarkOverlay config={effective} orientationDeg={media.orientationDeg||0} photoCode={media.photoCode} referenceSize={referenceSize}/>}
+    {canOverlay&&<WatermarkOverlay config={effective} orientationDeg={media.orientationDeg||0} photoCode={mediaStampCode(effective.templateId,media)} referenceSize={referenceSize}/>}
    </div>
    {pending&&!compact&&<span className="absolute left-2 bottom-2 rounded bg-[#0B1424]/80 px-2 py-1 text-[10px] text-[#CBD5E1]" role="status">Đang áp dụng chỉnh sửa…</span>}
    {failure&&!compact&&<div role="alert" className="absolute left-2 right-2 bottom-2 flex items-center justify-between gap-2 rounded-lg bg-[#5B1D27]/95 px-2 py-1.5 text-[11px] text-white">

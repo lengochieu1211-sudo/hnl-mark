@@ -33,7 +33,7 @@ import {setupAndroidBridge,saveToDevice,isAndroidApk,pickDeviceGallery} from './
 import {mediaExtension} from './services/mediaExtensions';
 import { createTimemarkPhoto,createTimemarkCode } from './services/timemarkRenderer';
 import {nextPhotoSerialSequence} from './services/photoSerial';
-import {captureStampCode} from './services/timemarkSerial';
+import {captureStampCode,mediaStampCode,mediaTimemarkCode} from './services/timemarkSerial';
 import {isRenderableStamp} from './services/stampRenderer';
 import {mediaWatermarkConfig,readPhotoExifGps} from './services/watermarkLocation';
 
@@ -152,12 +152,13 @@ export default function App() {
       const mediaFile=file.type===detectedType?file:new File([file],file.name,{type:detectedType,lastModified:file.lastModified});
       const now=new Date();
       const exifCoords=detectedType==='image/jpeg'?await readPhotoExifGps(mediaFile).catch(()=>undefined):undefined;
-      const item:MediaItem={id:`import-${Date.now()}-${i}-${Math.random().toString(36).slice(2,6)}`,
+      const timemarkCode=createTimemarkCode();
+      const item:MediaItem={timemarkCode,id:`import-${Date.now()}-${i}-${Math.random().toString(36).slice(2,6)}`,
       title:file.name.replace(/\.[^/.]+$/,'')||'Tệp mới chọn',kind:detectedType.startsWith('video/')?'video':'photo',
       origin:'newly-picked',url:URL.createObjectURL(mediaFile),rawBlob:mediaFile,createdAt:now.toISOString(),
       resolutionLabel:detectedType.startsWith('video/')?'Video thiết bị':'Ảnh thiết bị',
       sizeLabel:`${(file.size/1048576).toFixed(1)} MB`,location:'',coordinates:exifCoords||'',photoCode:captureStampCode(watermarkConfig.templateId,watermarkConfig.showPhotoCode,
-        watermarkConfig.photoCodePrefix,nextPhotoSerialSequence(startingSerial,imported),createTimemarkCode()),
+        watermarkConfig.photoCodePrefix,nextPhotoSerialSequence(startingSerial,imported),timemarkCode),
       customNote:'',templateId:watermarkConfig.templateId,
       // Imported media must not silently switch back to Timemark when a different
       // template was selected. Snapshot only when per-photo mode is enabled.
@@ -221,7 +222,7 @@ export default function App() {
       const config=newPhoto.captureWatermark||watermarkConfig;
       if(!isRenderableStamp(config.templateId))throw Error('Mẫu dấu không có bộ xuất. Ảnh gốc vẫn được giữ.');
       if(!newPhoto.rawBlob)throw Error('Không có ảnh gốc để tạo dấu');
-      const stamped=await createTimemarkPhoto(newPhoto.rawBlob,mediaWatermarkConfig(config,newPhoto),newPhoto.photoCode,newPhoto.orientationDeg||0,newPhoto.edits);
+      const stamped=await createTimemarkPhoto(newPhoto.rawBlob,mediaWatermarkConfig(config,newPhoto),mediaStampCode(config.templateId,newPhoto),newPhoto.orientationDeg||0,newPhoto.edits);
       item={...newPhoto,stampedBlob:stamped,isStamped:config.templateId!=='none',url:URL.createObjectURL(stamped)};
       await storeMedia(item);
     }catch(e){
@@ -299,7 +300,7 @@ export default function App() {
         url=URL.createObjectURL(m.rawBlob);
         const old=m.url;window.setTimeout(()=>URL.revokeObjectURL(old),10000);
       }
-      return {...m,watermarkOverride:{...m.watermarkOverride,...patch},
+      return {...m,timemarkCode:mediaTimemarkCode(m),watermarkOverride:{...m.watermarkOverride,...patch},
         stampedBlob:undefined,stampedConfig:undefined,url};
     });
   };

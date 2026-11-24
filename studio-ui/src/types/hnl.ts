@@ -138,6 +138,8 @@ export interface MediaItem {
   location: string;
   coordinates: string;
   photoCode: string;
+  /** Stable independent 14-character Timemark display ID. */
+  timemarkCode?: string;
   customNote: string;
   templateId: string;
   edits: ImageEdits;

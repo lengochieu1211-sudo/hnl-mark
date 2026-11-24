@@ -29,3 +29,22 @@ export function visibleTimemarkCode(codeOverride:string|undefined,timeMs:number,
  const mixed=(Math.imul(low^high,2654435761)^Math.imul(seq,2246822519))>>>0;
  return timePart+mixed.toString(36).toUpperCase().padStart(5,'0').slice(-5);
 }
+
+/** Separate immutable display ID from the human HNL counter.
+ * Legacy items get a deterministic ID from their original local identity,
+ * never from mutable date/time, stamp settings or filter values. */
+export function mediaTimemarkCode(media:{id:string;photoCode?:string;timemarkCode?:string}):string{
+ const valid=(s:string|undefined)=>/^[A-Z0-9]{14}$/.test(s||'')&&!/^HNL/.test(s||'');
+ if(valid(media.timemarkCode))return media.timemarkCode!;
+ if(valid(media.photoCode))return media.photoCode!;
+ let a=2166136261,b=0x9e3779b9;
+ for(const ch of String(media.id||'')){
+   const n=ch.codePointAt(0)||0;
+   a=Math.imul(a^n,16777619);b=Math.imul(b^n,2246822519);
+ }
+ const part=(n:number)=>(n>>>0).toString(36).toUpperCase().padStart(7,'0');
+ return part(a)+part(b);
+}
+export function mediaStampCode(templateId:string,media:{id:string;photoCode?:string;timemarkCode?:string}):string{
+ return templateId==='timemark'?mediaTimemarkCode(media):media.photoCode||'';
+}

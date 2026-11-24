@@ -11,7 +11,7 @@ assert.doesNotMatch(editor,/config=\{\{\s*\.\.\.watermarkConfig,\s*positionPrese
 assert.match(editor,/config=\{watermarkConfig\}/);
 assert.match(editor,/editedRasterSize\(sourceSize\.width,sourceSize\.height,edits\)/);
 assert.match(editor,/referenceSize=\{stampReferenceSize\}/);
-assert.match(editor,/photoCode=\{media\.photoCode\}/);
+assert.match(editor,/photoCode=\{mediaStampCode\(watermarkConfig\.templateId,media\)\}/);
 assert.match(editor,/orientationDeg=\{media\.orientationDeg\|\|0\}/);
 assert.match(photo,/editedRasterSize\(originalSize\.width,originalSize\.height,edits\)/);
 assert.match(overlay,/config\.templateId === 'timemark'/);

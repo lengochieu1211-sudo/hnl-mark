@@ -1,3 +1,4 @@
+import {mediaStampCode} from '../../services/timemarkSerial';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   AlignCenter,
@@ -273,7 +274,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
               {activeTab!=='erase'&&<WatermarkOverlay
                 config={watermarkConfig}
                 orientationDeg={media.orientationDeg||0}
-                photoCode={media.photoCode}
+                photoCode={mediaStampCode(watermarkConfig.templateId,media)}
                 referenceSize={stampReferenceSize}
                 draggable
                 containerRef={imageRectRef}

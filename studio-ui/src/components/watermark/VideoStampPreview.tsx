@@ -1,3 +1,4 @@
+import {mediaStampCode} from '../../services/timemarkSerial';
 import React,{useEffect,useRef,useState} from 'react';
 import type {MediaItem,WatermarkConfig} from '../../types/hnl';
 import {WatermarkOverlay} from './WatermarkOverlay';
@@ -32,7 +33,7 @@ export const VideoStampPreview:React.FC<{media:MediaItem;config:WatermarkConfig}
     className="absolute inset-0 w-full h-full object-fill" onLoadedMetadata={event=>{
      const v=event.currentTarget;setFrame({width:v.videoWidth,height:v.videoHeight});
     }}/>
-   {canOverlay&&<WatermarkOverlay config={effective} photoCode={media.photoCode} referenceSize={referenceSize}/>}
+   {canOverlay&&<WatermarkOverlay config={effective} photoCode={mediaStampCode(effective.templateId,media)} referenceSize={referenceSize}/>}
   </div>
   {burnedCameraVideo&&<span className="absolute bottom-1 left-1 right-1 bg-[#06101E]/85 rounded px-2 py-1 text-[10px] text-[#E2B74B] pointer-events-none">
    Video quay cũ đã đốt dấu trực tiếp: chưa có bản gốc không dấu để thay mẫu

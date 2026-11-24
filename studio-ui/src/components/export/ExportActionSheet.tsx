@@ -1,3 +1,4 @@
+import {mediaStampCode} from '../../services/timemarkSerial';
 import React,{useEffect,useRef,useState} from 'react';
 import {Download,Share2,Files,FolderArchive,CheckCircle2,AlertCircle,Loader2,X,Upload} from 'lucide-react';
 import type {MediaItem,WatermarkConfig} from '../../types/hnl';
@@ -48,7 +49,7 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
        setMessage('Đang phát và chèn dấu vào video… 0%');
        const controller=new AbortController();exportAbort.current=controller;
        try{
-         blob=await stampImportedVideo(await getBlob(it),cfg,it.photoCode,pct=>setMessage(pct>=0?`Đang chèn dấu video… ${pct}%`:`Đang chèn dấu video… ${Math.abs(pct)} giây`),controller.signal);
+         blob=await stampImportedVideo(await getBlob(it),cfg,mediaStampCode(cfg.templateId,it),pct=>setMessage(pct>=0?`Đang chèn dấu video… ${pct}%`:`Đang chèn dấu video… ${Math.abs(pct)} giây`),controller.signal);
          if(controller.signal.aborted)throw Error('Đã hủy xử lý video.');
          await onStampedMedia?.(it,blob,cfg);
        }finally{exportAbort.current=null;}
@@ -58,7 +59,7 @@ export const ExportActionSheet:React.FC<Props>=({isOpen,targetItems,onClose,wate
      if(!isRenderableStamp(cfg.templateId))throw Error('Mẫu dấu không hỗ trợ xuất ảnh. Ảnh gốc vẫn được giữ.');
      // Always render from the immutable ORIGINAL: an old stampedBlob may contain
      // another template, date/time or edit state. Never export stale pixels.
-     blob=await createTimemarkPhoto(await getBlob(it),cfg,it.photoCode,it.orientationDeg||0,it.edits);
+     blob=await createTimemarkPhoto(await getBlob(it),cfg,mediaStampCode(cfg.templateId,it),it.orientationDeg||0,it.edits);
    }
    const extension=it.kind==='video'?(blob.type.includes('mp4')?'mp4':'webm'):'jpg';
    const filename=`HNLMark_Timemark_${Date.now()}.${extension}`;

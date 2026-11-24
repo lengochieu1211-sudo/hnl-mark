@@ -1,6 +1,7 @@
 /** Portable ORIGINAL-media archive. Never replaces or deletes old media. */
 import JSZip from 'jszip';
 import type {MediaItem} from '../types/hnl';
+import {mediaTimemarkCode} from './timemarkSerial';
 import {storeMediaBatchNew} from './mediaStorage';
 import {mediaExtension,stampedArchiveMime} from './mediaExtensions';
 interface Entry {name:string;mime:string;size:number;stampedName?:string;sourceIsStamped?:boolean;meta:Omit<MediaItem,'rawBlob'|'stampedBlob'|'url'>}
@@ -18,7 +19,7 @@ export async function createProjectZip(items:MediaItem[]):Promise<Blob>{
    stampedName=`media/${manifest.items.length.toString().padStart(4,'0')}_stamped.${mediaExtension(stampedBlob.type,item.kind)}`;
    zip.file(stampedName,stampedBlob,{compression:'STORE'});
  }
- zip.file(name,blob,{compression:'STORE'});manifest.items.push({name,mime:blob.type,size:blob.size,stampedName,sourceIsStamped:item.kind==='video'&&item.isStamped===true&&!stampedBlob,meta});
+ zip.file(name,blob,{compression:'STORE'});manifest.items.push({name,mime:blob.type,size:blob.size,stampedName,sourceIsStamped:item.kind==='video'&&item.isStamped===true&&!stampedBlob,meta:{...meta,timemarkCode:mediaTimemarkCode(item)}});
  }
  zip.file('manifest.json',JSON.stringify(manifest,null,2));
  return zip.generateAsync({type:'blob',compression:'STORE'});
@@ -47,7 +48,7 @@ export async function restoreProjectZip(zipBlob:Blob):Promise<MediaItem[]>{
  if(!entry.meta||typeof entry.meta!=='object'||!['photo','video'].includes(entry.meta.kind)||
    typeof entry.meta.createdAt!=='string'||!Number.isFinite(Date.parse(entry.meta.createdAt)))
    throw Error('Thông tin tệp trong bản sao lưu không hợp lệ');
- const media={...entry.meta,id,rawBlob:blob,stampedBlob:stamped,url:''} as MediaItem;
+ const media={...entry.meta,timemarkCode:mediaTimemarkCode(entry.meta),id,rawBlob:blob,stampedBlob:stamped,url:''} as MediaItem;
  prepared.push(media);
  }
  if(!prepared.length)throw Error('ZIP không có ảnh/video để khôi phục');

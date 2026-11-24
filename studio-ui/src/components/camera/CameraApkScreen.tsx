@@ -413,13 +413,14 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           physicalPhotoAngleRef.current,autoStampOrientationRef.current):0;
         const output=cropCapturedCanvas(orientCapturedCanvas(canvas,quarter),aspectRatio);
         const blob=await new Promise<Blob>((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(Error('Không xuất được ảnh')),'image/jpeg',photoJpegQuality/100));
-        const at=new Date();const item:MediaItem={id:`cam-${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}`,
+        const timemarkCode=i===0?previewCode:createTimemarkCode();
+        const at=new Date();const item:MediaItem={timemarkCode,id:`cam-${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}`,
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
           createdAt:at.toISOString(),resolutionLabel:`${output.width} × ${output.height}`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:shotAddress,
           coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.locationSource==='manual'?watermarkConfig.coordinates:'',photoCode:i===0?capturePreviewCode:captureStampCode(
             watermarkConfig.templateId,watermarkConfig.showPhotoCode,
-            watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq+i,createTimemarkCode()),
+            watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq+i,timemarkCode),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
           orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,photoCodeSeq:watermarkConfig.photoCodeSeq+i,dateTimeIso:at.toISOString(),autoTime:false,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS,...cameraFilterEdits}};
         await onCapturePhoto(item);
@@ -508,7 +509,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           kind:'video',origin:'newly-picked',rawBlob:blob,url:URL.createObjectURL(blob),createdAt:date.toISOString(),
           durationSec:Math.max(1,Math.round((Date.now()-recordStartedAtRef.current-pausedTotalRef.current)/1000)),resolutionLabel:`${capture.width} × ${capture.height} · tối đa ${Math.min(30,videoSettings.fps)} FPS`,
           sizeLabel:`${(blob.size/1048576).toFixed(1)} MB`,location:watermarkConfig.locationText,coordinates:watermarkConfig.coordinates,
-          photoCode,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
+          photoCode,timemarkCode:previewCode,customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
           orientationDeg:0,captureWatermark:stampConfig,isStamped:isRenderableStamp(stampConfig.templateId)&&stampConfig.templateId!=='none',edits:{...DEFAULT_IMAGE_EDITS}};
         try{await onSaveVideo(item);setPreviewCode(createTimemarkCode());setLastRecordedVideo(item);setShowVideoReview(false);setIsReviewPlaying(false);}
         catch(e){triggerTransientToast('Không lưu được video gốc: '+String(e));}
