@@ -31,12 +31,12 @@ export function drawSimpleStamp(ctx:CanvasRenderingContext2D,width:number,height
     ctx.restore();return;
   }
   const text=simpleStampText(config);
- let size=Math.max(9,Math.round(Math.min(W,H)*Math.max(10,config.fontSizePx)/400));
- const padX=Math.max(7,W*.026),padY=Math.max(7,H*.026);
+ let size=Math.max(1,Math.min(Math.min(W,H)*Math.max(10,Math.min(32,Number(config.fontSizePx)||13))/400,H*.35));
+ const padX=W*.026,padY=H*.026;
  ctx.textBaseline='middle';ctx.font=`600 ${size}px ${watermarkFontFamily(config.fontKey)}`;
  let w=ctx.measureText(text).width;
  // A long date must fit a narrow locked-rotation viewport without clipping.
- if(w>W-2*padX){size=Math.max(6,Math.floor(size*(W-2*padX)/w));ctx.font=`600 ${size}px ${watermarkFontFamily(config.fontKey)}`;w=ctx.measureText(text).width;}
+ if(w>W-2*padX){size=Math.max(.5,size*(W-2*padX)/w);ctx.font=`600 ${size}px ${watermarkFontFamily(config.fontKey)}`;w=ctx.measureText(text).width;}
  const preset=config.positionPreset;
  let x=padX,y=H-padY-size/2;
  if(preset==='top-left'||preset==='top-right')y=padY+size/2;
@@ -53,7 +53,7 @@ export function drawSimpleStamp(ctx:CanvasRenderingContext2D,width:number,height
    ctx.fillRect(Math.max(0,x-size*.35),y-size*.72,Math.max(0,Math.min(W-(x-size*.35),w+size*.7)),size*1.45);
  }
  ctx.shadowColor='rgba(0,0,0,.9)';ctx.shadowBlur=Math.max(2,size*.18);
- ctx.fillStyle=config.textColor||'#ffffff';ctx.fillText(text,x,y);
+ ctx.fillStyle=config.textColor||'#ffffff';ctx.fillText(text,x,y,Math.max(1,W-padX-x));
  drawWatermarkLogo(ctx,W,H,config,logo);
  ctx.restore();
 }
@@ -76,19 +76,21 @@ export function customStampLines(config:WatermarkConfig):string[]{
 function drawCustomStamp(ctx:CanvasRenderingContext2D,W:number,H:number,config:WatermarkConfig,logo?:HTMLImageElement|ImageBitmap){
  const lines=customStampLines(config).slice(0,5);
  if(!lines.length){drawWatermarkLogo(ctx,W,H,config,logo);return;}
- const fontSize=Math.max(9,Math.round(Math.min(W,H)*Math.max(10,config.fontSizePx)/390));
- const padding=Math.max(7,Math.round(fontSize*.58));
- const inset=Math.max(8,Math.min(W,H)*.025);
- const lineHeight=fontSize*1.33;
- const limit=Math.max(30,W-2*inset-2*padding);
+ const inset=Math.min(W,H)*.025;
+ const fontSize=Math.max(1,Math.min(Math.min(W,H)*Math.max(10,Math.min(32,Number(config.fontSizePx)||13))/390,(H-2*inset)/(lines.length*1.52+1.5),W*.15));
+ const padding=fontSize*.75;
+ const lineHeight=fontSize*1.52;
+ const limit=Math.max(1,W-2*inset-2*padding);
  ctx.font=`600 ${fontSize}px ${watermarkFontFamily(config.fontKey)}`;
- const fitted=lines.map(line=>{
-  let t=line;
-  while(t.length>1&&ctx.measureText(t).width>limit)t=t.slice(0,-2).trimEnd()+'…';
-  return t;
+ const fitted=lines.map((line,i)=>{
+  if(i===0&&config.customShowDateTime!==false)return line;
+  if(ctx.measureText(line).width<=limit)return line;
+  const chars=Array.from(line);let lo=0,hi=chars.length;
+  while(lo<hi){const mid=Math.ceil((lo+hi)/2);if(ctx.measureText(chars.slice(0,mid).join('').trimEnd()+'…').width<=limit)lo=mid;else hi=mid-1;}
+  return ctx.measureText('…').width<=limit?chars.slice(0,lo).join('').trimEnd()+'…':'';
  });
  const blockWidth=Math.min(W-2*inset,Math.max(...fitted.map(t=>ctx.measureText(t).width))+2*padding);
- const blockHeight=lineHeight*fitted.length+padding*1.3;
+ const blockHeight=lineHeight*fitted.length+padding*2;
  let x=inset,y=H-inset-blockHeight;
  switch(config.positionPreset){
   case 'top-left':y=inset;break;
@@ -107,7 +109,7 @@ function drawCustomStamp(ctx:CanvasRenderingContext2D,W:number,H:number,config:W
  }
  ctx.textBaseline='middle';ctx.textAlign='left';
  ctx.fillStyle=config.textColor||'#ffffff';ctx.shadowColor='rgba(0,0,0,.8)';ctx.shadowBlur=Math.max(1,fontSize*.14);
- fitted.forEach((line,i)=>ctx.fillText(line,x+padding,y+padding*.65+lineHeight*(i+.5)));
+ fitted.forEach((line,i)=>ctx.fillText(line,x+padding,y+padding+lineHeight*(i+.5),Math.max(1,blockWidth-2*padding)));
  ctx.restore();
  drawWatermarkLogo(ctx,W,H,config,logo);
 }

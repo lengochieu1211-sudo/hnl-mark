@@ -27,14 +27,16 @@ function dateParts(config:WatermarkConfig){
  return {date,time,full:`${date} ${time}`};
 }
 function clamp(n:number,a:number,b:number){return Math.max(a,Math.min(n,b));}
-function line(g:CanvasRenderingContext2D,text:string,x:number,y:number,max:number,align:CanvasTextAlign='left'){
- let t=String(text||'').trim();if(!t)return;
+// Measure glyphs before painting. Date/time is never ellipsized; shrink only as needed.
+function line(g:CanvasRenderingContext2D,text:string,x:number,y:number,max:number,align:CanvasTextAlign='left',essential=false){
+ const t=String(text||'').trim();if(!t||max<=0)return;
  g.textAlign=align;
- if(g.measureText(t).width>max){
-   while(t.length>1 && g.measureText(t+'…').width>max)t=t.slice(0,-1);
-   t=t.trimEnd()+'…';
- }
- g.fillText(t,x,y);
+ const width=g.measureText(t).width;
+ if(essential&&width>max){g.fillText(t,x,y,max);return;}
+ if(width<=max){g.fillText(t,x,y);return;}
+ const chars=Array.from(t);let lo=0,hi=chars.length;
+ while(lo<hi){const mid=Math.ceil((lo+hi)/2);if(g.measureText(chars.slice(0,mid).join('').trimEnd()+'…').width<=max)lo=mid;else hi=mid-1;}
+ if(g.measureText('…').width<=max)g.fillText(chars.slice(0,lo).join('').trimEnd()+'…',x,y);
 }
 function colorBackground(g:CanvasRenderingContext2D,x:number,y:number,w:number,h:number,opacity:number,r:number){
  if(opacity<=0)return;
@@ -52,79 +54,76 @@ function locate(config:WatermarkConfig,W:number,H:number,w:number,h:number,pad:n
  }
  return {x:clamp(x,pad,Math.max(pad,W-pad-w)),y:clamp(y,pad,Math.max(pad,H-pad-h))};
 }
-function paintBody(g:CanvasRenderingContext2D,W:number,H:number,cfg:WatermarkConfig,template:WatermarkTemplate,codeOverride:string|undefined){
+export type StampBounds={x:number;y:number;w:number;h:number};
+function paintBody(g:CanvasRenderingContext2D,W:number,H:number,cfg:WatermarkConfig,template:WatermarkTemplate,codeOverride:string|undefined):StampBounds{
  const date=dateParts(cfg);
- const fontSize=clamp(Math.round(Math.min(W,H)/390*Math.max(10,cfg.fontSizePx)),10,Math.min(58,W*.083));
- const lineH=Math.round(fontSize*1.34);
- const p=Math.max(5,Math.round(fontSize*.6));
- const outer=Math.max(6,Math.round(Math.min(W,H)*.025));
+ // Relative sizing shared by raster sizes. Reserve height for the maximum rows.
+ const short=Math.min(W,H);
+ const fontSize=Math.max(1,Math.min(short*Math.max(10,Math.min(32,Number(cfg.fontSizePx)||13))/390,W*.075,H/12));
+ const lineH=fontSize*1.52,p=fontSize*.72,outer=short*.025;
  const accent=cfg.accentColor||template.accentHex||'#E2B74B';
  const white=cfg.textColor||'#F8FAFC';
- const code=cfg.showPhotoCode?`${cfg.photoCodePrefix}-${String(cfg.photoCodeSeq).padStart(4,'0')}`:'';
- const serial=cfg.showPhotoCode?(codeOverride||code):'';
+ const serial=cfg.showPhotoCode?(codeOverride||`${cfg.photoCodePrefix}-${String(cfg.photoCodeSeq).padStart(4,'0')}`):'';
  const loc=cfg.locationSource==='none'?'':cfg.locationText;
- const meta=[cfg.showCoordinates?cfg.coordinates:'',cfg.inspectorName].filter(Boolean).join(' · ');
+ const meta=[cfg.showCoordinates&&cfg.locationSource!=='none'?cfg.coordinates:'',cfg.inspectorName].filter(Boolean).join(' · ');
  const mode=template.surfaceMode;
  const family=watermarkFontFamily(cfg.fontKey);
- g.save();g.textBaseline='middle';g.lineJoin='round';g.shadowColor='rgba(0,0,0,.7)';g.shadowBlur=Math.max(1,fontSize*.12);
- const set=(size:number,weight:number,color:string)=>{g.font=`${weight} ${Math.round(size)}px ${family}`;g.fillStyle=color;};
+ const title=cfg.customTitle||template.name;
+ type Row={text:string;size:number;weight:number;color:string;essential?:boolean;right?:string;rightColor?:string;rightEssential?:boolean};
+ let rows:Row[]=[],w=0;
+ const make=(text:string,size:number,weight:number,color:string,essential=false):Row=>({text,size,weight,color,essential});
+ const detail=(text:string,color='#E2E8F0')=>make(text,.85,400,color);
  if(mode==='strip-footer'){
-   const lines=loc?3:2;
-   const h=(lines+1)*lineH+p*2;
-   // CSS preview uses full-width footer regardless of selected corner.
-   const y=H-h;
-   colorBackground(g,0,y,W,h,cfg.bgOpacity,0);
-   set(fontSize*.95,700,white);line(g,cfg.customTitle||template.name,outer+p,y+p+lineH*.65,W*.45);
-   set(fontSize*.93,700,accent);line(g,date.full,W-outer-p,y+p+lineH*.65,W*.49,'right');
-   set(fontSize*.85,400,'#E2E8F0');line(g,loc,outer+p,y+p+lineH*1.75,W-2*(outer+p));
-   if(serial){set(fontSize*.78,400,'#CBD5E1');line(g,serial,W-outer-p,H-p-lineH*.5,W*.55,'right');}
- } else if(mode==='led-digital'){
-   const w=Math.min(W-outer*2,Math.max(W*.39,fontSize*16));
-   const h=lineH*2.9+p*2;
-   const {x,y}=locate(cfg,W,H,w,h,outer);
-   colorBackground(g,x,y,w,h,cfg.bgOpacity,fontSize*.65);
-   set(fontSize*1.35,800,accent);line(g,date.time,x+p,y+p+lineH*.70,w-2*p);
-   set(fontSize*.89,500,white);line(g,date.date+(serial?' · '+serial:''),x+p,y+p+lineH*1.78,w-2*p);
-   set(fontSize*.75,400,'#CBD5E1');line(g,loc,x+p,y+p+lineH*2.6,w-2*p);
- } else if(mode==='minimal-text'){
-   const w=Math.min(W-outer*2,Math.max(W*.32,fontSize*23));
-   const h=lineH*(cfg.customNote?3:2)+p*1.2;
-   const {x,y}=locate(cfg,W,H,w,h,outer);
-   set(fontSize*1.06,700,accent);line(g,date.full,x+p,y+lineH*.64,w-2*p);
-   set(fontSize*.90,500,white);line(g,loc,x+p,y+lineH*1.68,w-2*p);
-   if(cfg.customNote){set(fontSize*.82,400,white);line(g,cfg.customNote,x+p,y+lineH*2.63,w-2*p);}
- } else if(mode==='stripe-gold'){
-   const w=Math.min(W-outer*2,Math.max(W*.43,fontSize*24));
-   const h=lineH*3.8+p*2;
-   const {x,y}=locate(cfg,W,H,w,h,outer);
-   colorBackground(g,x,y,w,h,cfg.bgOpacity,fontSize*.55);
-   g.shadowColor='transparent';g.fillStyle=accent;
-   g.beginPath();g.roundRect(x,y,w,lineH*1.20+p,[fontSize*.5,fontSize*.5,0,0]);g.fill();
-   set(fontSize*.94,750,'#071121');line(g,template.name,x+p,y+lineH*.8,w-(serial?Math.max(w*.34,p*3):p*2));
-   if(serial){set(fontSize*.73,600,'#071121');line(g,serial,x+w-p,y+lineH*.8,w*.40,'right');}
-   g.shadowColor='rgba(0,0,0,.7)';
-   set(fontSize,700,white);line(g,date.full,x+p,y+lineH*1.94,w-2*p);
-   set(fontSize*.85,400,'#E2E8F0');line(g,loc,x+p,y+lineH*2.85,w-2*p);
-   set(fontSize*.80,400,'#CBD5E1');line(g,[cfg.customTitle,cfg.inspectorName].filter(Boolean).join(' · '),x+p,y+lineH*3.65,w-2*p);
- } else {
-   // glass-dark and badge-card share the same layout as their CSS previews.
-   const w=Math.min(W-outer*2,Math.max(W*.41,fontSize*26));
-   const h=(meta?4.4:3.5)*lineH+p*2;
-   const {x,y}=locate(cfg,W,H,w,h,outer);
-   colorBackground(g,x,y,w,h,cfg.bgOpacity,fontSize*.7);
-   set(fontSize*.93,700,accent);line(g,cfg.customTitle||template.name,x+p,y+p+lineH*.60,w-2*p-(serial?w*.25:0));
-   if(serial){set(fontSize*.77,500,'#CBD5E1');line(g,serial,x+w-p,y+p+lineH*.60,w*.26,'right');}
-   set(fontSize*1.05,700,white);line(g,date.full,x+p,y+p+lineH*1.75,w-2*p);
-   set(fontSize*.85,400,'#E2E8F0');line(g,loc,x+p,y+p+lineH*2.78,w-2*p);
-   if(meta){set(fontSize*.78,400,'#CBD5E1');line(g,meta,x+p,y+p+lineH*3.8,w-2*p);}
+   w=W;rows=[{...make(title,.95,700,white),right:date.full,rightColor:accent,rightEssential:true},detail(loc),detail(serial,'#CBD5E1')];
+ }else if(mode==='led-digital'){
+   w=Math.min(W-2*outer,Math.max(W*.39,fontSize*16));
+   rows=[make(date.time,1.35,800,accent,true),make(date.date,.89,500,white,true),detail(serial,'#CBD5E1'),detail(loc)];
+ }else if(mode==='minimal-text'){
+   w=Math.min(W-2*outer,Math.max(W*.32,fontSize*23));
+   rows=[make(date.full,1.06,700,accent,true),make(loc,.90,500,white),make(cfg.customNote,.82,400,white)];
+ }else if(mode==='stripe-gold'){
+   w=Math.min(W-2*outer,Math.max(W*.43,fontSize*24));
+   rows=[{...make(template.name,.94,750,'#071121'),right:serial,rightColor:'#071121'},make(date.full,1,700,white,true),detail(loc),detail([cfg.customTitle,cfg.inspectorName].filter(Boolean).join(' · '),'#CBD5E1')];
+ }else{
+   w=Math.min(W-2*outer,Math.max(W*.41,fontSize*26));
+   rows=[{...make(title,.93,700,accent),right:serial,rightColor:'#CBD5E1'},make(date.full,1.05,700,white,true),detail(loc),detail(meta,'#CBD5E1')];
  }
+ rows=rows.filter(row=>row.text||row.right);
+ const h=rows.length*lineH+2*p;
+ const position=mode==='strip-footer'?{x:0,y:cfg.positionPreset==='custom'?clamp(H*cfg.customPos.yPct/100-h/2,0,H-h):H-h}:locate(cfg,W,H,w,h,outer);
+ const {x,y}=position;
+ const inset=mode==='strip-footer'?outer+p:p;
+ g.save();g.textBaseline='middle';g.lineJoin='round';
+ if(mode!=='minimal-text')colorBackground(g,x,y,w,h,cfg.bgOpacity,mode==='strip-footer'?0:fontSize*.55);
+ if(mode==='stripe-gold'){
+   g.shadowColor='transparent';g.fillStyle=accent;
+   const r=Math.min(fontSize*.5,w/3,(lineH+p)/3);
+   g.beginPath();g.roundRect(x,y,w,lineH+p,[r,r,0,0]);g.fill();
+ }
+ const usable=Math.max(0,w-2*inset);
+ rows.forEach((row,i)=>{
+   const cy=y+p+(i+.5)*lineH;
+   g.shadowColor=mode==='stripe-gold'&&i===0?'transparent':'rgba(0,0,0,.65)';
+   g.shadowBlur=fontSize*.09;
+   g.font=`${row.weight} ${fontSize*row.size}px ${family}`;g.fillStyle=row.color;
+   if(row.right){
+     // Two disjoint measured columns, with a gap even at the smallest size.
+     const gap=Math.min(usable*.08,fontSize*.8);
+     const rightWidth=row.rightEssential?Math.min(usable*.68,Math.max(usable*.45,g.measureText(row.right).width)):Math.min(usable*.42,g.measureText(row.right).width);
+     const leftWidth=Math.max(0,usable-gap-rightWidth);
+     line(g,row.text,x+inset,cy,leftWidth,'left',row.essential);
+     g.fillStyle=row.rightColor||row.color;
+     line(g,row.right,x+w-inset,cy,rightWidth,'right',row.rightEssential);
+   }else line(g,row.text,x+inset,cy,usable,'left',row.essential);
+ });
  g.restore();
+ return {x,y,w,h};
 }
 /** Independent/legacy templates need true encoded pixels, never a CSS-only stamp. */
 export function drawIndependentStamp(
  g:CanvasRenderingContext2D,width:number,height:number,cfg:WatermarkConfig,
  orientation:OrientationDeg=0,code?:string,logo?:HTMLImageElement|ImageBitmap,
-):void{
+):StampBounds|undefined{
  if(width<=0||height<=0)return;
  const tpl=WATERMARK_TEMPLATES.find(t=>t.id===cfg.templateId);
  if(!tpl||!isIndependentStamp(cfg.templateId))throw Error(`Không tìm thấy bộ kết xuất cho mẫu dấu: ${cfg.templateId}`);
@@ -134,7 +133,12 @@ export function drawIndependentStamp(
   W=height;H=width;
   g.translate(width/2,height/2);g.rotate(orientation*Math.PI/180);g.translate(-W/2,-H/2);
  }else if(orientation===180){g.translate(width,height);g.rotate(Math.PI);}
- paintBody(g,W,H,cfg,tpl,code);
+ const bounds=paintBody(g,W,H,cfg,tpl,code);
  drawWatermarkLogo(g,W,H,cfg,logo);
  g.restore();
+ const {x,y,w,h}=bounds;
+ if(orientation===90)return {x:width-y-h,y:x,w:h,h:w};
+ if(orientation===-90)return {x:y,y:height-x-w,w:h,h:w};
+ if(orientation===180)return {x:width-x-w,y:height-y-h,w,h};
+ return bounds;
 }

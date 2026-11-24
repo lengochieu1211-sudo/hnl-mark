@@ -63,10 +63,9 @@ export const WatermarkOverlay: React.FC<WatermarkOverlayProps> = ({
   if(config.templateId === 'timemark') return <OriginalTimemarkOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode}  referenceSize={referenceSize}/>;
   if(isSimpleStamp(config.templateId))return <SimpleStampOverlay config={config} orientationDeg={orientationDeg} referenceSize={referenceSize}/>;
   if(config.templateId === 'none') return null;
-  // All non-draggable previews use the same Canvas pixels as photo/video export.
-  // Keep the existing draggable DOM controls in the photo editor.
-  if(!draggable&&isIndependentStamp(config.templateId))
-    return <IndependentStampOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode} referenceSize={referenceSize}/>;
+  // All known independent templates share the export renderer, including editor drag.
+  if(isIndependentStamp(config.templateId))
+    return <IndependentStampOverlay config={config} orientationDeg={orientationDeg} photoCode={timemarkCode} referenceSize={referenceSize} onDragPositionChange={draggable?onDragPositionChange:undefined}/>;
 
   const template =
     WATERMARK_TEMPLATES.find((t) => t.id === config.templateId) ?? WATERMARK_TEMPLATES[10];
