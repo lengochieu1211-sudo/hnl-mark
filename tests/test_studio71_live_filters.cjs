@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
+const c=read('studio-ui/src/components/camera/CameraApkScreen.tsx'),v=read('studio-ui/src/services/stampedVideoCapture.ts'),app=read('studio-ui/src/App.tsx');
+assert.ok(c.includes('aria-label="Bộ lọc camera"')&&c.includes('PHOTO_FILTERS.map'));
+assert.ok(c.includes('edits:{...DEFAULT_IMAGE_EDITS,...cameraFilterEdits}'));
+assert.ok(c.includes('ctx.filter=`brightness(${exposureFactor})`;'));
+assert.ok(c.includes('filter:`brightness(${exposureFactor}) ${cameraColorFilter}`'));
+assert.ok(c.includes('aspectRatio,cameraColorFilter)'));
+assert.ok(v.indexOf('ctx.filter=')<v.indexOf('ctx.drawImage(video'));
+assert.ok(v.indexOf('ctx.restore();')<v.indexOf('drawConfiguredStamp(ctx'));
+assert.ok(app.includes('await storeMedia(newPhoto)')&&app.includes('newPhoto.edits'));
+console.log('PASS TEST71 live photo/video color: original photo preserved, preset metadata and video frame filter before stamp');

@@ -23,7 +23,8 @@ export async function createStampedVideoCapture(
  zoom:number,
  brightness:number,
  desiredFps:number,
- aspectMode:AspectRatioMode='full'
+ aspectMode:AspectRatioMode='full',
+ colorFilter='none'
 ):Promise<StampedCapture>{
  if(!isRenderableStamp(config.templateId))throw Error('Không tìm thấy bộ xuất video cho mẫu dấu này.');
  if(video.videoWidth<=0||video.videoHeight<=0||video.readyState<2)throw Error('Khung hình camera chưa sẵn sàng để ghi dấu.');
@@ -61,7 +62,7 @@ export async function createStampedVideoCapture(
   ctx.rotate(turn*Math.PI/180);
   if(lens==='front')ctx.scale(-1,1);
   const srcW=rawWidth/cropZoom,srcH=rawHeight/cropZoom;
-  ctx.filter=`brightness(${brightness})`;
+  ctx.filter=`brightness(${brightness})${colorFilter==='none'?'':' '+colorFilter}`;
   ctx.drawImage(video,(rawWidth-srcW)/2,(rawHeight-srcH)/2,srcW,srcH,
    -rawWidth/2,-rawHeight/2,rawWidth,rawHeight);
   ctx.restore();

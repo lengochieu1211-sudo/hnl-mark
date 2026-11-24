@@ -11,6 +11,7 @@ import {
   RotateCw,
   Share2,
   SlidersHorizontal,
+  Palette,
   X,
 } from 'lucide-react';
 import {
@@ -30,6 +31,7 @@ import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {PhotoPreview} from '../watermark/PhotoPreview';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
+import {PHOTO_FILTERS,photoFilterCss} from '../../services/smartErase';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
 import {captureStampCode} from '../../services/timemarkSerial';
 import {isRenderableStamp} from '../../services/stampRenderer';
@@ -105,6 +107,12 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [recordSeconds, setRecordSeconds] = useState<number>(0);
   const [showVideoQualityPopup, setShowVideoQualityPopup] = useState<boolean>(false);
   const [showPhotoQualityPopup, setShowPhotoQualityPopup] = useState(false);
+  const [showCameraFilters,setShowCameraFilters]=useState(false);
+  const cameraFilterId=watermarkConfig.cameraPhotoFilter||'original';
+  const cameraFilterStrength=watermarkConfig.cameraFilterStrength??100;
+  const cameraFilterEdits={photoFilter:cameraFilterId,filterStrength:cameraFilterStrength};
+  const cameraColorFilter=photoFilterCss({...DEFAULT_IMAGE_EDITS,...cameraFilterEdits});
+  const cameraFilterActive=cameraFilterId!=='original'&&cameraFilterStrength>0;
   const photoResolution:VideoResolution=watermarkConfig.photoResolution==='4K'||watermarkConfig.photoResolution==='720p'?watermarkConfig.photoResolution:'1080p';
   const photoJpegQuality=Number.isFinite(watermarkConfig.jpegQuality)?Math.min(100,Math.max(70,watermarkConfig.jpegQuality)):95;
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
@@ -285,7 +293,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   // Software metering is used only as a labeled fallback; it affects previews AND exports.
   const handlePreviewTap = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!previewRef.current || !liveRef.current) return;
-    if (showVideoQualityPopup || showPhotoQualityPopup) { setShowVideoQualityPopup(false); setShowPhotoQualityPopup(false); return; }
+    if (showVideoQualityPopup || showPhotoQualityPopup || showCameraFilters) { setShowVideoQualityPopup(false); setShowPhotoQualityPopup(false); setShowCameraFilters(false); return; }
     if(pinchStartDistRef.current)return;
     const rect=previewRef.current.getBoundingClientRect();
     const x=Math.min(.90,Math.max(.10,(e.clientX-rect.left)/rect.width));
@@ -358,7 +366,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     if(!cameraReady||!live||live.readyState<2){triggerTransientToast('Camera chưa sẵn sàng; kiểm tra quyền truy cập.');return;}
     if(mode==='photo'){
       if(photoCaptureLock.current)return;
-      photoCaptureLock.current=true;setIsPhotoCapturing(true);setShowPhotoQualityPopup(false);
+      photoCaptureLock.current=true;setIsPhotoCapturing(true);setShowPhotoQualityPopup(false);setShowCameraFilters(false);
       try{
       const count=burstMode?3:1;
       // No await here: capture the actual frame when the shutter was pressed.
@@ -393,7 +401,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             watermarkConfig.templateId,watermarkConfig.showPhotoCode,
             watermarkConfig.photoCodePrefix,watermarkConfig.photoCodeSeq+i,createTimemarkCode()),
           customNote:watermarkConfig.customNote,templateId:watermarkConfig.templateId,
-          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,photoCodeSeq:watermarkConfig.photoCodeSeq+i,dateTimeIso:at.toISOString(),autoTime:false,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS}};
+          orientationDeg:0, captureWatermark:mediaWatermarkConfig({...watermarkConfig,photoCodeSeq:watermarkConfig.photoCodeSeq+i,dateTimeIso:at.toISOString(),autoTime:false,locationText:shotAddress,coordinates:watermarkConfig.locationSource==='device'?(shotGps||''):watermarkConfig.coordinates},{location:shotAddress,coordinates:shotGps||''}),edits:{...DEFAULT_IMAGE_EDITS,...cameraFilterEdits}};
         await onCapturePhoto(item);
         setPreviewCode(createTimemarkCode());
         if(i<count-1)await new Promise(resolve=>window.setTimeout(resolve,230));
@@ -438,7 +446,8 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       const stampConfig={...watermarkConfig};
       const capture=await createStampedVideoCapture(live,stampConfig,
         ()=>autoStampOrientationRef.current,()=>physicalPhotoAngleRef.current,
-        photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps,aspectRatio);
+        photoCode,lens,zoomLevel,exposureFactor,videoSettings.fps,aspectRatio,cameraColorFilter);
+       setShowCameraFilters(false);
       stampedCaptureRef.current=capture;
       const activeMicrophone=isLiveMicrophone(stream)?stream:audioStreamRef.current;
       const hasAudio=hasReadyMic;
@@ -681,9 +690,16 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             {aspectRatio === 'full' ? 'FULL' : aspectRatio}
           </button>
 
+          <button type="button" disabled={isPhotoCapturing||isRecording||isRecordingStarting||isFinalizing||!onChangeWatermarkConfig}
+            onClick={()=>{setShowPhotoQualityPopup(false);setShowVideoQualityPopup(false);setShowCameraFilters(p=>!p);}}
+            aria-label="Bộ lọc camera" title="Bộ lọc ảnh và video"
+            aria-pressed={showCameraFilters}
+            className={`min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full transition disabled:opacity-40 ${showCameraFilters?'bg-[#E2B74B] text-[#060B14]':cameraFilterActive?'text-[#E2B74B] bg-[#E2B74B]/12':'text-[#94A3B8] hover:bg-white/10'}`}>
+            <Palette className="w-[19px] h-[19px]" style={iconRotationStyle}/>
+          </button>
           {mode === 'photo' && (
             <button type="button" disabled={isPhotoCapturing||!onChangeWatermarkConfig}
-              onClick={()=>setShowPhotoQualityPopup(p=>!p)}
+              onClick={()=>{setShowCameraFilters(false);setShowPhotoQualityPopup(p=>!p);}}
               className={`min-w-[44px] min-h-[44px] px-2 flex items-center justify-center gap-1 rounded-full transition text-[11px] font-mono-tabular font-semibold ${showPhotoQualityPopup?'bg-[#E2B74B] text-[#060B14]':'bg-white/[0.08] text-[#E2B74B] hover:bg-white/15'}`}
               aria-label="Tùy chỉnh chất lượng ảnh" title="Độ phân giải và chất lượng JPEG">
               <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -694,7 +710,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             <button
               type="button"
               disabled={isRecording || isRecordingStarting || isFinalizing}
-               onClick={() => setShowVideoQualityPopup((p) => !p)}
+               onClick={() => {setShowCameraFilters(false);setShowVideoQualityPopup((p) => !p);}}
               className={`min-w-[44px] min-h-[44px] px-2 flex items-center justify-center gap-1 rounded-full transition text-[11px] font-mono-tabular font-semibold ${
                 showVideoQualityPopup
                   ? 'bg-[#E2B74B] text-[#060B14]'
@@ -709,6 +725,26 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           )}
         </div>
       </div>
+
+      {showCameraFilters && (
+        <section aria-label="Bộ lọc ảnh và video" className={`absolute z-40 w-[286px] max-w-[calc(100%-24px)] max-h-[calc(100%-24px)] overflow-y-auto rounded-2xl bg-[#0D1729]/95 backdrop-blur-xl border border-white/15 p-3 shadow-2xl space-y-3 ${isLandscapeViewport?'top-3 left-16':'top-14 right-3 max-h-[calc(100%-68px)]'}`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-white">Bộ lọc · {mode==='photo'?'Ảnh':'Video'}</span>
+            <button type="button" className="text-xs text-[#E2B74B] min-h-9 px-2" onClick={()=>setShowCameraFilters(false)}>Xong</button>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {PHOTO_FILTERS.map(p=><button key={p.id} type="button" aria-pressed={cameraFilterId===p.id}
+              onClick={()=>onChangeWatermarkConfig?.({cameraPhotoFilter:p.id,cameraFilterStrength:p.id==='original'?0:100})}
+              className={`min-h-9 px-1 rounded-lg text-[11px] font-medium ${cameraFilterId===p.id?'bg-[#E2B74B] text-[#060B14]':'bg-white/[0.06] text-white'}`}>{p.label}</button>)}
+          </div>
+          {cameraFilterId!=='original'&&<label className="block text-xs text-[#CBD5E1]">Cường độ · {cameraFilterStrength}%
+            <input type="range" min={0} max={100} step={1} value={cameraFilterStrength}
+              aria-label="Cường độ bộ lọc camera" onChange={e=>onChangeWatermarkConfig?.({cameraFilterStrength:Number(e.target.value)})}
+              className="block w-full mt-2 accent-[#E2B74B] h-2"/>
+          </label>}
+          <p className="text-[11px] text-[#94A3B8]">Xem màu trực tiếp. Ảnh gốc không đổi; video ghi màu đã chọn. Dấu giữ nguyên màu.</p>
+        </section>
+      )}
 
       {/* Photo settings mirror the video settings slot, not a new toolbar row. */}
       {mode==='photo' && showPhotoQualityPopup && (
@@ -866,7 +902,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {/* Live camera stream — never an illustrative/mock photo. */}
           <video ref={liveRef} autoPlay playsInline muted
             aria-label="Khung ngắm camera trực tiếp"
-            style={{transform:`scale(${zoomLevel}) ${lens==='front'?'scaleX(-1)':''}`,filter:`brightness(${exposureFactor})`,transition:'transform 110ms ease-out'}}
+            style={{transform:`scale(${zoomLevel}) ${lens==='front'?'scaleX(-1)':''}`,filter:`brightness(${exposureFactor}) ${cameraColorFilter}`,transition:'transform 110ms ease-out'}}
             className="w-full h-full object-cover select-none pointer-events-none" />
           {cameraReady && mode==='video' && isRecording && audioUnavailable && <div role="status" className="absolute top-14 left-3 z-20 max-w-[70%] rounded-md bg-[#7F1D1D]/90 px-2 py-1 text-left text-[11px] text-white pointer-events-none">Micro tắt · Video không tiếng</div>}
           {!cameraReady && <div className="absolute inset-0 z-10 flex flex-col gap-3 items-center justify-center p-6 bg-[#071121] text-center">
@@ -993,6 +1029,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
                 setMode('photo');
                 setShowVideoQualityPopup(false);
                 setShowPhotoQualityPopup(false);
+                setShowCameraFilters(false);
               }}
               className={`min-h-[34px] ${isLandscapeViewport ? 'w-full px-1' : 'px-3.5'} rounded-[10px] text-xs font-semibold tracking-wide transition ${
                 mode === 'photo'
@@ -1005,7 +1042,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             <button
               type="button"
               disabled={isRecording || isRecordingStarting || isFinalizing}
-              onClick={() => {if(!isRecording){setShowPhotoQualityPopup(false);setMode('video');}}}
+              onClick={() => {if(!isRecording){setShowPhotoQualityPopup(false);setShowCameraFilters(false);setMode('video');}}}
               className={`min-h-[34px] ${isLandscapeViewport ? 'w-full px-1' : 'px-3.5'} rounded-[10px] text-xs font-semibold tracking-wide transition ${
                 mode === 'video'
                   ? 'bg-[#E2B74B] text-[#060B14]'
