@@ -7,7 +7,8 @@ preview=read('studio-ui/src/components/watermark/PhotoPreview.tsx')
 editor=read('studio-ui/src/components/editor/ImageEditorScreen.tsx')
 assert "media.rawBlob||await(await fetch(media.url)).blob()" in preview
 assert 'createEditorPreview(source,processingEdits,false,compact?480:1440)' in preview
-assert 'filter:`brightness(${edits.brightness??100}%)' in preview
+assert 'filter:photoFilterCss(edits)' in preview
+assert 'photoFilterCss(edits)' in editor
 assert 'mediaWatermarkConfig({...config,...media.captureWatermark,...media.watermarkOverride},media)' in preview
 assert 'fittedW' in preview and 'fittedH' in preview
 assert 'structureKey=JSON.stringify' in editor

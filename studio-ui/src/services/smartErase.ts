@@ -8,6 +8,8 @@ const clamp=(v:number,lo:number,hi:number)=>Math.min(hi,Math.max(lo,v));
 // Identical CSS filter string for editor, gallery preview and export canvas.
 export const PHOTO_FILTERS=[
  {id:'original',label:'Gốc',b:100,c:100,s:100,sepia:0,hue:0,gray:0},
+ // HNL original approximation of a vivid/high-contrast style; not the B612 LUT.
+ {id:'hnl-vd3',label:'HNL VD3',b:104,c:123,s:125,sepia:0,hue:0,gray:0},
  {id:'site',label:'Công trình',b:105,c:118,s:102,sepia:0,hue:0,gray:0},
  {id:'natural',label:'Tự nhiên',b:103,c:104,s:104,sepia:0,hue:0,gray:0},
  {id:'clear',label:'Trong trẻo',b:112,c:104,s:92,sepia:0,hue:0,gray:0},
