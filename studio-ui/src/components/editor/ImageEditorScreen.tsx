@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { CropRatio, ImageEdits, MediaItem, WatermarkConfig, SmartEraseDirection } from '../../types/hnl';
-import {createEditorPreview,clampSmartRect} from '../../services/smartErase';
+import {createEditorPreview,clampSmartRect,PHOTO_FILTERS,photoFilterCss} from '../../services/smartErase';
 import { DEFAULT_IMAGE_EDITS } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {editedRasterSize} from '../../services/stampPreviewGeometry';
@@ -91,7 +91,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
     const timer=window.setTimeout(async()=>{
       try{
         const source=media.rawBlob || await(await fetch(media.url)).blob();
-        const structuralEdits={...edits,brightness:100,contrast:100,saturation:100};
+        const structuralEdits={...edits,brightness:100,contrast:100,saturation:100,photoFilter:'original',filterStrength:0};
         const normal=await createEditorPreview(source,structuralEdits,false);
         const erased=await createEditorPreview(source,structuralEdits,true);
         if(disposed)return;
@@ -268,7 +268,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
                 onLoad={e=>{const w=e.currentTarget.naturalWidth||4,h=e.currentTarget.naturalHeight||3;
                  setImageSize(old=>old.w===w&&old.h===h?old:{w,h});}}
                 referrerPolicy="no-referrer"
-                style={{filter:activeTab==='erase'?'none':`brightness(${edits.brightness??100}%) contrast(${edits.contrast??100}%) saturate(${edits.saturation??100}%)`}}
+                style={{filter:activeTab==='erase'?'none':photoFilterCss(edits)}}
                 className="w-full h-full pointer-events-none" draggable={false}/>
               {activeTab!=='erase'&&<WatermarkOverlay
                 config={watermarkConfig}
@@ -438,6 +438,25 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
         </div>
       ) : (
         <div className="space-y-3 rounded-2xl bg-[#111C30] border border-white/[0.08] p-3.5">
+          {media.kind==='photo'&&<section className="space-y-2" aria-label="Bộ lọc màu ảnh">
+            <div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#F8FAFC]">Bộ lọc màu</span><span className="text-xs text-[#E2B74B]">{PHOTO_FILTERS.find(p=>p.id===(edits.photoFilter||'original'))?.label||'Gốc'}</span></div>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {PHOTO_FILTERS.map(p=><button key={p.id} type="button" aria-pressed={(edits.photoFilter||'original')===p.id}
+                onClick={()=>commitEdits({photoFilter:p.id,filterStrength:p.id==='original'?0:100})}
+                className={`shrink-0 w-[64px] rounded-lg p-1 border text-[11px] ${(edits.photoFilter||'original')===p.id?'border-[#E2B74B] text-[#E2B74B]':'border-white/10 text-[#CBD5E1]'}`}>
+                <img src={previewUrl||media.url} alt="" loading="lazy" draggable={false}
+                  className="w-full h-[56px] object-cover rounded-md"
+                  style={{filter:photoFilterCss({brightness:100,contrast:100,saturation:100,photoFilter:p.id,filterStrength:100})}}/>
+                <span className="block mt-1 whitespace-nowrap">{p.label}</span>
+              </button>)}
+            </div>
+            {(edits.photoFilter||'original')!=='original'&&<label className="block text-xs text-[#CBD5E1]">Cường độ bộ lọc · {edits.filterStrength??100}%
+              <input type="range" min={0} max={100} step={1} value={edits.filterStrength??100}
+                aria-label="Cường độ bộ lọc" onChange={e=>commitEdits({filterStrength:Number(e.target.value)})}
+                className="block w-full mt-2 accent-[#E2B74B] h-2"/>
+            </label>}
+            <p className="text-[11px] text-[#94A3B8]">Chỉ đổi màu ảnh; giữ ảnh gốc và màu dấu. Có thể chọn Gốc để bỏ bộ lọc.</p>
+          </section>}
           {[
             { key: 'brightness' as const, label: 'Độ sáng', min: 50, max: 150, val: edits.brightness },
             { key: 'contrast' as const, label: 'Tương phản', min: 50, max: 150, val: edits.contrast },

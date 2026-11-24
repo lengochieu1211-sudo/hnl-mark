@@ -122,3 +122,4 @@ jobs:
           node tests/test_studio69_multi_outer_safety.cjs
           node tests/test_studio70_app_build_info.cjs
           node tests/test_studio71_photo_quality.cjs
+          node --experimental-strip-types tests/test_studio71_photo_filters.mjs

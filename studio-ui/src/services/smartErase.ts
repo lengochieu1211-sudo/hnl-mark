@@ -4,6 +4,30 @@
 import type {ImageEdits,SmartEraseOperation,SmartEraseDirection} from '../types/hnl';
 
 const clamp=(v:number,lo:number,hi:number)=>Math.min(hi,Math.max(lo,v));
+// Original HNL presets; no third-party LUTs or network dependencies.
+// Identical CSS filter string for editor, gallery preview and export canvas.
+export const PHOTO_FILTERS=[
+ {id:'original',label:'Gốc',b:100,c:100,s:100,sepia:0,hue:0,gray:0},
+ {id:'site',label:'Công trình',b:105,c:118,s:102,sepia:0,hue:0,gray:0},
+ {id:'natural',label:'Tự nhiên',b:103,c:104,s:104,sepia:0,hue:0,gray:0},
+ {id:'clear',label:'Trong trẻo',b:112,c:104,s:92,sepia:0,hue:0,gray:0},
+ {id:'vivid',label:'Rực rỡ',b:104,c:110,s:145,sepia:0,hue:0,gray:0},
+ {id:'warm',label:'Ấm áp',b:104,c:105,s:112,sepia:24,hue:-8,gray:0},
+ {id:'cool',label:'Mát lạnh',b:104,c:107,s:104,sepia:12,hue:32,gray:0},
+ {id:'portrait',label:'Chân dung',b:108,c:92,s:92,sepia:8,hue:0,gray:0},
+ {id:'vintage',label:'Vintage',b:101,c:90,s:75,sepia:40,hue:-8,gray:0},
+ {id:'cinema',label:'Điện ảnh',b:93,c:122,s:78,sepia:12,hue:18,gray:0},
+ {id:'mono',label:'Đen trắng',b:102,c:116,s:100,sepia:0,hue:0,gray:100},
+ {id:'sepia',label:'Sepia',b:104,c:104,s:100,sepia:100,hue:0,gray:0},
+] as const;
+export function photoFilterCss(edits:Pick<ImageEdits,'brightness'|'contrast'|'saturation'|'photoFilter'|'filterStrength'>):string{
+ const p=PHOTO_FILTERS.find(x=>x.id===edits.photoFilter)||PHOTO_FILTERS[0];
+ const n=(v:number|undefined,d:number,lo:number,hi:number)=>Number.isFinite(v)?clamp(v as number,lo,hi):d;
+ const k=n(edits.filterStrength,100,0,100)/100;
+ const b=n(edits.brightness,100,50,150),c=n(edits.contrast,100,50,150),sat=n(edits.saturation,100,0,180);
+ if(k===0||p.id==='original')return `brightness(${b}%) contrast(${c}%) saturate(${sat}%)`;
+ return `brightness(${b*(1+(p.b-100)*k/100)}%) contrast(${c*(1+(p.c-100)*k/100)}%) saturate(${sat*(1+(p.s-100)*k/100)}%) sepia(${p.sepia*k}%) hue-rotate(${p.hue*k}deg) grayscale(${p.gray*k}%)`;
+}
 export function clampSmartRect(r:SmartEraseOperation['rect']){
  const x=clamp(Number(r.x)||0,0,.999),y=clamp(Number(r.y)||0,0,.999);
  return {x,y,w:clamp(Number(r.w)||0,0,1-x),h:clamp(Number(r.h)||0,0,1-y)};
@@ -83,10 +107,10 @@ function sourceBitmap(bitmap:ImageBitmap,edits:ImageEdits,maxEdge:number,onlyEra
   g.drawImage(canvas,-canvas.width/2,-canvas.height/2);
   canvas=next;
  }
- const brightness=edits.brightness??100,contrast=edits.contrast??100,saturation=edits.saturation??100;
- if(brightness!==100||contrast!==100||saturation!==100){
+ const filter=photoFilterCss(edits);
+ if(filter!=='brightness(100%) contrast(100%) saturate(100%)'){
   const next=blankCanvas(canvas.width,canvas.height);const g=next.getContext('2d');if(!g)throw Error('Không áp dụng được màu.');
-  g.filter=`brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%)`;
+  g.filter=filter;
   g.drawImage(canvas,0,0);canvas=next;
  }
  return canvas;

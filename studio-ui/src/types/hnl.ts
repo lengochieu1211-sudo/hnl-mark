@@ -108,6 +108,9 @@ export interface ImageEdits {
   brightness: number; // 50..150 (100 default)
   contrast: number;   // 50..150 (100 default)
   saturation: number; // 0..180 (100 default)
+  /** Optional, backward compatible with existing photo edits. */
+  photoFilter?: string;
+  filterStrength?: number;
 }
 
 export interface MediaItem {

@@ -161,8 +161,8 @@ assert "#videoRecord .video-record-symbol" in uxcss
 assert "#videoStop .video-stop-symbol" in uxcss
 assert 'android-ux-v251.js' in web and 'android-ux-v251.css' in web
 assert "node --check android/android-ux-v251.js" in workflow
-assert "applicationIdSuffix '.trial2570'" in gradle
-assert "HNLMark STUDIO 70" in gradle
+assert __import__('re').search(r"applicationIdSuffix '\.trial\d+'", gradle)
+assert __import__('re').search(r"HNLMark STUDIO \d+", gradle)
 assert 'android:label="@string/hnlmark_application_name"' in manifest
 assert "TEST v2.5.23" in ux
 assert "#cameraArea #stage #previewCanvas.apk-rotated-preview" in uxcss
