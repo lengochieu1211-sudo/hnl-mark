@@ -7,7 +7,7 @@ import {mediaStampCode} from '../../services/timemarkSerial';
  */
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import type {MediaItem,WatermarkConfig} from '../../types/hnl';
-import {createEditorPreview,photoFilterCss} from '../../services/smartErase';
+import {createEditorPreview,photoFilterCss,resolvePhotoEnhance,hasPhotoEnhance,photoEnhanceKey} from '../../services/smartErase';
 import {mediaWatermarkConfig} from '../../services/watermarkLocation';
 import {WatermarkOverlay} from './WatermarkOverlay';
 import {editedRasterSize,type StampReferenceSize} from '../../services/stampPreviewGeometry';
@@ -24,12 +24,12 @@ export const PhotoPreview:React.FC<{
  const [failure,setFailure]=useState('');
  const [retry,setRetry]=useState(0);
  const edits=media.edits;
- const structural=JSON.stringify([media.id,edits.smartErase||[],edits.cropRatio,edits.rotationDeg,edits.flipHorizontal]);
+ const structural=JSON.stringify([media.id,edits.smartErase||[],edits.cropRatio,edits.rotationDeg,edits.flipHorizontal,photoEnhanceKey(edits)]);
  const key=structural;
  const needsProcessing=!!((edits.smartErase||[]).length || (edits.cropRatio&&edits.cropRatio!=='free') ||
-   ((edits.rotationDeg||0)%360) || edits.flipHorizontal);
+   ((edits.rotationDeg||0)%360) || edits.flipHorizontal || hasPhotoEnhance(edits));
  // Color sliders never trigger a canvas encode or object-URL replacement.
- const processingEdits=useMemo(()=>({...edits,brightness:100,contrast:100,saturation:100,photoFilter:'original',filterStrength:0}),[structural]);
+ const processingEdits=useMemo(()=>({...edits,brightness:100,contrast:100,saturation:100,photoFilter:'original',filterStrength:0,enhance:resolvePhotoEnhance(edits)}),[structural]);
  const [originalSize,setOriginalSize]=useState<StampReferenceSize|null>(null);
  useEffect(()=>{
   if(!needsProcessing||!media.rawBlob){setOriginalSize(null);return;}

@@ -3,8 +3,8 @@ import {readFileSync} from 'node:fs';
 import {PHOTO_FILTERS,photoFilterCss} from '../studio-ui/src/services/smartErase.ts';
 const neutral={brightness:100,contrast:100,saturation:100};
 const baseline=photoFilterCss(neutral);
-assert.equal(PHOTO_FILTERS.length,13);
-assert.equal(new Set(PHOTO_FILTERS.map(x=>x.id)).size,13);
+assert.equal(PHOTO_FILTERS.length,25);
+assert.equal(new Set(PHOTO_FILTERS.map(x=>x.id)).size,25);
 for(const p of PHOTO_FILTERS){
  assert.equal(photoFilterCss({...neutral,photoFilter:p.id,filterStrength:0}),baseline);
  if(p.id!=='original')assert.notEqual(photoFilterCss({...neutral,photoFilter:p.id,filterStrength:100}),baseline);
@@ -18,4 +18,4 @@ assert.ok(editor.includes("photoFilter:'original',filterStrength:0")&&preview.in
 assert.ok(render.indexOf('createEditedCanvas(bitmap,edits)')<render.lastIndexOf('drawOriginalTimemark('));
 assert.equal(PHOTO_FILTERS[1].id,'hnl-vd3');
 assert.match(photoFilterCss({...neutral,photoFilter:'hnl-vd3',filterStrength:100}),/contrast\(123%\).*saturate\(125%\)/);
-console.log('PASS: 13 offline photo presets, intensity, legacy fallback, preview/export wiring');
+console.log('PASS: 25 offline photo presets, intensity, legacy fallback, preview/export wiring');

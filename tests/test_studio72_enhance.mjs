@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {PHOTO_FILTERS,resolvePhotoEnhance,hasPhotoEnhance,enhanceRows} from '../studio-ui/src/services/smartErase.ts';
+assert.equal(PHOTO_FILTERS.length,25);
+assert.equal(hasPhotoEnhance({photoFilter:'original'}),false);
+assert.equal(hasPhotoEnhance({photoFilter:'skin-soft',filterStrength:0}),false);
+assert.equal(resolvePhotoEnhance({photoFilter:'skin-soft',filterStrength:50}).skinSmooth,22.5);
+assert.equal(resolvePhotoEnhance({photoFilter:'night-hd',enhance:{denoise:0}}).denoise,0);
+const w=5,h=5,src=new Uint8ClampedArray(w*h*4);
+for(let i=0;i<src.length;i+=4){src.set([120,120,120,255],i);}
+src.set([135,135,135,255],48);
+const saved=src.slice(),out=new Uint8ClampedArray(src.length);
+enhanceRows(src,w,h,0,h,out,resolvePhotoEnhance({enhance:{denoise:100}}));
+assert.ok(out[48]<135&&out[48]>120);
+assert.deepEqual(src,saved);assert.equal(out[51],255);
+const skin=new Uint8ClampedArray([180,135,110,255,50,150,220,255]),lit=new Uint8ClampedArray(8);
+enhanceRows(skin,2,1,0,1,lit,resolvePhotoEnhance({enhance:{skinBright:100}}));
+assert.ok(lit[0]>skin[0]);assert.equal(lit[4],skin[4]);
+const dark=new Uint8ClampedArray([30,30,30,255,245,245,245,255]),bright=new Uint8ClampedArray(8);
+enhanceRows(dark,2,1,0,1,bright,resolvePhotoEnhance({enhance:{shadows:100}}));
+assert.ok(bright[0]>30&&bright[4]-245<bright[0]-30);
+console.log('PASS TEST72: 25 presets, immutable pixels, denoise, chroma mask, shadow lift, intensity and legacy default');

@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { CropRatio, ImageEdits, MediaItem, WatermarkConfig, SmartEraseDirection } from '../../types/hnl';
-import {createEditorPreview,clampSmartRect,PHOTO_FILTERS,photoFilterCss} from '../../services/smartErase';
+import {createEditorPreview,clampSmartRect,PHOTO_FILTERS,photoFilterCss,HD_CONTROLS,resolvePhotoEnhance,photoEnhanceKey} from '../../services/smartErase';
 import { DEFAULT_IMAGE_EDITS } from '../../data/mockMedia';
 import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {editedRasterSize} from '../../services/stampPreviewGeometry';
@@ -70,7 +70,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
 
   const edits = media.edits;
   // Recreate bitmap only when a geometric/erase operation changes, never on color slider ticks.
-  const structureKey=JSON.stringify([media.id,edits.smartErase||[],edits.cropRatio,edits.rotationDeg,edits.flipHorizontal]);
+  const structureKey=JSON.stringify([media.id,edits.smartErase||[],edits.cropRatio,edits.rotationDeg,edits.flipHorizontal,photoEnhanceKey(edits)]);
   // Use the source raster (and the exact crop/rotation output dimensions) just
   // like PhotoPreview and JPEG export. CSS preview pixels must not resize Timemark.
   useEffect(()=>{
@@ -92,7 +92,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
     const timer=window.setTimeout(async()=>{
       try{
         const source=media.rawBlob || await(await fetch(media.url)).blob();
-        const structuralEdits={...edits,brightness:100,contrast:100,saturation:100,photoFilter:'original',filterStrength:0};
+        const structuralEdits={...edits,brightness:100,contrast:100,saturation:100,photoFilter:'original',filterStrength:0,enhance:resolvePhotoEnhance(edits)};
         const normal=await createEditorPreview(source,structuralEdits,false);
         const erased=await createEditorPreview(source,structuralEdits,true);
         if(disposed)return;
@@ -443,7 +443,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
             <div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#F8FAFC]">Bộ lọc màu</span><span className="text-xs text-[#E2B74B]">{PHOTO_FILTERS.find(p=>p.id===(edits.photoFilter||'original'))?.label||'Gốc'}</span></div>
             <div className="flex gap-2 overflow-x-auto pb-2">
               {PHOTO_FILTERS.map(p=><button key={p.id} type="button" aria-pressed={(edits.photoFilter||'original')===p.id}
-                onClick={()=>commitEdits({photoFilter:p.id,filterStrength:p.id==='original'?0:100})}
+                onClick={()=>commitEdits({photoFilter:p.id,filterStrength:p.id==='original'?0:100,enhance:undefined})}
                 className={`shrink-0 w-[64px] rounded-lg p-1 border text-[11px] ${(edits.photoFilter||'original')===p.id?'border-[#E2B74B] text-[#E2B74B]':'border-white/10 text-[#CBD5E1]'}`}>
                 <img src={previewUrl||media.url} alt="" loading="lazy" draggable={false}
                   className="w-full h-[56px] object-cover rounded-md"
@@ -456,7 +456,13 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
                 aria-label="Cường độ bộ lọc" onChange={e=>commitEdits({filterStrength:Number(e.target.value)})}
                 className="block w-full mt-2 accent-[#E2B74B] h-2"/>
             </label>}
-            <p className="text-[11px] text-[#94A3B8]">Chỉ đổi màu ảnh; giữ ảnh gốc và màu dấu. Có thể chọn Gốc để bỏ bộ lọc.</p>
+            <details className="rounded-lg border border-white/10 p-2 space-y-2"><summary className="text-xs font-semibold text-[#E2B74B] cursor-pointer">Làm đẹp &amp; HD</summary>
+              {HD_CONTROLS.map(([key,label])=><label key={key} className="block text-xs text-[#CBD5E1]">{label} · {Math.round(resolvePhotoEnhance(edits)[key])}%
+                <input type="range" min={0} max={100} value={resolvePhotoEnhance(edits)[key]} aria-label={label} onChange={ev=>commitEdits({enhance:{...edits.enhance,[key]:Number(ev.target.value)}})} className="block w-full accent-[#E2B74B]"/>
+              </label>)}
+              <button type="button" className="text-xs text-[#E2B74B]" onClick={()=>commitEdits({enhance:Object.fromEntries(HD_CONTROLS.map(([key])=>[key,0]))})}>Tắt hiệu ứng HD</button>
+              <p className="text-[11px] text-[#94A3B8]">Xử lý vùng màu da gần đúng, giữ ảnh gốc và dấu. Không tái tạo chi tiết đã mất.</p>
+            </details>
           </section>}
           {[
             { key: 'brightness' as const, label: 'Độ sáng', min: 50, max: 150, val: edits.brightness },

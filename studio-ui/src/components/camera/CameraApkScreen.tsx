@@ -31,7 +31,7 @@ import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {PhotoPreview} from '../watermark/PhotoPreview';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
-import {PHOTO_FILTERS,photoFilterCss} from '../../services/smartErase';
+import {PHOTO_FILTERS,photoFilterCss,HD_CONTROLS,resolvePhotoEnhance} from '../../services/smartErase';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
 import {captureStampCode} from '../../services/timemarkSerial';
 import {isRenderableStamp} from '../../services/stampRenderer';
@@ -111,7 +111,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [filterThumbnail,setFilterThumbnail]=useState('');
   const cameraFilterId=watermarkConfig.cameraPhotoFilter||'original';
   const cameraFilterStrength=watermarkConfig.cameraFilterStrength??100;
-  const cameraFilterEdits={photoFilter:cameraFilterId,filterStrength:cameraFilterStrength};
+  const cameraFilterEdits={photoFilter:cameraFilterId,filterStrength:cameraFilterStrength,enhance:watermarkConfig.cameraEnhance};
   const cameraColorFilter=photoFilterCss({...DEFAULT_IMAGE_EDITS,...cameraFilterEdits});
   const cameraFilterActive=cameraFilterId!=='original'&&cameraFilterStrength>0;
   const photoResolution:VideoResolution=watermarkConfig.photoResolution==='4K'||watermarkConfig.photoResolution==='720p'?watermarkConfig.photoResolution:'1080p';
@@ -755,7 +755,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           </div>
           <div className="flex gap-1.5 overflow-x-auto pb-1 overscroll-x-contain">
             {PHOTO_FILTERS.map(p=><button key={p.id} type="button" aria-pressed={cameraFilterId===p.id}
-              onClick={()=>onChangeWatermarkConfig?.({cameraPhotoFilter:p.id,cameraFilterStrength:p.id==='original'?0:100})}
+              onClick={()=>onChangeWatermarkConfig?.({cameraPhotoFilter:p.id,cameraFilterStrength:p.id==='original'?0:100,cameraEnhance:{}})}
               className={`relative shrink-0 w-[65px] rounded-lg p-1 border text-[10px] font-medium ${cameraFilterId===p.id?'border-[#E2B74B] text-[#E2B74B]':'border-white/10 text-white'}`}>
               {filterThumbnail?<img src={filterThumbnail} alt="" draggable={false} className="w-full h-11 rounded object-cover" style={{filter:photoFilterCss({...DEFAULT_IMAGE_EDITS,photoFilter:p.id,filterStrength:100})}}/>:<span className="flex h-11 items-center justify-center rounded bg-[#192844]"><Palette className="w-4 h-4"/></span>}
               {cameraFilterId===p.id&&<Check className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#E2B74B] text-[#060B14]"/>}
@@ -767,6 +767,11 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
               className="min-w-0 flex-1 accent-[#E2B74B] h-2"/>
             <span className="w-9 text-right text-[#E2B74B]">{cameraFilterStrength}%</span>
           </label>}
+          {mode==='photo'&&<details className="max-h-32 overflow-y-auto rounded border border-white/10 p-1.5"><summary className="text-xs text-[#E2B74B]">Làm đẹp &amp; HD khi lưu ảnh</summary>
+            {HD_CONTROLS.map(([key,label])=><label key={key} className="flex items-center gap-1 text-[10px]"><span className="w-20 shrink-0">{label}</span><input type="range" min={0} max={100} value={resolvePhotoEnhance(cameraFilterEdits)[key]} aria-label={label} onChange={ev=>onChangeWatermarkConfig?.({cameraEnhance:{...watermarkConfig.cameraEnhance,[key]:Number(ev.target.value)}})} className="min-w-0 flex-1 accent-[#E2B74B]"/><span>{Math.round(resolvePhotoEnhance(cameraFilterEdits)[key])}%</span></label>)}
+            <button type="button" className="text-xs text-[#E2B74B]" onClick={()=>onChangeWatermarkConfig?.({cameraEnhance:Object.fromEntries(HD_CONTROLS.map(([key])=>[key,0]))})}>Tắt HD</button>
+            <p className="text-[10px] text-[#94A3B8]">Camera xem trước màu; HD xử lý sau chụp. Video chỉ áp dụng màu.</p>
+          </details>}
           {!filterThumbnail&&<p className="text-[10px] text-[#94A3B8]">Ảnh mẫu hiện khi camera sẵn sàng.</p>}
         </section>
       )}

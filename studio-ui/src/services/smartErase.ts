@@ -21,6 +21,18 @@ export const PHOTO_FILTERS=[
  {id:'cinema',label:'Điện ảnh',b:93,c:122,s:78,sepia:12,hue:18,gray:0},
  {id:'mono',label:'Đen trắng',b:102,c:116,s:100,sepia:0,hue:0,gray:100},
  {id:'sepia',label:'Sepia',b:104,c:104,s:100,sepia:100,hue:0,gray:0},
+ {id:'skin-natural',label:'Da tự nhiên',b:104,c:98,s:101,sepia:0,hue:0,gray:0},
+ {id:'skin-bright',label:'Da sáng',b:108,c:96,s:98,sepia:0,hue:0,gray:0},
+ {id:'skin-soft',label:'Da mịn',b:105,c:97,s:98,sepia:0,hue:0,gray:0},
+ {id:'skin-clear',label:'Da trong',b:108,c:100,s:96,sepia:0,hue:-3,gray:0},
+ {id:'skin-peach',label:'Hồng đào',b:105,c:97,s:108,sepia:4,hue:-8,gray:0},
+ {id:'portrait-hd',label:'Chân dung HD',b:105,c:104,s:104,sepia:0,hue:0,gray:0},
+ {id:'outdoor-fresh',label:'Ngoài trời tươi',b:106,c:105,s:122,sepia:0,hue:0,gray:0},
+ {id:'nature-hd',label:'Thiên nhiên HD',b:105,c:108,s:116,sepia:0,hue:0,gray:0},
+ {id:'site-hd',label:'Công trình HD',b:105,c:109,s:103,sepia:0,hue:0,gray:0},
+ {id:'bright-detail',label:'Sáng rõ',b:107,c:98,s:105,sepia:0,hue:0,gray:0},
+ {id:'night-hd',label:'Đêm rõ nét',b:103,c:103,s:99,sepia:0,hue:0,gray:0},
+ {id:'video-natural',label:'Video tự nhiên',b:103,c:102,s:103,sepia:0,hue:0,gray:0},
 ] as const;
 export function photoFilterCss(edits:Pick<ImageEdits,'brightness'|'contrast'|'saturation'|'photoFilter'|'filterStrength'>):string{
  const p=PHOTO_FILTERS.find(x=>x.id===edits.photoFilter)||PHOTO_FILTERS[0];
@@ -29,6 +41,55 @@ export function photoFilterCss(edits:Pick<ImageEdits,'brightness'|'contrast'|'sa
  const b=n(edits.brightness,100,50,150),c=n(edits.contrast,100,50,150),sat=n(edits.saturation,100,0,180);
  if(k===0||p.id==='original')return `brightness(${b}%) contrast(${c}%) saturate(${sat}%)`;
  return `brightness(${b*(1+(p.b-100)*k/100)}%) contrast(${c*(1+(p.c-100)*k/100)}%) saturate(${sat*(1+(p.s-100)*k/100)}%) sepia(${p.sepia*k}%) hue-rotate(${p.hue*k}deg) grayscale(${p.gray*k}%)`;
+}
+export type PhotoEnhance={skinBright?:number;skinSmooth?:number;sharpness?:number;denoise?:number;clarity?:number;shadows?:number};
+export const HD_CONTROLS=[['skinBright','Sáng da'],['skinSmooth','Mịn da'],['sharpness','Độ nét'],['denoise','Giảm hạt'],['clarity','Độ trong'],['shadows','Sáng vùng tối']] as const;
+type HDKey=typeof HD_CONTROLS[number][0];
+const HD_PRESETS:Record<string,PhotoEnhance>={
+ 'skin-natural':{skinBright:18,skinSmooth:16,denoise:12},'skin-bright':{skinBright:38,skinSmooth:20,shadows:12},
+ 'skin-soft':{skinBright:12,skinSmooth:45,denoise:18},'skin-clear':{skinBright:25,skinSmooth:20,clarity:8},
+ 'skin-peach':{skinBright:18,skinSmooth:15},'portrait-hd':{skinSmooth:15,sharpness:25,denoise:14},
+ 'outdoor-fresh':{clarity:15,shadows:12},'nature-hd':{sharpness:25,clarity:18,denoise:10},
+ 'site-hd':{sharpness:28,clarity:20,denoise:12},'bright-detail':{shadows:40,denoise:18,sharpness:10},
+ 'night-hd':{shadows:25,denoise:55,sharpness:8}
+};
+export function resolvePhotoEnhance(edits:Pick<ImageEdits,'photoFilter'|'filterStrength'|'enhance'>):Required<PhotoEnhance>{
+ const p=HD_PRESETS[edits.photoFilter||'']||{},k=clamp(Number.isFinite(edits.filterStrength)?edits.filterStrength!:100,0,100)/100;
+ const val=(key:HDKey)=>clamp(Number.isFinite(edits.enhance?.[key])?edits.enhance![key]!:(p[key]||0)*k,0,100);
+ return {skinBright:val('skinBright'),skinSmooth:val('skinSmooth'),sharpness:val('sharpness'),denoise:val('denoise'),clarity:val('clarity'),shadows:val('shadows')};
+}
+export function hasPhotoEnhance(e:Pick<ImageEdits,'photoFilter'|'filterStrength'|'enhance'>){return Object.values(resolvePhotoEnhance(e)).some(v=>v>0);}
+export function photoEnhanceKey(e:Pick<ImageEdits,'photoFilter'|'filterStrength'|'enhance'>){return JSON.stringify(resolvePhotoEnhance(e));}
+/** Local edge-aware detail processing. No inferred/fabricated detail.
+ * Skin selection is an approximate chroma mask, not face recognition.
+ * Row chunks bound temporary allocation; the input pixel buffer is read-only. */
+export function enhanceRows(src:Uint8ClampedArray,w:number,h:number,y0:number,count:number,out:Uint8ClampedArray,e:Required<PhotoEnhance>){
+ const sb=e.skinBright/100,sm=e.skinSmooth/100,sh=e.sharpness/100,dn=e.denoise/100,cl=e.clarity/100,ss=e.shadows/100;
+ for(let y=y0;y<y0+count;y++)for(let x=0;x<w;x++){
+  const i=(y*w+x)*4,o=((y-y0)*w+x)*4,r=src[i],g=src[i+1],b=src[i+2],lum=.299*r+.587*g+.114*b;
+  const cb=128-.168736*r-.331264*g+.5*b,cr=128+.5*r-.418688*g-.081312*b;
+  const skin=clamp(Math.min((cb-75)/12,(137-cb)/12,(cr-130)/12,(183-cr)/12,(lum-25)/25,(245-lum)/20),0,1);
+  const left=x>0?i-4:i,right=x+1<w?i+4:i,up=y>0?i-w*4:i,down=y+1<h?i+w*4:i;
+  const weight=(j:number)=>{const diff=Math.max(Math.abs(src[j]-r),Math.abs(src[j+1]-g),Math.abs(src[j+2]-b));return Math.max(0,1-diff/36);};
+  const wl=weight(left),wr=weight(right),wu=weight(up),wd=weight(down),sum=2+wl+wr+wu+wd;
+  const smooth=Math.min(.78,.65*dn+.68*sm*skin);
+  const light=ss*35*Math.pow(1-lum/255,2)+sb*skin*22*Math.sin(Math.PI*lum/255);
+  for(let c=0;c<3;c++){
+    const v=src[i+c],avg=(2*v+wl*src[left+c]+wr*src[right+c]+wu*src[up+c]+wd*src[down+c])/sum;
+    const detail=v-avg;
+    // Do not amplify isolated low-amplitude noise after denoise.
+    const boost=Math.abs(detail)>3?clamp(detail,-18,18)*sh*.65*(1-dn*.65)*(1-sm*skin*.7):0;
+    const contrast=cl*8*((lum-128)/128)*Math.sin(Math.PI*lum/255);
+    out[o+c]=clamp(v+(avg-v)*smooth+boost+light+contrast,0,255);
+  }
+  out[o+3]=src[i+3];
+ }
+}
+function applyPhotoEnhance(canvas:HTMLCanvasElement,e:Required<PhotoEnhance>){
+ if(!Object.values(e).some(v=>v>0))return;
+ const g=canvas.getContext('2d',{willReadFrequently:true});if(!g)throw Error('Không tạo được bộ xử lý HD.');
+ const w=canvas.width,h=canvas.height,src=g.getImageData(0,0,w,h);
+ for(let y=0;y<h;y+=64){const rows=Math.min(64,h-y),out=g.createImageData(w,rows);enhanceRows(src.data,w,h,y,rows,out.data,e);g.putImageData(out,0,y);}
 }
 export function clampSmartRect(r:SmartEraseOperation['rect']){
  const x=clamp(Number(r.x)||0,0,.999),y=clamp(Number(r.y)||0,0,.999);
@@ -109,6 +170,7 @@ function sourceBitmap(bitmap:ImageBitmap,edits:ImageEdits,maxEdge:number,onlyEra
   g.drawImage(canvas,-canvas.width/2,-canvas.height/2);
   canvas=next;
  }
+ applyPhotoEnhance(canvas,resolvePhotoEnhance(edits));
  const filter=photoFilterCss(edits);
  if(filter!=='brightness(100%) contrast(100%) saturate(100%)'){
   const next=blankCanvas(canvas.width,canvas.height);const g=next.getContext('2d');if(!g)throw Error('Không áp dụng được màu.');

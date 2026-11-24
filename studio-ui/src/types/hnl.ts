@@ -88,6 +88,7 @@ export interface WatermarkConfig {
   photoResolution?: '720p' | '1080p' | '4K';
   cameraPhotoFilter?: string;
   cameraFilterStrength?: number;
+  cameraEnhance?: ImageEdits['enhance'];
 }
 
 export type MediaOrigin = 'saved-project' | 'newly-picked';
@@ -113,6 +114,7 @@ export interface ImageEdits {
   /** Optional, backward compatible with existing photo edits. */
   photoFilter?: string;
   filterStrength?: number;
+  enhance?: {skinBright?:number;skinSmooth?:number;sharpness?:number;denoise?:number;clarity?:number;shadows?:number};
 }
 
 export interface MediaItem {
