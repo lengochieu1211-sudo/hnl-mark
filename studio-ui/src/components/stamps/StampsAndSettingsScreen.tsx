@@ -21,6 +21,7 @@ import {normalizeWatermarkLogo,logoSrc} from '../../services/watermarkLogo';
 import { ImageEditorScreen } from '../editor/ImageEditorScreen';
 import {mediaWatermarkConfig,readDeviceGps,reverseDeviceGpsAddress} from '../../services/watermarkLocation';
 import {isAndroidApk,getSaveLocationLabel,chooseSaveLocation,clearSaveLocation} from '../../services/deviceBridge';
+import {hnlBuildInfo, hnlBuildTimeVi} from '../../services/buildInfo';
 
 interface StampsAndSettingsScreenProps {
   activeMedia: MediaItem;
@@ -771,6 +772,20 @@ export const StampsAndSettingsScreen: React.FC<StampsAndSettingsScreenProps> = (
           </AccordionSection>
         </div>
       )}
+      {/* Read-only app details. Does not touch camera, stamp, or offline data. */}
+      <details aria-label="Thông tin phiên bản ứng dụng" className="rounded-xl border border-white/[0.09] bg-[#0D1626] text-[12px] text-[#CBD5E1]">
+        <summary className="min-h-11 flex cursor-pointer select-none items-center justify-between gap-2 px-3 py-2 text-[#F8FAFC]">
+          <span className="font-semibold">Thông tin ứng dụng</span>
+          <span className="text-[#E2B74B]">v{hnlBuildInfo.version}</span>
+        </summary>
+        <div className="border-t border-white/10 px-3 py-2.5 space-y-1.5">
+          <p>Ứng dụng: HNL Mark {isAndroidApk() ? '(Android APK offline)' : '(Web)'}</p>
+          <p>Phiên bản: <strong className="text-white">{hnlBuildInfo.version}</strong></p>
+          <p>Ngày giờ tạo bản build: <strong className="text-white">{hnlBuildTimeVi(hnlBuildInfo.createdAtUtc)}</strong></p>
+          <p>Mã nguồn: <code className="text-[#E2B74B] break-all">{hnlBuildInfo.sourceSha.slice(0, 12)}</code></p>
+          <p className="text-[11px] text-[#94A3B8]">Đây là giờ đóng gói phần mềm, không phải ngày giờ chụp ảnh/video.</p>
+        </div>
+      </details>
     </div>
   );
 };
