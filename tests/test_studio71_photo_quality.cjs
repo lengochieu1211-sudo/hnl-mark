@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
+const c=read('studio-ui/src/components/camera/CameraApkScreen.tsx'),a=read('studio-ui/src/App.tsx'),g=read('android/app/build.gradle'),t=read('studio-ui/src/types/hnl.ts'),r=read('studio-ui/src/services/timemarkRenderer.ts');
+assert.ok(c.includes('Tùy chỉnh chất lượng ảnh')&&c.includes('Tùy chỉnh chất lượng video'));
+assert.ok(c.includes("mode==='photo' && showPhotoQualityPopup"));
+assert.ok(c.includes("mode==='photo'?{...videoSettings,resolution:photoResolution,fps:30}:videoSettings"));
+assert.ok(c.includes("mode==='photo'?photoResolution:videoSettings.resolution"));
+assert.ok(c.includes("'image/jpeg',photoJpegQuality/100")&&!c.includes("'image/jpeg',.95"));
+assert.ok(c.includes('onChangeWatermarkConfig?.({jpegQuality:q.value})')&&c.includes('onChangeWatermarkConfig?.({photoResolution:res})'));
+assert.ok(c.includes('setShowPhotoQualityPopup(false)')&&c.includes('photoCaptureLock.current'));
+assert.ok(t.includes("photoResolution?: '720p' | '1080p' | '4K'"));
+assert.ok(a.includes('onChangeWatermarkConfig={updateWatermarkConfig}')&&a.includes('await storeMedia(newPhoto)'));
+assert.ok(r.includes('config.jpegQuality/100'));
+assert.ok(g.includes(".trial2571")&&g.includes("HNLMark STUDIO 71")&&g.includes("applicationId 'vn.hnl.xaydung.hnlmark'"));
+console.log('PASS TEST71 photo quality source wiring, independent video config, burst capture, isolated APK');

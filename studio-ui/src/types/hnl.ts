@@ -84,6 +84,8 @@ export interface WatermarkConfig {
   perPhotoOverrideEnabled: boolean;
   defaultAspectRatio: AspectRatioMode;
   jpegQuality: number;
+  /** Requested photo camera resolution; independent from video settings. */
+  photoResolution?: '720p' | '1080p' | '4K';
 }
 
 export type MediaOrigin = 'saved-project' | 'newly-picked';

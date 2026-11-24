@@ -104,6 +104,9 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [isFinalizing, setIsFinalizing] = useState<boolean>(false);
   const [recordSeconds, setRecordSeconds] = useState<number>(0);
   const [showVideoQualityPopup, setShowVideoQualityPopup] = useState<boolean>(false);
+  const [showPhotoQualityPopup, setShowPhotoQualityPopup] = useState(false);
+  const photoResolution:VideoResolution=watermarkConfig.photoResolution==='4K'||watermarkConfig.photoResolution==='720p'?watermarkConfig.photoResolution:'1080p';
+  const photoJpegQuality=Number.isFinite(watermarkConfig.jpegQuality)?Math.min(100,Math.max(70,watermarkConfig.jpegQuality)):95;
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
     resolution: '1080p',
     fps: 30,
@@ -164,7 +167,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     const start=async()=>{
       try{
         if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera WebView không khả dụng trên thiết bị này.');
-        const video=cameraVideoConstraints(lens,videoSettings);
+        const video=cameraVideoConstraints(lens,mode==='photo'?{...videoSettings,resolution:photoResolution,fps:30}:videoSettings);
         // Open camera independently from the microphone. A failed Android audio source
         // must never take away the camera preview or make VIDEO mode a black screen.
         // VIDEO: ask Android for camera + microphone together, not two WebView
@@ -196,7 +199,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
       setAndroidCameraActive(false);
     };
     // Resolution change requires reopening camera; never modify a stream in use for recording.
-  },[lens,mode,videoSettings.resolution,videoSettings.fps,cameraRetryKey]);
+  },[lens,mode,mode==='photo'?photoResolution:videoSettings.resolution,mode==='photo'?30:videoSettings.fps,cameraRetryKey]);
 
 
   // GPS is prefetched ONLY when the user opted in. It must never delay the shutter.
@@ -282,7 +285,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   // Software metering is used only as a labeled fallback; it affects previews AND exports.
   const handlePreviewTap = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!previewRef.current || !liveRef.current) return;
-    if (showVideoQualityPopup) { setShowVideoQualityPopup(false); return; }
+    if (showVideoQualityPopup || showPhotoQualityPopup) { setShowVideoQualityPopup(false); setShowPhotoQualityPopup(false); return; }
     if(pinchStartDistRef.current)return;
     const rect=previewRef.current.getBoundingClientRect();
     const x=Math.min(.90,Math.max(.10,(e.clientX-rect.left)/rect.width));
@@ -355,7 +358,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
     if(!cameraReady||!live||live.readyState<2){triggerTransientToast('Camera chưa sẵn sàng; kiểm tra quyền truy cập.');return;}
     if(mode==='photo'){
       if(photoCaptureLock.current)return;
-      photoCaptureLock.current=true;setIsPhotoCapturing(true);
+      photoCaptureLock.current=true;setIsPhotoCapturing(true);setShowPhotoQualityPopup(false);
       try{
       const count=burstMode?3:1;
       // No await here: capture the actual frame when the shutter was pressed.
@@ -381,7 +384,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
         const quarter=isAndroidApk()?capturedPhotoTurn(canvas.width,canvas.height,
           physicalPhotoAngleRef.current,autoStampOrientationRef.current):0;
         const output=cropCapturedCanvas(orientCapturedCanvas(canvas,quarter),aspectRatio);
-        const blob=await new Promise<Blob>((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(Error('Không xuất được ảnh')),'image/jpeg',.95));
+        const blob=await new Promise<Blob>((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(Error('Không xuất được ảnh')),'image/jpeg',photoJpegQuality/100));
         const at=new Date();const item:MediaItem={id:`cam-${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}`,
           title:`Ảnh HNL ${at.toLocaleString('vi-VN')}`,kind:'photo',origin:'newly-picked',url:URL.createObjectURL(blob),rawBlob:blob,
           createdAt:at.toISOString(),resolutionLabel:`${output.width} × ${output.height}`,
@@ -678,6 +681,15 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             {aspectRatio === 'full' ? 'FULL' : aspectRatio}
           </button>
 
+          {mode === 'photo' && (
+            <button type="button" disabled={isPhotoCapturing||!onChangeWatermarkConfig}
+              onClick={()=>setShowPhotoQualityPopup(p=>!p)}
+              className={`min-w-[44px] min-h-[44px] px-2 flex items-center justify-center gap-1 rounded-full transition text-[11px] font-mono-tabular font-semibold ${showPhotoQualityPopup?'bg-[#E2B74B] text-[#060B14]':'bg-white/[0.08] text-[#E2B74B] hover:bg-white/15'}`}
+              aria-label="Tùy chỉnh chất lượng ảnh" title="Độ phân giải và chất lượng JPEG">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              {!isLandscapeViewport && <span>{photoResolution}</span>}
+            </button>
+          )}
           {mode === 'video' && (
             <button
               type="button"
@@ -697,6 +709,42 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           )}
         </div>
       </div>
+
+      {/* Photo settings mirror the video settings slot, not a new toolbar row. */}
+      {mode==='photo' && showPhotoQualityPopup && (
+        <div className={`absolute z-40 w-[260px] max-w-[calc(100%-24px)] max-h-[calc(100%-24px)] overflow-y-auto rounded-2xl bg-[#0D1729]/95 backdrop-blur-xl border border-white/15 p-3.5 shadow-2xl space-y-3 ${isLandscapeViewport?'top-3 left-16':'top-14 right-3 max-h-[calc(100%-68px)]'}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[13px] font-semibold text-[#F8FAFC]">Chất lượng ảnh</span>
+            <button type="button" onClick={()=>setShowPhotoQualityPopup(false)} className="text-xs text-[#94A3B8] hover:text-white px-1.5 py-0.5">Xong</button>
+          </div>
+          <div className="space-y-1.5">
+            <div className="text-[11px] text-[#94A3B8]">Độ phân giải yêu cầu</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['720p','1080p','4K'] as VideoResolution[]).map(res=>(
+                <button key={res} type="button" aria-pressed={photoResolution===res} disabled={isPhotoCapturing}
+                  onClick={()=>onChangeWatermarkConfig?.({photoResolution:res})}
+                  className={`min-h-[36px] rounded-lg text-xs font-mono-tabular font-medium transition ${photoResolution===res?'bg-[#E2B74B] text-[#060B14] font-semibold':'bg-white/[0.06] text-[#F8FAFC] hover:bg-white/10'}`}>{res}</button>
+              ))}
+            </div>
+            <p className="text-[11px] text-[#94A3B8]">Tùy khả năng camera; không phóng lớn ảnh để giả lập 4K.</p>
+            <p className="text-[11px] text-[#E2B74B]" role="status">Khung camera: {cameraReady&&liveRef.current?.videoWidth?liveRef.current.videoWidth+' × '+liveRef.current.videoHeight:'Đang kết nối'}</p>
+          </div>
+          <div className="space-y-1.5">
+            <div className="text-[11px] text-[#94A3B8]">Mức nén JPEG · {photoJpegQuality}%</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([{label:'Chuẩn',value:85},{label:'Cao',value:95},{label:'Tối đa',value:100}]).map(q=>(
+                <button key={q.value} type="button" aria-pressed={photoJpegQuality===q.value} disabled={isPhotoCapturing}
+                  onClick={()=>onChangeWatermarkConfig?.({jpegQuality:q.value})}
+                  className={`min-h-[36px] rounded-lg text-xs font-medium transition ${photoJpegQuality===q.value?'bg-[#E2B74B] text-[#060B14] font-semibold':'bg-white/[0.06] text-[#F8FAFC] hover:bg-white/10'}`}>{q.label}</button>
+              ))}
+            </div>
+            <input type="range" min={70} max={100} step={1} value={photoJpegQuality} aria-label="Chất lượng JPEG ảnh chụp"
+              disabled={isPhotoCapturing} onChange={e=>onChangeWatermarkConfig?.({jpegQuality:Number(e.target.value)})}
+              className="w-full accent-[#E2B74B] h-2" />
+            <p className="text-[11px] text-[#94A3B8]">Áp dụng cho ảnh chụp thường, liên tiếp và ảnh đóng dấu mới. Không đổi chất lượng video.</p>
+          </div>
+        </div>
+      )}
 
       {/* Video Quality Popup (Clean floating popover, zero frame clutter) */}
       {mode === 'video' && showVideoQualityPopup && (
@@ -944,6 +992,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
               onClick={() => {
                 setMode('photo');
                 setShowVideoQualityPopup(false);
+                setShowPhotoQualityPopup(false);
               }}
               className={`min-h-[34px] ${isLandscapeViewport ? 'w-full px-1' : 'px-3.5'} rounded-[10px] text-xs font-semibold tracking-wide transition ${
                 mode === 'photo'
@@ -956,7 +1005,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             <button
               type="button"
               disabled={isRecording || isRecordingStarting || isFinalizing}
-              onClick={() => {if(!isRecording)setMode('video');}}
+              onClick={() => {if(!isRecording){setShowPhotoQualityPopup(false);setMode('video');}}}
               className={`min-h-[34px] ${isLandscapeViewport ? 'w-full px-1' : 'px-3.5'} rounded-[10px] text-xs font-semibold tracking-wide transition ${
                 mode === 'video'
                   ? 'bg-[#E2B74B] text-[#060B14]'
