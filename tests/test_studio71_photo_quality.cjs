@@ -11,5 +11,5 @@ assert.ok(c.includes('setShowPhotoQualityPopup(false)')&&c.includes('photoCaptur
 assert.ok(t.includes("photoResolution?: '720p' | '1080p' | '4K'"));
 assert.ok(a.includes('onChangeWatermarkConfig={updateWatermarkConfig}')&&a.includes('await storeMedia(newPhoto)'));
 assert.ok(r.includes('config.jpegQuality/100'));
-assert.ok(g.includes(".trial2573")&&g.includes("HNLMark STUDIO 73")&&g.includes("applicationId 'vn.hnl.xaydung.hnlmark'"));
+assert.ok(g.includes(".trial2574")&&g.includes("HNLMark STUDIO 74")&&g.includes("applicationId 'vn.hnl.xaydung.hnlmark'"));
 console.log('PASS TEST71 photo quality source wiring, independent video config, burst capture, isolated APK');

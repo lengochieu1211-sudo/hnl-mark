@@ -57,3 +57,20 @@ for(const key of ['skinBright','skinSmooth','sharpness','denoise','clarity','sha
  referenceEnhanceRows(sample,19,17,0,17,a,e);enhanceRows(sample,19,17,0,17,b,e);assert.deepEqual(b,a,key);
 }
 console.log('PASS TEST73: exact TEST72 pixel parity for 25 presets at 3 strengths and all 6 controls');
+
+// TEST74: all six HD controls must feed live still preview, independently of export.
+const {readFileSync}=await import('node:fs');
+const camera=readFileSync(new URL('../studio-ui/src/components/camera/CameraApkScreen.tsx',import.meta.url),'utf8');
+const liveHD=readFileSync(new URL('../studio-ui/src/services/livePhotoEnhance.ts',import.meta.url),'utf8');
+assert.match(camera,/startLivePhotoEnhance\(live,canvas,JSON.parse\(cameraHDKey\),exposureFactor/);
+assert.match(camera,/mode!=='photo'\|\|!cameraHDActive\|\|isPhotoCapturing/);
+assert.match(camera,/cameraHDKey=photoEnhanceKey\(cameraFilterEdits\)/);
+assert.match(camera,/edits:\{\.\.\.DEFAULT_IMAGE_EDITS,\.\.\.cameraFilterEdits\}/);
+assert.match(liveHD,/LIVE_HD_MAX_EDGE=480/);assert.match(liveHD,/LIVE_HD_FRAME_MS=100/);
+assert.match(liveHD,/enhanceRows\(source.data,width,height,0,height,output.data,edits\)/);
+assert.match(liveHD,/window.clearTimeout\(timer\)/);
+const portrait=new Uint8ClampedArray([180,135,110,255,190,145,120,255,180,135,110,255]);
+const smooth=new Uint8ClampedArray(portrait.length);
+enhanceRows(portrait,3,1,0,1,smooth,resolvePhotoEnhance({enhance:{skinSmooth:100}}));
+assert.ok(smooth[4]<portrait[4]&&smooth[4]>portrait[0]);
+console.log('PASS TEST74: six HD controls wired to bounded live preview, skin smoothing fixture, unchanged still export');
