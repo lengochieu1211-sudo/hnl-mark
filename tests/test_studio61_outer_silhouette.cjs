@@ -53,5 +53,5 @@ const ui=fs.readFileSync(path.join(__dirname,'../studio-ui/src/components/scanne
 assert.ok(ui.includes("saveAutomaticScanIfUnedited(page.id,page.corners,null,page.corners"),'Clear stuck pending on failed scan without source rewrite');
 assert.ok(ui.includes('editing.autoProcessPending&&!scanDirtyDrafts.current.has(editing.id)'),'Do not claim pending during manual edits');
 const gradle=fs.readFileSync(path.join(__dirname,'../android/app/build.gradle'),'utf8');
-assert.match(gradle,/applicationIdSuffix '\.trial2572'/);assert.match(gradle,/HNLMark STUDIO 72/);
+assert.match(gradle,/applicationIdSuffix '\.trial2573'/);assert.match(gradle,/HNLMark STUDIO 73/);
 console.log('PASS TEST61: full receipt silhouette, inner-grid guard, angled QR, persistent-pending recovery, parallel APK');

@@ -65,21 +65,31 @@ export function photoEnhanceKey(e:Pick<ImageEdits,'photoFilter'|'filterStrength'
  * Row chunks bound temporary allocation; the input pixel buffer is read-only. */
 export function enhanceRows(src:Uint8ClampedArray,w:number,h:number,y0:number,count:number,out:Uint8ClampedArray,e:Required<PhotoEnhance>){
  const sb=e.skinBright/100,sm=e.skinSmooth/100,sh=e.sharpness/100,dn=e.denoise/100,cl=e.clarity/100,ss=e.shadows/100;
+ const needsSkin=sb>0||sm>0,needsNeighbors=sm>0||sh>0||dn>0;
+ // Keep the same arithmetic and output; skip expensive work for inactive controls.
  for(let y=y0;y<y0+count;y++)for(let x=0;x<w;x++){
   const i=(y*w+x)*4,o=((y-y0)*w+x)*4,r=src[i],g=src[i+1],b=src[i+2],lum=.299*r+.587*g+.114*b;
-  const cb=128-.168736*r-.331264*g+.5*b,cr=128+.5*r-.418688*g-.081312*b;
-  const skin=clamp(Math.min((cb-75)/12,(137-cb)/12,(cr-130)/12,(183-cr)/12,(lum-25)/25,(245-lum)/20),0,1);
+  let skin=0;
+  if(needsSkin){const cb=128-.168736*r-.331264*g+.5*b,cr=128+.5*r-.418688*g-.081312*b;
+   skin=clamp(Math.min((cb-75)/12,(137-cb)/12,(cr-130)/12,(183-cr)/12,(lum-25)/25,(245-lum)/20),0,1);}
   const left=x>0?i-4:i,right=x+1<w?i+4:i,up=y>0?i-w*4:i,down=y+1<h?i+w*4:i;
-  const weight=(j:number)=>{const diff=Math.max(Math.abs(src[j]-r),Math.abs(src[j+1]-g),Math.abs(src[j+2]-b));return Math.max(0,1-diff/36);};
-  const wl=weight(left),wr=weight(right),wu=weight(up),wd=weight(down),sum=2+wl+wr+wu+wd;
+  let wl=0,wr=0,wu=0,wd=0;
+  if(needsNeighbors){
+   wl=Math.max(0,1-Math.max(Math.abs(src[left]-r),Math.abs(src[left+1]-g),Math.abs(src[left+2]-b))/36);
+   wr=Math.max(0,1-Math.max(Math.abs(src[right]-r),Math.abs(src[right+1]-g),Math.abs(src[right+2]-b))/36);
+   wu=Math.max(0,1-Math.max(Math.abs(src[up]-r),Math.abs(src[up+1]-g),Math.abs(src[up+2]-b))/36);
+   wd=Math.max(0,1-Math.max(Math.abs(src[down]-r),Math.abs(src[down+1]-g),Math.abs(src[down+2]-b))/36);
+  }
+  const sum=2+wl+wr+wu+wd;
   const smooth=Math.min(.78,.65*dn+.68*sm*skin);
-  const light=ss*35*Math.pow(1-lum/255,2)+sb*skin*22*Math.sin(Math.PI*lum/255);
+  const sine=sb>0||cl>0?Math.sin(Math.PI*lum/255):0;
+  const light=(ss>0?ss*35*Math.pow(1-lum/255,2):0)+sb*skin*22*sine;
+  const contrast=cl*8*((lum-128)/128)*sine;
   for(let c=0;c<3;c++){
     const v=src[i+c],avg=(2*v+wl*src[left+c]+wr*src[right+c]+wu*src[up+c]+wd*src[down+c])/sum;
     const detail=v-avg;
     // Do not amplify isolated low-amplitude noise after denoise.
     const boost=Math.abs(detail)>3?clamp(detail,-18,18)*sh*.65*(1-dn*.65)*(1-sm*skin*.7):0;
-    const contrast=cl*8*((lum-128)/128)*Math.sin(Math.PI*lum/255);
     out[o+c]=clamp(v+(avg-v)*smooth+boost+light+contrast,0,255);
   }
   out[o+3]=src[i+3];

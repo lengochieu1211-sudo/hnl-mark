@@ -94,12 +94,13 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
         const source=media.rawBlob || await(await fetch(media.url)).blob();
         const structuralEdits={...edits,brightness:100,contrast:100,saturation:100,photoFilter:'original',filterStrength:0,enhance:resolvePhotoEnhance(edits)};
         const normal=await createEditorPreview(source,structuralEdits,false);
+        if(disposed)return;
         const erased=await createEditorPreview(source,structuralEdits,true);
         if(disposed)return;
         urls=[URL.createObjectURL(normal),URL.createObjectURL(erased)];
         setPreviewUrl(urls[0]);setErasePreviewUrl(urls[1]);setEraseError('');
       }catch(e){if(!disposed)setEraseError('Không tạo được preview chỉnh ảnh: '+String(e));}
-    },40);
+    },100);
     return ()=>{disposed=true;window.clearTimeout(timer);urls.forEach(url=>URL.revokeObjectURL(url));};
   },[media.id,media.rawBlob,structureKey]);
 
@@ -445,7 +446,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
               {PHOTO_FILTERS.map(p=><button key={p.id} type="button" aria-pressed={(edits.photoFilter||'original')===p.id}
                 onClick={()=>commitEdits({photoFilter:p.id,filterStrength:p.id==='original'?0:100,enhance:undefined})}
                 className={`shrink-0 w-[64px] rounded-lg p-1 border text-[11px] ${(edits.photoFilter||'original')===p.id?'border-[#E2B74B] text-[#E2B74B]':'border-white/10 text-[#CBD5E1]'}`}>
-                <img src={previewUrl||media.url} alt="" loading="lazy" draggable={false}
+                <img src={erasePreviewUrl||media.url} alt="" loading="lazy" draggable={false}
                   className="w-full h-[56px] object-cover rounded-md"
                   style={{filter:photoFilterCss({brightness:100,contrast:100,saturation:100,photoFilter:p.id,filterStrength:100})}}/>
                 <span className="block mt-1 whitespace-nowrap">{p.label}</span>
