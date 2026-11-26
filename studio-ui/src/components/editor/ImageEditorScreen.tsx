@@ -444,7 +444,7 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
             <div className="flex items-center justify-between"><span className="text-xs font-semibold text-[#F8FAFC]">Bộ lọc màu</span><span className="text-xs text-[#E2B74B]">{PHOTO_FILTERS.find(p=>p.id===(edits.photoFilter||'original'))?.label||'Gốc'}</span></div>
             <div className="flex gap-2 overflow-x-auto pb-2">
               {PHOTO_FILTERS.map(p=><button key={p.id} type="button" aria-pressed={(edits.photoFilter||'original')===p.id}
-                onClick={()=>commitEdits({photoFilter:p.id,filterStrength:p.id==='original'?0:100,enhance:undefined})}
+                onClick={()=>commitEdits({photoFilter:p.id,filterStrength:p.id==='original'?0:100,enhanceVersion:2})}
                 className={`shrink-0 w-[64px] rounded-lg p-1 border text-[11px] ${(edits.photoFilter||'original')===p.id?'border-[#E2B74B] text-[#E2B74B]':'border-white/10 text-[#CBD5E1]'}`}>
                 <img src={erasePreviewUrl||media.url} alt="" loading="lazy" draggable={false}
                   className="w-full h-[56px] object-cover rounded-md"
@@ -459,9 +459,10 @@ export const ImageEditorScreen: React.FC<ImageEditorScreenProps> = ({
             </label>}
             <details className="rounded-lg border border-white/10 p-2 space-y-2"><summary className="text-xs font-semibold text-[#E2B74B] cursor-pointer">Làm đẹp &amp; HD</summary>
               {HD_CONTROLS.map(([key,label])=><label key={key} className="block text-xs text-[#CBD5E1]">{label} · {Math.round(resolvePhotoEnhance(edits)[key])}%
-                <input type="range" min={0} max={100} value={resolvePhotoEnhance(edits)[key]} aria-label={label} onChange={ev=>commitEdits({enhance:{...edits.enhance,[key]:Number(ev.target.value)}})} className="block w-full accent-[#E2B74B]"/>
+                <input type="range" min={0} max={100} value={resolvePhotoEnhance(edits)[key]} aria-label={label} onChange={ev=>commitEdits({enhanceVersion:2,enhance:{...edits.enhance,[key]:Number(ev.target.value)}})} className="block w-full accent-[#E2B74B]"/>
               </label>)}
-              <button type="button" className="text-xs text-[#E2B74B]" onClick={()=>commitEdits({enhance:Object.fromEntries(HD_CONTROLS.map(([key])=>[key,0]))})}>Tắt hiệu ứng HD</button>
+              <button type="button" className="text-xs text-[#E2B74B]" onClick={()=>commitEdits({enhanceVersion:2,enhance:Object.fromEntries(HD_CONTROLS.map(([key])=>[key,0]))})}>Tắt hiệu ứng HD</button>
+              <button type="button" className="text-xs text-[#E2B74B] ml-3" onClick={()=>commitEdits({enhanceVersion:2,enhance:undefined})}>HD của mẫu</button>
               <p className="text-[11px] text-[#94A3B8]">Xử lý vùng màu da gần đúng, giữ ảnh gốc và dấu. Không tái tạo chi tiết đã mất.</p>
             </details>
           </section>}

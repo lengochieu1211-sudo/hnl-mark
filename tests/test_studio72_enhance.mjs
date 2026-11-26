@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {PHOTO_FILTERS,resolvePhotoEnhance,hasPhotoEnhance,enhanceRows} from '../studio-ui/src/services/smartErase.ts';
+import {PHOTO_FILTERS,resolvePhotoEnhance,hasPhotoEnhance,enhanceRows,enhanceRowsV2,photoEnhanceKey} from '../studio-ui/src/services/smartErase.ts';
 assert.equal(PHOTO_FILTERS.length,25);
 assert.equal(hasPhotoEnhance({photoFilter:'original'}),false);
 assert.equal(hasPhotoEnhance({photoFilter:'skin-soft',filterStrength:0}),false);
@@ -62,15 +62,37 @@ console.log('PASS TEST73: exact TEST72 pixel parity for 25 presets at 3 strength
 const {readFileSync}=await import('node:fs');
 const camera=readFileSync(new URL('../studio-ui/src/components/camera/CameraApkScreen.tsx',import.meta.url),'utf8');
 const liveHD=readFileSync(new URL('../studio-ui/src/services/livePhotoEnhance.ts',import.meta.url),'utf8');
-assert.match(camera,/startLivePhotoEnhance\(live,canvas,JSON.parse\(cameraHDKey\),exposureFactor/);
+assert.match(camera,/startLivePhotoEnhance\(live,canvas,\(\)=>liveHDSettings.current/);
 assert.match(camera,/mode!=='photo'\|\|!cameraHDActive\|\|isPhotoCapturing/);
-assert.match(camera,/cameraHDKey=photoEnhanceKey\(cameraFilterEdits\)/);
+assert.match(camera,/liveHDSettings.current=\{edits:resolvePhotoEnhance\(cameraFilterEdits\),exposure:exposureFactor,zoom:zoomLevel\}/);
 assert.match(camera,/edits:\{\.\.\.DEFAULT_IMAGE_EDITS,\.\.\.cameraFilterEdits\}/);
-assert.match(liveHD,/LIVE_HD_MAX_EDGE=480/);assert.match(liveHD,/LIVE_HD_FRAME_MS=100/);
-assert.match(liveHD,/enhanceRows\(source.data,width,height,0,height,output.data,edits\)/);
+assert.match(liveHD,/LIVE_HD_MAX_EDGE=720/);assert.match(liveHD,/LIVE_HD_FRAME_MS=83/);
+assert.match(liveHD,/enhanceRowsV2\(source.data,width,height,0,height,output.data,settings.edits\)/);
 assert.match(liveHD,/window.clearTimeout\(timer\)/);
 const portrait=new Uint8ClampedArray([180,135,110,255,190,145,120,255,180,135,110,255]);
 const smooth=new Uint8ClampedArray(portrait.length);
 enhanceRows(portrait,3,1,0,1,smooth,resolvePhotoEnhance({enhance:{skinSmooth:100}}));
 assert.ok(smooth[4]<portrait[4]&&smooth[4]>portrait[0]);
 console.log('PASS TEST74: six HD controls wired to bounded live preview, skin smoothing fixture, unchanged still export');
+
+ // TEST75: preserve legacy pixel regression above; V2 opt-in, stronger effect and immutable pixels.
+ const renderV2=(pixels,w,h,enhance)=>{const dest=new Uint8ClampedArray(pixels.length);enhanceRowsV2(pixels,w,h,0,h,dest,resolvePhotoEnhance({enhance}));return dest;};
+ assert.deepEqual(renderV2(sample,19,17,{}),sample);
+ assert.notEqual(photoEnhanceKey({enhance:{skinSmooth:100}}),photoEnhanceKey({enhance:{skinSmooth:100},enhanceVersion:2}));
+ const originalPortrait=portrait.slice();
+ const smoothV2=renderV2(portrait,3,1,{skinSmooth:100});
+ assert.ok(smoothV2[4]<smooth[4]&&smoothV2[4]>=portrait[0]);
+ assert.deepEqual(portrait,originalPortrait);
+ const edge=new Uint8ClampedArray([20,20,20,255,230,230,230,255,230,230,230,255]);
+ assert.deepEqual(renderV2(edge,3,1,{denoise:100}),edge);
+ const detailPixels=new Uint8ClampedArray([50,50,50,255,100,100,100,255,50,50,50,255]);
+ assert.ok(renderV2(detailPixels,3,1,{sharpness:100})[4]>100);
+ assert.ok(renderV2(detailPixels,3,1,{clarity:100})[4]>100);
+ assert.ok(renderV2(detailPixels,3,1,{denoise:100})[4]<100);
+ assert.ok(renderV2(dark,2,1,{shadows:100})[0]>bright[0]);
+ assert.match(camera,/enhanceVersion:2 as const/);
+ assert.match(liveHD,/const sw=w\/z,sh=h\/z/);
+ assert.match(liveHD,/context.drawImage\(video,sx,sy,sw,sh,0,0,width,height\)/);
+ assert.match(liveHD,/key!==lastKey/);
+ assert.doesNotMatch(camera,/cameraFilterStrength:p.id==='original'\?0:100,cameraEnhance/);
+ console.log('PASS TEST75: versioned V2, stronger smoothing, edge preservation, local detail, adaptive crop-before-downsample preview');

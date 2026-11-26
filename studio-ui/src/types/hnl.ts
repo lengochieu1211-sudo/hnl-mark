@@ -114,6 +114,8 @@ export interface ImageEdits {
   /** Optional, backward compatible with existing photo edits. */
   photoFilter?: string;
   filterStrength?: number;
+  /** V1 is implicit for old saved edits; V2 only for newly chosen effects. */
+  enhanceVersion?: 2;
   enhance?: {skinBright?:number;skinSmooth?:number;sharpness?:number;denoise?:number;clarity?:number;shadows?:number};
 }
 

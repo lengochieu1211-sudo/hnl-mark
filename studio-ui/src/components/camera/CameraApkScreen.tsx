@@ -31,8 +31,8 @@ import { WatermarkOverlay } from '../watermark/WatermarkOverlay';
 import {PhotoPreview} from '../watermark/PhotoPreview';
 import { setAndroidCameraActive } from '../../services/deviceBridge';
 import { createStampedVideoCapture } from '../../services/stampedVideoCapture';
-import {PHOTO_FILTERS,photoFilterCss,HD_CONTROLS,resolvePhotoEnhance,photoEnhanceKey} from '../../services/smartErase';
-import {startLivePhotoEnhance} from '../../services/livePhotoEnhance';
+import {PHOTO_FILTERS,photoFilterCss,HD_CONTROLS,resolvePhotoEnhance} from '../../services/smartErase';
+import {startLivePhotoEnhance,type LiveHDSettings} from '../../services/livePhotoEnhance';
 import {createTimemarkCode} from '../../services/timemarkRenderer';
 import {captureStampCode} from '../../services/timemarkSerial';
 import {isRenderableStamp} from '../../services/stampRenderer';
@@ -112,11 +112,10 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const [filterThumbnail,setFilterThumbnail]=useState('');
   const cameraFilterId=watermarkConfig.cameraPhotoFilter||'original';
   const cameraFilterStrength=watermarkConfig.cameraFilterStrength??100;
-  const cameraFilterEdits={photoFilter:cameraFilterId,filterStrength:cameraFilterStrength,enhance:watermarkConfig.cameraEnhance};
+  const cameraFilterEdits={photoFilter:cameraFilterId,filterStrength:cameraFilterStrength,enhance:watermarkConfig.cameraEnhance,enhanceVersion:2 as const};
   const cameraColorFilter=photoFilterCss({...DEFAULT_IMAGE_EDITS,...cameraFilterEdits});
-  const cameraHDKey=photoEnhanceKey(cameraFilterEdits);
   const cameraHDActive=Object.values(resolvePhotoEnhance(cameraFilterEdits)).some(v=>v>0);
-  const cameraFilterActive=(cameraFilterId!=='original'&&cameraFilterStrength>0)||cameraHDActive;
+  const cameraFilterActive=(cameraFilterId!=='original'&&cameraFilterStrength>0)||(mode==='photo'&&cameraHDActive);
   const photoResolution:VideoResolution=watermarkConfig.photoResolution==='4K'||watermarkConfig.photoResolution==='720p'?watermarkConfig.photoResolution:'1080p';
   const photoJpegQuality=Number.isFinite(watermarkConfig.jpegQuality)?Math.min(100,Math.max(70,watermarkConfig.jpegQuality)):95;
   const [videoSettings, setVideoSettings] = useState<VideoSettings>({
@@ -153,14 +152,16 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
   const chunksRef = useRef<Blob[]>([]);
   const [cameraError,setCameraError] = useState<string>('');
   const [cameraReady,setCameraReady] = useState(false);
+  const liveHDSettings=useRef<LiveHDSettings>({edits:resolvePhotoEnhance(cameraFilterEdits),exposure:exposureFactor,zoom:zoomLevel});
+  liveHDSettings.current={edits:resolvePhotoEnhance(cameraFilterEdits),exposure:exposureFactor,zoom:zoomLevel};
   // Use the same six-control pixel algorithm as still export, at bounded preview resolution.
   // Do not touch the recording stream, raw capture, stamp, or device camera constraints.
   useEffect(()=>{
     setLiveHDUnavailable(false);
     const canvas=liveHDRef.current,live=liveRef.current;
     if(!canvas||!live||!cameraReady||mode!=='photo'||!cameraHDActive||isPhotoCapturing)return;
-    return startLivePhotoEnhance(live,canvas,JSON.parse(cameraHDKey),exposureFactor,()=>setLiveHDUnavailable(true));
-  },[cameraReady,mode,cameraHDActive,cameraHDKey,exposureFactor,lens,isPhotoCapturing]);
+    return startLivePhotoEnhance(live,canvas,()=>liveHDSettings.current,()=>setLiveHDUnavailable(true));
+  },[cameraReady,mode,cameraHDActive,lens,isPhotoCapturing]);
   // Capture one tiny, unfiltered camera frame for all filter swatches. No extra stream.
   useEffect(()=>{
     if(!showCameraFilters||!cameraReady){setFilterThumbnail('');return;}
@@ -774,7 +775,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
           {(mode==='video'||cameraEffectTab==='color')&&<>
           <div className="flex gap-1.5 overflow-x-auto pb-1 overscroll-x-contain">
             {PHOTO_FILTERS.map(p=><button key={p.id} type="button" aria-pressed={cameraFilterId===p.id}
-              onClick={()=>onChangeWatermarkConfig?.({cameraPhotoFilter:p.id,cameraFilterStrength:p.id==='original'?0:100,cameraEnhance:{}})}
+              onClick={()=>onChangeWatermarkConfig?.({cameraPhotoFilter:p.id,cameraFilterStrength:p.id==='original'?0:100})}
               className={`relative shrink-0 w-[65px] rounded-lg p-1 border text-[10px] font-medium ${cameraFilterId===p.id?'border-[#E2B74B] text-[#E2B74B]':'border-white/10 text-white'}`}>
               {filterThumbnail?<img src={filterThumbnail} alt="" draggable={false} className="w-full h-11 rounded object-cover" style={{filter:photoFilterCss({...DEFAULT_IMAGE_EDITS,photoFilter:p.id,filterStrength:100})}}/>:<span className="flex h-11 items-center justify-center rounded bg-[#192844]"><Palette className="w-4 h-4"/></span>}
               {cameraFilterId===p.id&&<Check className="absolute top-1 right-1 w-4 h-4 rounded-full bg-[#E2B74B] text-[#060B14]"/>}
@@ -799,6 +800,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
               </label>)}
             <div className="flex items-center justify-between gap-2">
               <button type="button" className="text-xs text-[#E2B74B] min-h-8" onClick={()=>onChangeWatermarkConfig?.({cameraEnhance:Object.fromEntries(HD_CONTROLS.map(([key])=>[key,0]))})}>Tắt HD</button>
+              <button type="button" className="text-xs text-[#E2B74B] min-h-8" onClick={()=>onChangeWatermarkConfig?.({cameraEnhance:{}})}>HD của mẫu</button>
               <p role="status" className="text-[10px] text-[#94A3B8] text-right">{liveHDUnavailable?'Không xem trước được HD; ảnh lưu vẫn xử lý.':cameraHDActive?'Xem trước HD nhẹ · ảnh lưu đủ độ phân giải':'Kéo thanh để xem hiệu ứng.'}</p>
             </div>
           </div>}
@@ -964,7 +966,7 @@ export const CameraApkScreen: React.FC<CameraApkScreenProps> = ({
             style={{transform:`scale(${zoomLevel}) ${lens==='front'?'scaleX(-1)':''}`,filter:`brightness(${exposureFactor}) ${cameraColorFilter}`,transition:'transform 110ms ease-out'}}
             className="w-full h-full object-cover select-none pointer-events-none" />
           <canvas ref={liveHDRef} aria-hidden="true" className="absolute inset-0 w-full h-full object-cover select-none pointer-events-none"
-            style={{visibility:'hidden',transform:`scale(${zoomLevel}) ${lens==='front'?'scaleX(-1)':''}`,filter:cameraColorFilter,transition:'transform 110ms ease-out'}} />
+            style={{visibility:'hidden',transform:lens==='front'?'scaleX(-1)':'none',filter:cameraColorFilter}} />
           {cameraReady && mode==='video' && isRecording && audioUnavailable && <div role="status" className="absolute top-14 left-3 z-20 max-w-[70%] rounded-md bg-[#7F1D1D]/90 px-2 py-1 text-left text-[11px] text-white pointer-events-none">Micro tắt · Video không tiếng</div>}
           {!cameraReady && <div className="absolute inset-0 z-10 flex flex-col gap-3 items-center justify-center p-6 bg-[#071121] text-center">
             <p className="text-sm text-[#F8FAFC]">{cameraError||'Đang mở camera thực tế…'}</p>

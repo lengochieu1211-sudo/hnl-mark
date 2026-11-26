@@ -59,7 +59,7 @@ export function resolvePhotoEnhance(edits:Pick<ImageEdits,'photoFilter'|'filterS
  return {skinBright:val('skinBright'),skinSmooth:val('skinSmooth'),sharpness:val('sharpness'),denoise:val('denoise'),clarity:val('clarity'),shadows:val('shadows')};
 }
 export function hasPhotoEnhance(e:Pick<ImageEdits,'photoFilter'|'filterStrength'|'enhance'>){return Object.values(resolvePhotoEnhance(e)).some(v=>v>0);}
-export function photoEnhanceKey(e:Pick<ImageEdits,'photoFilter'|'filterStrength'|'enhance'>){return JSON.stringify(resolvePhotoEnhance(e));}
+export function photoEnhanceKey(e:Pick<ImageEdits,'photoFilter'|'filterStrength'|'enhance'|'enhanceVersion'>){return JSON.stringify({...resolvePhotoEnhance(e),version:e.enhanceVersion===2?2:1});}
 /** Local edge-aware detail processing. No inferred/fabricated detail.
  * Skin selection is an approximate chroma mask, not face recognition.
  * Row chunks bound temporary allocation; the input pixel buffer is read-only. */
@@ -95,11 +95,49 @@ export function enhanceRows(src:Uint8ClampedArray,w:number,h:number,y0:number,co
   out[o+3]=src[i+3];
  }
 }
-function applyPhotoEnhance(canvas:HTMLCanvasElement,e:Required<PhotoEnhance>){
+/** V2: stronger multi-scale smoothing, independent local detail, bounded corrections.
+ * No generated detail or face detector. The legacy kernel remains for old edits. */
+export function enhanceRowsV2(src:Uint8ClampedArray,w:number,h:number,y0:number,count:number,out:Uint8ClampedArray,e:Required<PhotoEnhance>){
+ const sb=e.skinBright/100,sm=e.skinSmooth/100,sh=e.sharpness/100,dn=e.denoise/100,cl=e.clarity/100,ss=e.shadows/100;
+ const skinOn=sb>0||sm>0, smoothOn=sm>0||dn>0, detailOn=sh>0||cl>0;
+ const radius=Math.max(1,Math.min(3,Math.round(Math.max(w,h)/1440)));
+ for(let y=y0;y<y0+count;y++)for(let x=0;x<w;x++){
+  const i=(y*w+x)*4,o=((y-y0)*w+x)*4,r=src[i],g=src[i+1],b=src[i+2],lum=.299*r+.587*g+.114*b;
+  let skin=0;
+  if(skinOn){const cb=128-.168736*r-.331264*g+.5*b,cr=128+.5*r-.418688*g-.081312*b;
+   skin=clamp(Math.min((cb-75)/12,(137-cb)/12,(cr-130)/12,(183-cr)/12,(lum-20)/25,(250-lum)/20),0,1);}
+  const L=(y*w+Math.max(0,x-radius))*4,R=(y*w+Math.min(w-1,x+radius))*4,U=(Math.max(0,y-radius)*w+x)*4,D=(Math.min(h-1,y+radius)*w+x)*4;
+  const L2=(y*w+Math.max(0,x-2*radius))*4,R2=(y*w+Math.min(w-1,x+2*radius))*4,U2=(Math.max(0,y-2*radius)*w+x)*4,D2=(Math.min(h-1,y+2*radius)*w+x)*4;
+  const smooth=Math.min(.94,.90*dn+.92*sm*skin);
+  let a=0,bb=0,c=0,d=0,aa=0,bbb=0,cc=0,dd=0;
+  if(smoothOn&&smooth>0){
+   const limit=36+22*Math.max(dn,sm*skin);
+   const weight=(j:number)=>Math.max(0,1-Math.max(Math.abs(src[j]-r),Math.abs(src[j+1]-g),Math.abs(src[j+2]-b))/limit);
+   a=weight(L);bb=weight(R);c=weight(U);d=weight(D);
+   aa=.75*weight(L2);bbb=.75*weight(R2);cc=.75*weight(U2);dd=.75*weight(D2);
+  }
+  const sum=1+a+bb+c+d+aa+bbb+cc+dd;
+  const light=(ss>0?ss*45*Math.pow(1-lum/255,2):0)+(sb>0?sb*skin*30*Math.sin(Math.PI*lum/255):0);
+  for(let k=0;k<3;k++){
+   const v=src[i+k],avg=(v+a*src[L+k]+bb*src[R+k]+c*src[U+k]+d*src[D+k]+aa*src[L2+k]+bbb*src[R2+k]+cc*src[U2+k]+dd*src[D2+k])/sum;
+   let boost=0;
+   if(detailOn){
+    const detail=v-(src[L+k]+src[R+k]+src[U+k]+src[D+k])*.25;
+    const broad=v-(src[L2+k]+src[R2+k]+src[U2+k]+src[D2+k])*.25;
+    const gain=(1-.8*dn)*(1-.85*sm*skin);
+    boost=gain*(sh*clamp(detail,-24,24)*.85+cl*clamp(broad,-16,16)*.5);
+   }
+   out[o+k]=clamp(v+(avg-v)*smooth+light+boost,0,255);
+  }
+  out[o+3]=src[i+3];
+ }
+}
+function applyPhotoEnhance(canvas:HTMLCanvasElement,e:Required<PhotoEnhance>,version?:number){
  if(!Object.values(e).some(v=>v>0))return;
  const g=canvas.getContext('2d',{willReadFrequently:true});if(!g)throw Error('Không tạo được bộ xử lý HD.');
  const w=canvas.width,h=canvas.height,src=g.getImageData(0,0,w,h);
- for(let y=0;y<h;y+=64){const rows=Math.min(64,h-y),out=g.createImageData(w,rows);enhanceRows(src.data,w,h,y,rows,out.data,e);g.putImageData(out,0,y);}
+ const kernel=version===2?enhanceRowsV2:enhanceRows;
+ for(let y=0;y<h;y+=64){const rows=Math.min(64,h-y),out=g.createImageData(w,rows);kernel(src.data,w,h,y,rows,out.data,e);g.putImageData(out,0,y);}
 }
 export function clampSmartRect(r:SmartEraseOperation['rect']){
  const x=clamp(Number(r.x)||0,0,.999),y=clamp(Number(r.y)||0,0,.999);
@@ -180,7 +218,7 @@ function sourceBitmap(bitmap:ImageBitmap,edits:ImageEdits,maxEdge:number,onlyEra
   g.drawImage(canvas,-canvas.width/2,-canvas.height/2);
   canvas=next;
  }
- applyPhotoEnhance(canvas,resolvePhotoEnhance(edits));
+ applyPhotoEnhance(canvas,resolvePhotoEnhance(edits),edits.enhanceVersion);
  const filter=photoFilterCss(edits);
  if(filter!=='brightness(100%) contrast(100%) saturate(100%)'){
   const next=blankCanvas(canvas.width,canvas.height);const g=next.getContext('2d');if(!g)throw Error('Không áp dụng được màu.');
