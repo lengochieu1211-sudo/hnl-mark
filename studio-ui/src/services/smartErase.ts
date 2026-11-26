@@ -97,39 +97,44 @@ export function enhanceRows(src:Uint8ClampedArray,w:number,h:number,y0:number,co
 }
 /** V2: stronger multi-scale smoothing, independent local detail, bounded corrections.
  * No generated detail or face detector. The legacy kernel remains for old edits. */
+function hdNeighborWeight(src:Uint8ClampedArray,j:number,r:number,g:number,b:number,limit:number){
+ return Math.max(0,1-Math.max(Math.abs(src[j]-r),Math.abs(src[j+1]-g),Math.abs(src[j+2]-b))/limit);
+}
 export function enhanceRowsV2(src:Uint8ClampedArray,w:number,h:number,y0:number,count:number,out:Uint8ClampedArray,e:Required<PhotoEnhance>){
  const sb=e.skinBright/100,sm=e.skinSmooth/100,sh=e.sharpness/100,dn=e.denoise/100,cl=e.clarity/100,ss=e.shadows/100;
  const skinOn=sb>0||sm>0, smoothOn=sm>0||dn>0, detailOn=sh>0||cl>0;
- const radius=Math.max(1,Math.min(3,Math.round(Math.max(w,h)/1440)));
- for(let y=y0;y<y0+count;y++)for(let x=0;x<w;x++){
-  const i=(y*w+x)*4,o=((y-y0)*w+x)*4,r=src[i],g=src[i+1],b=src[i+2],lum=.299*r+.587*g+.114*b;
-  let skin=0;
-  if(skinOn){const cb=128-.168736*r-.331264*g+.5*b,cr=128+.5*r-.418688*g-.081312*b;
-   skin=clamp(Math.min((cb-75)/12,(137-cb)/12,(cr-130)/12,(183-cr)/12,(lum-20)/25,(250-lum)/20),0,1);}
-  const L=(y*w+Math.max(0,x-radius))*4,R=(y*w+Math.min(w-1,x+radius))*4,U=(Math.max(0,y-radius)*w+x)*4,D=(Math.min(h-1,y+radius)*w+x)*4;
-  const L2=(y*w+Math.max(0,x-2*radius))*4,R2=(y*w+Math.min(w-1,x+2*radius))*4,U2=(Math.max(0,y-2*radius)*w+x)*4,D2=(Math.min(h-1,y+2*radius)*w+x)*4;
-  const smooth=Math.min(.94,.90*dn+.92*sm*skin);
-  let a=0,bb=0,c=0,d=0,aa=0,bbb=0,cc=0,dd=0;
-  if(smoothOn&&smooth>0){
-   const limit=36+22*Math.max(dn,sm*skin);
-   const weight=(j:number)=>Math.max(0,1-Math.max(Math.abs(src[j]-r),Math.abs(src[j+1]-g),Math.abs(src[j+2]-b))/limit);
-   a=weight(L);bb=weight(R);c=weight(U);d=weight(D);
-   aa=.75*weight(L2);bbb=.75*weight(R2);cc=.75*weight(U2);dd=.75*weight(D2);
-  }
-  const sum=1+a+bb+c+d+aa+bbb+cc+dd;
-  const light=(ss>0?ss*45*Math.pow(1-lum/255,2):0)+(sb>0?sb*skin*30*Math.sin(Math.PI*lum/255):0);
-  for(let k=0;k<3;k++){
-   const v=src[i+k],avg=(v+a*src[L+k]+bb*src[R+k]+c*src[U+k]+d*src[D+k]+aa*src[L2+k]+bbb*src[R2+k]+cc*src[U2+k]+dd*src[D2+k])/sum;
-   let boost=0;
-   if(detailOn){
-    const detail=v-(src[L+k]+src[R+k]+src[U+k]+src[D+k])*.25;
-    const broad=v-(src[L2+k]+src[R2+k]+src[U2+k]+src[D2+k])*.25;
-    const gain=(1-.8*dn)*(1-.85*sm*skin);
-    boost=gain*(sh*clamp(detail,-24,24)*.85+cl*clamp(broad,-16,16)*.5);
+ const radius=Math.max(1,Math.min(3,Math.round(Math.max(w,h)/1440))),step=radius*4,step2=step*2,stride=w*4;
+ for(let y=y0;y<y0+count;y++){
+  const row=y*stride,up=Math.max(0,y-radius)*stride,down=Math.min(h-1,y+radius)*stride,up2=Math.max(0,y-2*radius)*stride,down2=Math.min(h-1,y+2*radius)*stride;
+  for(let x=0;x<w;x++){
+   const off=x*4,i=row+off,o=((y-y0)*w+x)*4,r=src[i],g=src[i+1],b=src[i+2],lum=.299*r+.587*g+.114*b;
+   let skin=0;
+   if(skinOn){const cb=128-.168736*r-.331264*g+.5*b,cr=128+.5*r-.418688*g-.081312*b;
+    skin=clamp(Math.min((cb-75)/12,(137-cb)/12,(cr-130)/12,(183-cr)/12,(lum-20)/25,(250-lum)/20),0,1);}
+   const L=x>=radius?i-step:row,R=x+radius<w?i+step:row+stride-4,U=up+off,D=down+off;
+   const L2=x>=2*radius?i-step2:row,R2=x+2*radius<w?i+step2:row+stride-4,U2=up2+off,D2=down2+off;
+   const smooth=Math.min(.94,.90*dn+.92*sm*skin);
+   let a=0,bb=0,c=0,d=0,aa=0,bbb=0,cc=0,dd=0;
+   if(smoothOn&&smooth>0){
+    const limit=36+22*Math.max(dn,sm*skin);
+    a=hdNeighborWeight(src,L,r,g,b,limit);bb=hdNeighborWeight(src,R,r,g,b,limit);c=hdNeighborWeight(src,U,r,g,b,limit);d=hdNeighborWeight(src,D,r,g,b,limit);
+    aa=.75*hdNeighborWeight(src,L2,r,g,b,limit);bbb=.75*hdNeighborWeight(src,R2,r,g,b,limit);cc=.75*hdNeighborWeight(src,U2,r,g,b,limit);dd=.75*hdNeighborWeight(src,D2,r,g,b,limit);
    }
-   out[o+k]=clamp(v+(avg-v)*smooth+light+boost,0,255);
+   const sum=1+a+bb+c+d+aa+bbb+cc+dd;
+   const light=(ss>0?ss*45*Math.pow(1-lum/255,2):0)+(sb>0?sb*skin*30*Math.sin(Math.PI*lum/255):0);
+   const gain=detailOn?(1-.8*dn)*(1-.85*sm*skin):0;
+   for(let k=0;k<3;k++){
+    const v=src[i+k],avg=smooth>0?(v+a*src[L+k]+bb*src[R+k]+c*src[U+k]+d*src[D+k]+aa*src[L2+k]+bbb*src[R2+k]+cc*src[U2+k]+dd*src[D2+k])/sum:v;
+    let boost=0;
+    if(detailOn){
+     const detail=sh>0?v-(src[L+k]+src[R+k]+src[U+k]+src[D+k])*.25:0;
+     const broad=cl>0?v-(src[L2+k]+src[R2+k]+src[U2+k]+src[D2+k])*.25:0;
+     boost=gain*(sh*clamp(detail,-24,24)*.85+cl*clamp(broad,-16,16)*.5);
+    }
+    out[o+k]=clamp(v+(avg-v)*smooth+light+boost,0,255);
+   }
+   out[o+3]=src[i+3];
   }
-  out[o+3]=src[i+3];
  }
 }
 function applyPhotoEnhance(canvas:HTMLCanvasElement,e:Required<PhotoEnhance>,version?:number){

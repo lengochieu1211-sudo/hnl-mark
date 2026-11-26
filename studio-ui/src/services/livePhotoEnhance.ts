@@ -1,5 +1,5 @@
-import {enhanceRowsV2} from './smartErase';
-import type {PhotoEnhance} from './smartErase';
+import {enhanceRowsV2} from './smartErase.ts';
+import type {PhotoEnhance} from './smartErase.ts';
 export const LIVE_HD_MAX_EDGE=720;
 export const LIVE_HD_FRAME_MS=83;
 export type LiveHDSettings={edits:Required<PhotoEnhance>;exposure:number;zoom:number};

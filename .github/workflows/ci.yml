@@ -126,3 +126,4 @@ jobs:
           node tests/test_studio71_live_filters.cjs
           node tests/test_studio71_stamp_bounds.cjs
           node --experimental-strip-types tests/test_studio72_enhance.mjs
+          node --experimental-strip-types tests/test_studio75_live_hd.mjs
