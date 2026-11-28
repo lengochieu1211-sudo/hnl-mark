@@ -7,6 +7,7 @@ import {loadWatermarkLogo} from './watermarkLogo';
 import {drawConfiguredStamp,isRenderableStamp} from './stampRenderer';
 import {capturedPhotoTurn,orientedFrameSize} from './capturedPhotoOrientation';
 import {cameraCenterCrop,outputAspect} from './cameraFrameGeometry';
+import {createVideoFramePacer,videoCanvasFilter} from './videoFramePacer';
 
 type StampedCapture={stream:MediaStream;stop:()=>void;width:number;height:number};
 
@@ -41,13 +42,14 @@ export async function createStampedVideoCapture(
  await prepareTimemarkFont(config.fontKey);
  const logo=await loadWatermarkLogo(config);
  const fps=Math.min(30,Math.max(15,desiredFps));
- let active=true,frameId=0,previousFrame=0;
+ const shouldDraw=createVideoFramePacer(fps);
+ const frameFilter=videoCanvasFilter(brightness,colorFilter);
+ let active=true,frameId=0;
  const frame=(now:number)=>{
   if(!active)return;
   frameId=window.requestAnimationFrame(frame);
-  if(now-previousFrame<1000/fps)return;
-  previousFrame=now;
   if(video.readyState<2||!video.videoWidth||!video.videoHeight)return;
+  if(!shouldDraw(now))return;
   const rawWidth=video.videoWidth,rawHeight=video.videoHeight;
   // Re-evaluate sensor angle every frame. If device rotates mid-recording,
   // keep a fixed encoder canvas and CENTER CROP rather than stretching video.
@@ -62,7 +64,7 @@ export async function createStampedVideoCapture(
   ctx.rotate(turn*Math.PI/180);
   if(lens==='front')ctx.scale(-1,1);
   const srcW=rawWidth/cropZoom,srcH=rawHeight/cropZoom;
-  ctx.filter=`brightness(${brightness})${colorFilter==='none'?'':' '+colorFilter}`;
+  ctx.filter=frameFilter;
   ctx.drawImage(video,(rawWidth-srcW)/2,(rawHeight-srcH)/2,srcW,srcH,
    -rawWidth/2,-rawHeight/2,rawWidth,rawHeight);
   ctx.restore();
